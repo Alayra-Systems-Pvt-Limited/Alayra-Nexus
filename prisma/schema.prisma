@@ -1,0 +1,78 @@
+// Kinetic Nexus — slim schema
+// Only what the proxy needs: providers, keys, model registry, token usage, settings
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model NexusProvider {
+  id             String     @id @default(uuid())
+  name           String
+  slug           String     @unique
+  provider       String
+  baseUrl        String?
+  modelFetchUrl  String?
+  authHeader     String     @default("Authorization")
+  authPrefix     String?
+  modelIdPath    String     @default("data[].id")
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  keys           NexusKey[]
+}
+
+model NexusKey {
+  id              String        @id @default(uuid())
+  providerId      String
+  provider        NexusProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  label           String?
+  encryptedKey    String
+  maskedKey       String
+  status          String        @default("active")
+  rpmLimit        Int           @default(60)
+  tpmLimit        Int           @default(100000)
+  maxUsers        Int           @default(10)
+  currentUsers    Int           @default(0)
+  availableModels String[]
+  lastUsedAt      DateTime?
+  coolingUntil    DateTime?
+  errorCount      Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([providerId, status])
+}
+
+model AiModelRegistry {
+  id          String   @id @default(uuid())
+  modelsJson  String
+  updatedAt   DateTime @updatedAt
+}
+
+model TokenUsage {
+  id           String   @id @default(uuid())
+  sessionId    String
+  modelId      String
+  modelName    String
+  provider     String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  totalTokens  Int      @default(0)
+  estimatedUsd Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([modelId, createdAt])
+  @@index([createdAt])
+}
+
+model AppSettings {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
