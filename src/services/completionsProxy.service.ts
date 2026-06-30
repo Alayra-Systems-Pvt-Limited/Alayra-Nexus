@@ -40,17 +40,48 @@ async function resolveKey(model: AiModel): Promise<{ apiKey: string; baseUrl?: s
   throw new ProxyError(503, `No active API key for provider: ${model.provider}`);
 }
 
+function inferProvider(modelId: string): AiModel['provider'] | null {
+  const m = modelId.toLowerCase();
+  if (m.startsWith('claude'))                           return 'anthropic';
+  if (m.startsWith('gemini') || m.startsWith('google')) return 'google';
+  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) return 'openai';
+  if (m.startsWith('llama') || m.startsWith('mixtral') || m.startsWith('deepseek') || m.includes('groq')) return 'groq';
+  if (m.includes('/'))                                  return 'openrouter';  // openrouter uses "provider/model" format
+  return null;
+}
+
 async function resolveModel(modelId: string | undefined): Promise<AiModel> {
   const raw = (modelId ?? '').trim();
   if (!raw || raw === 'nexus-auto') return getPrimaryModel();
+
+  // 1. Check our registry first
   try {
     const m = await getModelById(raw);
     if (m.status !== 'active') throw new ModelPausedError(raw);
     return m;
   } catch (err) {
-    if (err instanceof ModelNotFoundError) throw new ProxyError(404, `Model not found: ${raw}`);
-    throw err;
+    if (!(err instanceof ModelNotFoundError)) throw err;
   }
+
+  // 2. Not in registry — infer provider from model name so real Cursor model IDs work
+  const provider = inferProvider(raw);
+  if (!provider) throw new ProxyError(404, `Cannot infer provider for model: ${raw}. Add it to the model registry or use a recognizable model ID (claude-*, gemini-*, gpt-*, llama-*, provider/model).`);
+
+  return {
+    id:                  raw,
+    provider,
+    modelString:         raw,
+    displayName:         raw,
+    status:              'active',
+    isPrimary:           false,
+    isFree:              false,
+    priority:            10,
+    supportsVision:      false,
+    supportsToolCalling: true,
+    contextWindow:       128000,
+    inputPricePer1k:     0,
+    outputPricePer1k:    0,
+  };
 }
 
 function parseUsageFromSSE(collected: string): { input: number; output: number } | null {
