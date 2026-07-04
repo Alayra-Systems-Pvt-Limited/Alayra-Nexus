@@ -46,9 +46,9 @@ function estimateInputTokens(messages: unknown[]): number {
 
 export async function handleProxy(body: CompletionsBody, reply: FastifyReply, teamKeyId?: string): Promise<FastifyReply | void> {
   const modelField = (body.model ?? '').trim().toLowerCase();
-  if (modelField && modelField !== 'nexus' && modelField !== 'nexus-auto') {
+  if (modelField && modelField !== 'kinetic-nexus-1' && modelField !== 'nexus') {
     return reply.code(400).send({
-      error: `Invalid model "${body.model}". Use model: "nexus" — Kinetic Nexus routes automatically.`,
+      error: `Invalid model "${body.model}". Use model: "kinetic-nexus-1" — Kinetic Nexus routes automatically.`,
     });
   }
 

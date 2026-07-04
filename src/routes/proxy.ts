@@ -9,12 +9,11 @@ export default async function proxyRoutes(fastify: FastifyInstance) {
     return handleProxy(request.body as CompletionsBody, reply, teamKeyId);
   });
 
-  // Always returns just "nexus" — that's the only model name users need
   fastify.get('/v1/models', { preHandler: [verifyApiKey] }, async (_request, reply) => {
     return reply.send({
       object: 'list',
       data: [{
-        id:       'nexus',
+        id:       'kinetic-nexus-1',
         object:   'model',
         created:  Math.floor(Date.now() / 1000),
         owned_by: 'kinetic-nexus',
