@@ -17,7 +17,10 @@ export async function verifyApiKey(request: FastifyRequest, reply: FastifyReply)
   // 2. Check team keys via SHA-256 hash (O(1) DB lookup, no decryption needed)
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const teamKey   = await prisma.nexusTeamKey.findUnique({ where: { keyHash: tokenHash } });
-  if (teamKey) return;
+  if (teamKey) {
+    (request as Record<string, unknown>).teamKeyId = teamKey.id;
+    return;
+  }
 
   return reply.code(401).send({ error: 'Invalid API key' });
 }

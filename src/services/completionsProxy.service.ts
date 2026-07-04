@@ -44,7 +44,7 @@ function estimateInputTokens(messages: unknown[]): number {
   try { return Math.max(1, Math.ceil(JSON.stringify(messages).length / 4)); } catch { return 256; }
 }
 
-export async function handleProxy(body: CompletionsBody, reply: FastifyReply): Promise<FastifyReply | void> {
+export async function handleProxy(body: CompletionsBody, reply: FastifyReply, teamKeyId?: string): Promise<FastifyReply | void> {
   const modelField = (body.model ?? '').trim().toLowerCase();
   if (modelField && modelField !== 'nexus' && modelField !== 'nexus-auto') {
     return reply.code(400).send({
@@ -120,7 +120,7 @@ export async function handleProxy(body: CompletionsBody, reply: FastifyReply): P
     const usage        = parseUsageFromSSE(collected);
     const inputTokens  = usage?.input  ?? estimateInputTokens(messages);
     const outputTokens = usage?.output ?? estimateDeltaTokens(collected);
-    void recordTokenUsage({ sessionId, modelId: route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens }).catch(() => {});
+    void recordTokenUsage({ sessionId, modelId: route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId }).catch(() => {});
     return;
   }
 
@@ -128,7 +128,7 @@ export async function handleProxy(body: CompletionsBody, reply: FastifyReply): P
   const usageObj     = data.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
   const inputTokens  = usageObj?.prompt_tokens     ?? estimateInputTokens(messages);
   const outputTokens = usageObj?.completion_tokens  ?? 1;
-  void recordTokenUsage({ sessionId, modelId: route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens }).catch(() => {});
+  void recordTokenUsage({ sessionId, modelId: route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId }).catch(() => {});
 
   for (const [k, v] of Object.entries(nexusHeaders)) reply.header(k, v);
   return reply.code(200).send(data);

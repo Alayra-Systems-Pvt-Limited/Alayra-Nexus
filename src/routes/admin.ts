@@ -7,7 +7,7 @@ import { encrypt, decrypt, maskKey } from '../lib/encryption';
 import { createHash, randomBytes } from 'crypto';
 import { getSetting, setSetting } from '../services/settings.service';
 import { getModelRegistry, updateModelRegistry } from '../services/model.service';
-import { getUsageSummary }     from '../services/token.service';
+import { getUsageSummary, getUsageByTeamKey } from '../services/token.service';
 import { testKey, banKey, coolKey, validateProviderCredentials, validateModel, providerDefaultUrl } from '../services/nexus.service';
 import { redis }               from '../lib/redis';
 import { REGISTRY_CACHE_KEY }  from '../lib/registryCacheKey';
@@ -177,6 +177,12 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     const { period = '30d' } = request.query as { period?: 'today' | '7d' | '30d' };
     const summary = await getUsageSummary(period);
     return reply.send(summary);
+  });
+
+  fastify.get('/admin/usage/by-team-key', adminGuard, async (request, reply) => {
+    const { period = '30d' } = request.query as { period?: 'today' | '7d' | '30d' };
+    const leaderboard = await getUsageByTeamKey(period);
+    return reply.send({ leaderboard });
   });
 
   fastify.get('/admin/usage/by-day', adminGuard, async (request, reply) => {

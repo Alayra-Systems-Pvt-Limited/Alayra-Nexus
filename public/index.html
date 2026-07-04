@@ -809,6 +809,7 @@ async function revokeTeamKey(id, name) {
 
 // ── Usage ──────────────────────────────────────────────────────────
 async function loadUsage(period) {
+  if (window._demoMode) return;
   ['today','7d','30d'].forEach(p => {
     const b = document.getElementById('u-'+p);
     b.style.background = p===period ? 'var(--accent-bg)' : '';
@@ -817,7 +818,10 @@ async function loadUsage(period) {
   const el = document.getElementById('usage-content');
   el.innerHTML = '<div style="text-align:center;padding:2rem"><div class="loader"></div></div>';
   try {
-    const data = await GET(`/admin/usage?period=${period}`);
+    const [data, tkData] = await Promise.all([
+      GET(`/admin/usage?period=${period}`),
+      GET(`/admin/usage/by-team-key?period=${period}`),
+    ]);
     const t = data.totals;
     el.innerHTML = `
       <div class="grid-3" style="margin-bottom:1rem">
@@ -826,6 +830,10 @@ async function loadUsage(period) {
         <div class="stat"><div class="stat-label">Output tokens</div><div class="stat-value">${fmtNum(t.outputTokens)}</div></div>
       </div>
       <div class="card">
+        <div class="card-title">Team key leaderboard</div>
+        ${renderTeamKeyLeaderboard(tkData?.leaderboard ?? [], t.totalTokens)}
+      </div>
+      <div class="card" style="margin-top:12px">
         <div class="card-title">By model</div>
         ${renderByModel(data.byModel, t.totalTokens)}
       </div>
@@ -834,6 +842,23 @@ async function loadUsage(period) {
         ${renderByDay(data.byDay)}
       </div>`;
   } catch(e) { el.innerHTML = `<div style="color:var(--red)">${e.message}</div>`; }
+}
+
+function renderTeamKeyLeaderboard(leaderboard, globalTotal) {
+  if (!leaderboard.length) return '<div style="color:var(--muted);font-size:13px">No team key usage yet — requests made with the main API key are not attributed to a team member.</div>';
+  const maxTokens = leaderboard[0].totalTokens; // already sorted desc
+  return leaderboard.map((entry, i) => {
+    const pct = maxTokens > 0 ? Math.round(entry.totalTokens / maxTokens * 100) : 0;
+    const share = globalTotal > 0 ? Math.round(entry.totalTokens / globalTotal * 100) : 0;
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
+    return `<div class="usage-bar-wrap">
+      <div class="usage-bar-label">
+        <span><span style="margin-right:6px">${medal}</span>${entry.name}</span>
+        <span style="color:var(--muted);font-size:12px">${entry.requests} req &nbsp;·&nbsp; ${fmtNum(entry.totalTokens)} tokens &nbsp;·&nbsp; ${share}% of total</span>
+      </div>
+      <div class="usage-bar"><div class="usage-bar-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
 }
 
 function renderByModel(byModel, total) {
@@ -943,7 +968,12 @@ function enterDemoMode() {
   // Demo usage
   document.getElementById('usage-content').innerHTML =
     '<div class="grid-3" style="margin-bottom:1rem"><div class="stat"><div class="stat-label">Total tokens</div><div class="stat-value">2.4M</div></div><div class="stat"><div class="stat-label">Input tokens</div><div class="stat-value">1.8M</div></div><div class="stat"><div class="stat-label">Output tokens</div><div class="stat-value">560K</div></div></div>' +
-    '<div class="card"><div class="card-title">By model</div><div class="usage-bar-wrap"><div class="usage-bar-label"><span>claude-3-5-sonnet-20241022</span><span>1.5M tokens</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:63%"></div></div></div><div class="usage-bar-wrap"><div class="usage-bar-label"><span>gemini-2.0-flash</span><span>900K tokens</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:37%"></div></div></div></div>';
+    '<div class="card"><div class="card-title">Team key leaderboard</div>' +
+    '<div class="usage-bar-wrap"><div class="usage-bar-label"><span><span style="margin-right:6px">🥇</span>Abbas</span><span style="color:var(--muted);font-size:12px">84 req &nbsp;·&nbsp; 1.4M tokens &nbsp;·&nbsp; 58% of total</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:100%"></div></div></div>' +
+    '<div class="usage-bar-wrap"><div class="usage-bar-label"><span><span style="margin-right:6px">🥈</span>Frontend Team</span><span style="color:var(--muted);font-size:12px">31 req &nbsp;·&nbsp; 620K tokens &nbsp;·&nbsp; 26% of total</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:44%"></div></div></div>' +
+    '<div class="usage-bar-wrap"><div class="usage-bar-label"><span><span style="margin-right:6px">🥉</span>Liaqat</span><span style="color:var(--muted);font-size:12px">12 req &nbsp;·&nbsp; 380K tokens &nbsp;·&nbsp; 16% of total</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:27%"></div></div></div>' +
+    '</div>' +
+    '<div class="card" style="margin-top:12px"><div class="card-title">By model</div><div class="usage-bar-wrap"><div class="usage-bar-label"><span>claude-3-5-sonnet-20241022</span><span>1.5M tokens</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:63%"></div></div></div><div class="usage-bar-wrap"><div class="usage-bar-label"><span>gemini-2.0-flash</span><span>900K tokens</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:37%"></div></div></div></div>';
 }
 
 // ── Boot ──────────────────────────────────────────────────────────
