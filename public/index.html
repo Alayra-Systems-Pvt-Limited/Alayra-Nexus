@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Kinetic Nexus</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#09090b;--sidebar:#111116;--card:#18181b;--card2:#222228;
+  --border:#2a2a32;--border2:#3a3a44;
+  --text:#f4f4f5;--muted:#71717a;--subtle:#3f3f46;
+  --accent:#8b5cf6;--accent-dim:#7c3aed;--accent-bg:rgba(139,92,246,.12);
+  --green:#22c55e;--green-bg:rgba(34,197,94,.12);
+  --yellow:#f59e0b;--yellow-bg:rgba(245,158,11,.12);
+  --red:#ef4444;--red-bg:rgba(239,68,68,.12);
+  --blue:#3b82f6;--blue-bg:rgba(59,130,246,.12);
+  --radius:8px;--r2:12px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;font-size:14px;line-height:1.5}
+
+/* ── Login ── */
+#login-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:100}
+.login-box{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:2rem;width:360px}
+.login-logo{font-size:22px;font-weight:700;margin-bottom:4px;background:linear-gradient(135deg,#a78bfa,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.login-sub{color:var(--muted);font-size:13px;margin-bottom:1.5rem}
+.login-box label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em}
+.login-box input{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;color:var(--text);font-size:14px;outline:none}
+.login-box input:focus{border-color:var(--accent)}
+.login-err{color:var(--red);font-size:12px;margin-top:6px;min-height:18px}
+
+/* ── App shell ── */
+#app{display:none;height:100vh;flex-direction:column}
+.topbar{height:48px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 1rem;gap:12px;flex-shrink:0}
+.topbar-logo{font-weight:700;font-size:15px;background:linear-gradient(135deg,#a78bfa,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.01em}
+.topbar-by{color:var(--subtle);font-size:12px}
+.topbar-spacer{flex:1}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+.status-label{font-size:12px;color:var(--muted)}
+
+.shell{display:flex;flex:1;overflow:hidden}
+.sidebar{width:200px;background:var(--sidebar);border-right:1px solid var(--border);padding:12px 0;flex-shrink:0;display:flex;flex-direction:column;gap:2px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 16px;border-radius:6px;margin:0 8px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:500;transition:all .15s;user-select:none}
+.nav-item:hover{background:var(--card);color:var(--text)}
+.nav-item.active{background:var(--accent-bg);color:var(--accent)}
+.nav-icon{font-size:16px;width:18px;text-align:center}
+.nav-sep{height:1px;background:var(--border);margin:8px 16px}
+
+.content{flex:1;overflow-y:auto;padding:2rem}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* ── Components ── */
+h2{font-size:18px;font-weight:600;margin-bottom:4px}
+.page-sub{color:var(--muted);font-size:13px;margin-bottom:1.5rem}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:1.25rem}
+.card+.card{margin-top:12px}
+.card-title{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+button{cursor:pointer;border:none;border-radius:var(--radius);font-size:13px;font-weight:500;padding:8px 14px;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-dim)}
+.btn-secondary{background:var(--card2);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--border2)}
+.btn-danger{background:var(--red-bg);color:var(--red);border:1px solid transparent}
+.btn-danger:hover{border-color:var(--red)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-icon{padding:6px 8px;background:var(--card2);border:1px solid var(--border);color:var(--muted)}
+.btn-icon:hover{color:var(--text);border-color:var(--border2)}
+
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.badge-green{background:var(--green-bg);color:var(--green)}
+.badge-yellow{background:var(--yellow-bg);color:var(--yellow)}
+.badge-red{background:var(--red-bg);color:var(--red)}
+.badge-purple{background:var(--accent-bg);color:var(--accent)}
+.badge-blue{background:var(--blue-bg);color:var(--blue)}
+.badge-gray{background:var(--card2);color:var(--muted)}
+
+.copy-row{display:flex;align-items:center;background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;gap:10px;margin-bottom:8px}
+.copy-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;width:80px;flex-shrink:0}
+.copy-val{flex:1;font-family:monospace;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.copy-btn{flex-shrink:0;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;transition:all .15s}
+.copy-btn:hover{color:var(--text);border-color:var(--border2)}
+.copy-btn.copied{color:var(--green);border-color:var(--green)}
+
+input,select,textarea{background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 12px;color:var(--text);font-size:13px;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+select option{background:var(--card2)}
+.form-row{margin-bottom:12px}
+.form-label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500}
+.form-hint{font-size:11px;color:var(--subtle);margin-top:4px}
+.form-actions{display:flex;gap:8px;margin-top:16px}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border)}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+.val-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.val-status{font-size:12px;font-weight:500}
+.val-ok{color:var(--green)}
+.val-err{color:var(--red)}
+.val-testing{color:var(--yellow)}
+
+/* ── Modal ── */
+#modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}
+#modal-bg.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:1.5rem;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:1rem}
+.modal-close{float:right;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1}
+
+/* ── Connect tab ── */
+.connect-hero{text-align:center;padding:1.5rem 0 1rem}
+.connect-hero h1{font-size:24px;font-weight:700;background:linear-gradient(135deg,#a78bfa,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.connect-hero p{color:var(--muted);margin-top:6px;font-size:14px}
+.tools-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:1rem}
+.tool-tag{background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;font-size:12px;color:var(--muted)}
+
+/* ── Setup wizard ── */
+.wizard{max-width:520px;margin:0 auto}
+.wizard-steps{display:flex;gap:8px;margin-bottom:1.5rem}
+.wizard-step{flex:1;height:3px;border-radius:2px;background:var(--border)}
+.wizard-step.done{background:var(--accent)}
+.wizard-step.active{background:var(--accent);opacity:.5}
+
+/* ── Stat cards ── */
+.stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1rem}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.stat-value{font-size:24px;font-weight:700}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:24px;right:24px;background:#1e1e2e;border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;font-size:13px;color:var(--text);transform:translateY(60px);opacity:0;transition:all .25s;z-index:999}
+#toast.show{transform:translateY(0);opacity:1}
+
+.empty-state{text-align:center;padding:3rem 1rem;color:var(--muted)}
+.empty-state .icon{font-size:32px;margin-bottom:10px;opacity:.4}
+.empty-state p{font-size:13px}
+
+.loader{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.tier-premium{color:#f59e0b}
+.tier-standard{color:#8b5cf6}
+.tier-fast{color:#22c55e}
+
+/* ── Usage bars ── */
+.usage-bar-wrap{margin-bottom:10px}
+.usage-bar-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px}
+.usage-bar{height:6px;background:var(--card2);border-radius:3px;overflow:hidden}
+.usage-bar-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .4s}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">⚡ Kinetic Nexus</div>
+    <div class="login-sub">by Alayra Systems</div>
+    <label>Admin password</label>
+    <input type="password" id="login-pwd" placeholder="Enter your ADMIN_PASSWORD" autofocus/>
+    <div class="login-err" id="login-err"></div>
+    <button class="btn-primary" style="width:100%;margin-top:14px" onclick="doLogin()">Sign in →</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-logo">⚡ Kinetic Nexus</div>
+    <div class="topbar-by">by Alayra Systems</div>
+    <div class="topbar-spacer"></div>
+    <div class="status-dot" id="status-dot"></div>
+    <div class="status-label" id="status-label">connecting…</div>
+    <button class="btn-secondary btn-sm" onclick="doLogout()">Sign out</button>
+  </div>
+
+  <div class="shell">
+    <nav class="sidebar">
+      <div class="nav-item active" data-tab="connect" onclick="showTab('connect')">
+        <span class="nav-icon">🔗</span> Connect
+      </div>
+      <div class="nav-item" data-tab="providers" onclick="showTab('providers')">
+        <span class="nav-icon">🔑</span> Providers
+      </div>
+      <div class="nav-item" data-tab="team" onclick="showTab('team')">
+        <span class="nav-icon">👥</span> Team Keys
+      </div>
+      <div class="nav-item" data-tab="usage" onclick="showTab('usage')">
+        <span class="nav-icon">📊</span> Usage
+      </div>
+      <div class="nav-sep"></div>
+      <div class="nav-item" data-tab="settings" onclick="showTab('settings')">
+        <span class="nav-icon">⚙️</span> Settings
+      </div>
+    </nav>
+
+    <main class="content">
+
+      <!-- Connect -->
+      <div class="tab-panel active" id="tab-connect">
+        <div class="connect-hero">
+          <h1>Your endpoint is ready</h1>
+          <p>Paste these three values into any AI tool to start routing through Nexus</p>
+        </div>
+        <div class="card" style="max-width:600px;margin:0 auto">
+          <div id="connect-rows">
+            <div style="text-align:center;padding:2rem"><div class="loader"></div></div>
+          </div>
+          <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+            <div class="card-title">Works with any OpenAI-compatible tool</div>
+            <div class="tools-row" id="tools-row">
+              <span class="tool-tag">Cursor</span><span class="tool-tag">Cline</span>
+              <span class="tool-tag">Windsurf</span><span class="tool-tag">Continue.dev</span>
+              <span class="tool-tag">Aider</span><span class="tool-tag">Open WebUI</span>
+              <span class="tool-tag">LM Studio</span><span class="tool-tag">Any OpenAI SDK</span>
+            </div>
+          </div>
+        </div>
+        <div style="max-width:600px;margin:1rem auto 0">
+          <div class="card">
+            <div class="card-title">Routing status</div>
+            <div id="routing-status"><div class="loader"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Providers -->
+      <div class="tab-panel" id="tab-providers">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h2>Providers & Keys</h2>
+          <button class="btn-primary" onclick="showAddProvider()">+ Add provider</button>
+        </div>
+        <div class="page-sub">Each provider needs at least one API key. Nexus routes across all active keys automatically.</div>
+        <div id="providers-list"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
+      </div>
+
+      <!-- Team Keys -->
+      <div class="tab-panel" id="tab-team">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h2>Team Keys</h2>
+          <button class="btn-primary" onclick="showCreateTeamKey()">+ New key</button>
+        </div>
+        <div class="page-sub">Give each team member their own named key. Track usage per person. Revoke anytime.</div>
+        <div id="team-list"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
+      </div>
+
+      <!-- Usage -->
+      <div class="tab-panel" id="tab-usage">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h2>Usage</h2>
+          <div style="display:flex;gap:6px">
+            <button class="btn-secondary btn-sm" onclick="loadUsage('today')" id="u-today">Today</button>
+            <button class="btn-secondary btn-sm" onclick="loadUsage('7d')" id="u-7d">7 days</button>
+            <button class="btn-secondary btn-sm" onclick="loadUsage('30d')" id="u-30d" style="background:var(--accent-bg);color:var(--accent)">30 days</button>
+          </div>
+        </div>
+        <div class="page-sub">Token usage tracked per model and per team key.</div>
+        <div id="usage-content"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
+      </div>
+
+      <!-- Settings -->
+      <div class="tab-panel" id="tab-settings">
+        <h2>Settings</h2>
+        <div class="page-sub">Manage your Nexus API key and configuration.</div>
+        <div class="card" style="max-width:500px">
+          <div class="card-title">Nexus API key</div>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">This is the key your team pastes into their AI tool. Rotating it invalidates all existing sessions.</p>
+          <div class="copy-row">
+            <span class="copy-label">API KEY</span>
+            <span class="copy-val" id="settings-key">••••••••••••••••</span>
+            <button class="copy-btn" onclick="toggleShowKey()" id="show-key-btn">Show</button>
+            <button class="copy-btn" onclick="copyText(document.getElementById('settings-key-raw').value)" id="copy-key-btn">Copy</button>
+          </div>
+          <input type="hidden" id="settings-key-raw"/>
+          <button class="btn-danger btn-sm" style="margin-top:8px" onclick="rotateKey()">⟳ Rotate key</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="modal-bg" onclick="closeModal(event)">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let PWD = sessionStorage.getItem('nx_pwd') || '';
+let teamKeys = [];
+
+// ── Auth ───────────────────────────────────────────────────────────
+async function doLogin() {
+  const pwd = document.getElementById('login-pwd').value.trim();
+  if (!pwd) return;
+  PWD = pwd;
+  const res = await fetch('/admin/status', { headers: { Authorization: `Bearer ${pwd}` } });
+  if (res.status === 401) {
+    document.getElementById('login-err').textContent = 'Incorrect password';
+    return;
+  }
+  sessionStorage.setItem('nx_pwd', pwd);
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  initApp();
+}
+
+document.getElementById('login-pwd').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function doLogout() {
+  sessionStorage.removeItem('nx_pwd');
+  location.reload();
+}
+
+// ── API ────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: { Authorization: `Bearer ${PWD}`, 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(path, opts);
+  if (res.status === 401) { doLogout(); return null; }
+  if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(t || `HTTP ${res.status}`); }
+  return res.json();
+}
+const GET  = p        => api('GET',    p);
+const POST = (p, b)   => api('POST',   p, b);
+const DEL  = p        => api('DELETE', p);
+const PATCH= (p, b)   => api('PATCH',  p, b);
+
+// ── Toast ──────────────────────────────────────────────────────────
+function toast(msg, isErr) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = isErr ? 'var(--red)' : 'var(--green)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Init ───────────────────────────────────────────────────────────
+async function initApp() {
+  updateStatus();
+  setInterval(updateStatus, 30000);
+  showTab('connect');
+  loadTeamKeys();
+}
+
+async function updateStatus() {
+  try {
+    const s = await GET('/admin/status');
+    document.getElementById('status-dot').style.background = s.ok ? 'var(--green)' : 'var(--red)';
+    document.getElementById('status-label').textContent = s.ok ? `${s.activeKeys} key${s.activeKeys!==1?'s':''} active` : 'error';
+  } catch { document.getElementById('status-label').textContent = 'offline'; }
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  if (name==='connect')   loadConnect();
+  if (name==='providers') loadProviders();
+  if (name==='team')      renderTeamKeys();
+  if (name==='usage')     loadUsage('30d');
+  if (name==='settings')  loadSettings();
+}
+
+// ── Connect tab ────────────────────────────────────────────────────
+async function loadConnect() {
+  try {
+    const cfg = await GET('/admin/config');
+    const rows = document.getElementById('connect-rows');
+    const key  = cfg.nexusApiKey || '';
+    const masked = key.slice(0,8) + '••••••••' + key.slice(-4);
+    rows.innerHTML = `
+      <div class="copy-row">
+        <span class="copy-label">Base URL</span>
+        <span class="copy-val">${cfg.baseUrl}</span>
+        <button class="copy-btn" onclick="copyText('${cfg.baseUrl}',this)">Copy</button>
+      </div>
+      <div class="copy-row">
+        <span class="copy-label">Model</span>
+        <span class="copy-val">nexus</span>
+        <button class="copy-btn" onclick="copyText('nexus',this)">Copy</button>
+      </div>
+      <div class="copy-row">
+        <span class="copy-label">API Key</span>
+        <span class="copy-val" id="connect-key-val">${masked}</span>
+        <button class="copy-btn" onclick="copyText('${key}',this)">Copy</button>
+      </div>`;
+    loadRoutingStatus();
+  } catch(e) { document.getElementById('connect-rows').innerHTML = `<div style="color:var(--red);font-size:13px">Failed to load config: ${e.message}</div>`; }
+}
+
+async function loadRoutingStatus() {
+  try {
+    const data = await GET('/admin/routing/status');
+    const el = document.getElementById('routing-status');
+    const tierColor = { premium:'var(--yellow)', standard:'var(--accent)', fast:'var(--green)' };
+    el.innerHTML = data.tiers.map(t => {
+      const providers = t.providers;
+      if (!providers.length) return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="badge badge-gray" style="text-transform:capitalize">${t.tier}</span><span style="color:var(--subtle);font-size:12px">No providers</span></div>`;
+      return providers.map(p => `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span class="badge" style="background:${tierColor[t.tier]}22;color:${tierColor[t.tier]};text-transform:capitalize">${t.tier}</span>
+          <span style="font-size:13px">${p.name || p.id}</span>
+          ${p.preferredModel ? `<span style="font-family:monospace;font-size:12px;color:var(--muted)">${p.preferredModel}</span>` : ''}
+          <span class="badge ${p.activeKeys>0?'badge-green':'badge-red'}">${p.activeKeys} active</span>
+        </div>`).join('');
+    }).join('');
+  } catch { document.getElementById('routing-status').textContent = 'Could not load routing status'; }
+}
+
+// ── Providers ──────────────────────────────────────────────────────
+async function loadProviders() {
+  const el = document.getElementById('providers-list');
+  try {
+    const { providers } = await GET('/admin/providers');
+    if (!providers.length) {
+      el.innerHTML = `<div class="empty-state"><div class="icon">🔑</div><p>No providers yet.<br/>Add your first provider to start routing.</p></div>`;
+      return;
+    }
+    el.innerHTML = providers.map(p => renderProviderCard(p)).join('');
+    providers.forEach(p => loadKeysForProvider(p.id));
+  } catch(e) { el.innerHTML = `<div style="color:var(--red)">${e.message}</div>`; }
+}
+
+function tierBadge(tier) {
+  const map = { premium:'badge-yellow', standard:'badge-purple', fast:'badge-green' };
+  return `<span class="badge ${map[tier]||'badge-gray'}" style="text-transform:capitalize">${tier}</span>`;
+}
+
+function providerBadge(slug) {
+  const icons = { anthropic:'🔵', openai:'🟢', google:'🔴', groq:'⚡', openrouter:'🌐', custom:'⚙️' };
+  return icons[slug] || '🔧';
+}
+
+function renderProviderCard(p) {
+  return `<div class="card" id="pcard-${p.id}">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span style="font-size:20px">${providerBadge(p.provider)}</span>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:14px">${p.name}</div>
+        ${p.preferredModel ? `<div style="font-family:monospace;font-size:12px;color:var(--muted)">${p.preferredModel}</div>` : '<div style="font-size:12px;color:var(--red)">⚠ No preferred model set</div>'}
+      </div>
+      ${tierBadge(p.tier)}
+      <button class="btn-icon btn-sm" onclick="showAddKey('${p.id}','${p.name}')">+ Key</button>
+      <button class="btn-icon btn-sm" onclick="showEditProvider('${p.id}')">Edit</button>
+      <button class="btn-danger btn-sm" onclick="deleteProvider('${p.id}','${p.name}')">Delete</button>
+    </div>
+    <div id="keys-${p.id}"><div class="loader"></div></div>
+  </div>`;
+}
+
+async function loadKeysForProvider(providerId) {
+  const el = document.getElementById('keys-'+providerId);
+  if (!el) return;
+  try {
+    const { keys } = await GET(`/admin/providers/${providerId}/keys`);
+    if (!keys.length) { el.innerHTML = `<div style="font-size:12px;color:var(--subtle);padding:4px 0">No keys — click "+ Key" to add one</div>`; return; }
+    el.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px">${keys.map(k => renderKeyRow(k)).join('')}</div>`;
+  } catch(e) { el.innerHTML = `<div style="color:var(--red);font-size:12px">${e.message}</div>`; }
+}
+
+function keyStatusBadge(k) {
+  if (k.status==='banned')  return '<span class="badge badge-red">Banned</span>';
+  if (k.status==='cooling') return '<span class="badge badge-yellow">Cooling</span>';
+  return '<span class="badge badge-green">Active</span>';
+}
+
+function renderKeyRow(k) {
+  return `<div style="display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:8px 10px" id="krow-${k.id}">
+    <span style="font-family:monospace;font-size:12px;color:var(--muted);flex:1">${k.maskedKey || k.label || k.id.slice(0,8)}</span>
+    ${k.label ? `<span style="font-size:12px;color:var(--muted)">${k.label}</span>` : ''}
+    ${keyStatusBadge(k)}
+    <span style="font-size:11px;color:var(--subtle)">${k.rpmLimit} RPM</span>
+    <button class="btn-icon btn-sm" onclick="testProvKey('${k.id}')">Test</button>
+    ${k.status==='banned' ? `<button class="btn-secondary btn-sm" onclick="unbanKey('${k.id}')">Unban</button>` : `<button class="btn-icon btn-sm" onclick="banKey('${k.id}')">Ban</button>`}
+    <button class="btn-danger btn-sm" onclick="deleteKey('${k.id}','${k.providerId}')">✕</button>
+  </div>`;
+}
+
+async function deleteProvider(id, name) {
+  if (!confirm(`Delete provider "${name}" and all its keys?`)) return;
+  try { await DEL(`/admin/providers/${id}`); toast('Provider deleted'); loadProviders(); }
+  catch(e) { toast(e.message, true); }
+}
+
+async function deleteKey(id, providerId) {
+  try { await DEL(`/admin/keys/${id}`); toast('Key removed'); loadKeysForProvider(providerId); }
+  catch(e) { toast(e.message, true); }
+}
+
+async function banKey(id) {
+  try { await POST(`/admin/keys/${id}/ban`); toast('Key banned'); loadProviders(); }
+  catch(e) { toast(e.message, true); }
+}
+
+async function unbanKey(id) {
+  try { await POST(`/admin/keys/${id}/unban`); toast('Key unbanned'); loadProviders(); }
+  catch(e) { toast(e.message, true); }
+}
+
+async function testProvKey(id) {
+  const btn = event.target;
+  btn.textContent = '…'; btn.disabled = true;
+  try {
+    const r = await POST(`/admin/keys/${id}/test`);
+    btn.textContent = r.success ? `✓ ${r.latencyMs}ms` : '✗ fail';
+    btn.style.color = r.success ? 'var(--green)' : 'var(--red)';
+    setTimeout(() => { btn.textContent='Test'; btn.style.color=''; btn.disabled=false; }, 3000);
+  } catch { btn.textContent='err'; btn.disabled=false; }
+}
+
+// ── Add provider modal ──────────────────────────────────────────────
+function showAddProvider() {
+  document.getElementById('modal-box').innerHTML = `
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title">Add provider</div>
+    <div class="form-row">
+      <label class="form-label">Provider type</label>
+      <select id="prov-type" onchange="fillProviderDefaults()">
+        <option value="anthropic">Anthropic (Claude)</option>
+        <option value="openai">OpenAI (GPT)</option>
+        <option value="google">Google (Gemini)</option>
+        <option value="groq">Groq (Llama/Mixtral)</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="custom">Custom</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Display name</label>
+      <input id="prov-name" placeholder="e.g. Anthropic Primary"/>
+    </div>
+    <div class="form-row">
+      <label class="form-label">API Key</label>
+      <input id="prov-key" type="password" placeholder="sk-ant-... or sk-... or AIza..."/>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Preferred model (the actual model ID to use)</label>
+      <input id="prov-model" placeholder="e.g. claude-3-5-sonnet-20241022"/>
+      <div class="form-hint">This is what Nexus sends to the provider API</div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Tier</label>
+      <select id="prov-tier">
+        <option value="premium">Premium (tried first)</option>
+        <option value="standard" selected>Standard</option>
+        <option value="fast">Fast (fallback)</option>
+      </select>
+    </div>
+    <div class="val-row" id="prov-val-status"></div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="submitAddProvider()">Add provider</button>
+      <button class="btn-secondary" onclick="testNewProvider()">Test credentials</button>
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>`;
+  openModal();
+  fillProviderDefaults();
+}
+
+const PROVIDER_DEFAULTS = {
+  anthropic:  { name:'Anthropic', model:'claude-3-5-sonnet-20241022', tier:'premium' },
+  openai:     { name:'OpenAI',    model:'gpt-4o-mini',                tier:'standard' },
+  google:     { name:'Google',    model:'gemini-2.0-flash',           tier:'standard' },
+  groq:       { name:'Groq',      model:'llama-3.3-70b-versatile',    tier:'fast' },
+  openrouter: { name:'OpenRouter',model:'openai/gpt-4o-mini',         tier:'standard' },
+  custom:     { name:'Custom',    model:'',                           tier:'standard' },
+};
+
+function fillProviderDefaults() {
+  const type = document.getElementById('prov-type').value;
+  const d = PROVIDER_DEFAULTS[type] || PROVIDER_DEFAULTS.custom;
+  if (!document.getElementById('prov-name').value) document.getElementById('prov-name').value = d.name;
+  if (!document.getElementById('prov-model').value) document.getElementById('prov-model').value = d.model;
+  document.getElementById('prov-tier').value = d.tier;
+}
+
+async function testNewProvider() {
+  const type = document.getElementById('prov-type').value;
+  const key  = document.getElementById('prov-key').value.trim();
+  const el   = document.getElementById('prov-val-status');
+  if (!key) { el.innerHTML = '<span class="val-status val-err">Enter an API key first</span>'; return; }
+  el.innerHTML = '<span class="val-status val-testing"><span class="loader"></span> Testing…</span>';
+  try {
+    const r = await POST('/admin/validate/provider', { provider: type, apiKey: key });
+    el.innerHTML = r.ok
+      ? `<span class="val-status val-ok">✓ Connected (${r.latencyMs}ms)</span>`
+      : `<span class="val-status val-err">✗ ${r.error}</span>`;
+  } catch(e) { el.innerHTML = `<span class="val-status val-err">✗ ${e.message}</span>`; }
+}
+
+async function submitAddProvider() {
+  const type  = document.getElementById('prov-type').value;
+  const name  = document.getElementById('prov-name').value.trim();
+  const key   = document.getElementById('prov-key').value.trim();
+  const model = document.getElementById('prov-model').value.trim();
+  const tier  = document.getElementById('prov-tier').value;
+  if (!name || !key) { toast('Name and API key are required', true); return; }
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') + '-' + Date.now().toString(36);
+  try {
+    const prov = await POST('/admin/providers', { name, slug, provider: type, tier, preferredModel: model || undefined });
+    await POST(`/admin/providers/${prov.provider.id}/keys`, { apiKey: key, label: 'Primary', rpmLimit: 60 });
+    if (model) {
+      const vr = await POST('/admin/validate/model', { providerId: prov.provider.id, modelName: model });
+      if (!vr.ok) toast(`Provider added but model test failed: ${vr.error}`, true);
+      else toast(`Provider added and model verified ✓`);
+    } else { toast('Provider added'); }
+    closeModal();
+    loadProviders();
+    loadConnect();
+  } catch(e) { toast(e.message, true); }
+}
+
+// ── Add key modal ───────────────────────────────────────────────────
+function showAddKey(providerId, providerName) {
+  document.getElementById('modal-box').innerHTML = `
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title">Add key to ${providerName}</div>
+    <div class="form-row">
+      <label class="form-label">API Key</label>
+      <input id="new-key-val" type="password" placeholder="sk-ant-..."/>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Label (optional)</label>
+      <input id="new-key-label" placeholder="e.g. Key 2, Backup, Work account"/>
+    </div>
+    <div class="form-row">
+      <label class="form-label">RPM limit</label>
+      <input id="new-key-rpm" type="number" value="60" min="1"/>
+    </div>
+    <div class="val-row" id="key-val-status"></div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="submitAddKey('${providerId}')">Add key</button>
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>`;
+  openModal();
+}
+
+async function submitAddKey(providerId) {
+  const apiKey = document.getElementById('new-key-val').value.trim();
+  const label  = document.getElementById('new-key-label').value.trim();
+  const rpm    = parseInt(document.getElementById('new-key-rpm').value) || 60;
+  if (!apiKey) { toast('API key is required', true); return; }
+  try {
+    await POST(`/admin/providers/${providerId}/keys`, { apiKey, label: label || undefined, rpmLimit: rpm });
+    toast('Key added');
+    closeModal();
+    loadKeysForProvider(providerId);
+  } catch(e) { toast(e.message, true); }
+}
+
+// ── Edit provider modal ──────────────────────────────────────────────
+async function showEditProvider(id) {
+  const { providers } = await GET('/admin/providers');
+  const p = providers.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('modal-box').innerHTML = `
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title">Edit ${p.name}</div>
+    <div class="form-row">
+      <label class="form-label">Preferred model</label>
+      <input id="edit-model" value="${p.preferredModel||''}" placeholder="e.g. claude-3-5-sonnet-20241022"/>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Tier</label>
+      <select id="edit-tier">
+        <option value="premium" ${p.tier==='premium'?'selected':''}>Premium</option>
+        <option value="standard" ${p.tier==='standard'?'selected':''}>Standard</option>
+        <option value="fast" ${p.tier==='fast'?'selected':''}>Fast</option>
+      </select>
+    </div>
+    <div class="val-row" id="edit-val-status"></div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="submitEditProvider('${id}')">Save</button>
+      <button class="btn-secondary" onclick="testEditModel('${id}')">Test model</button>
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>`;
+  openModal();
+}
+
+async function testEditModel(providerId) {
+  const model = document.getElementById('edit-model').value.trim();
+  const el    = document.getElementById('edit-val-status');
+  if (!model) { el.innerHTML = '<span class="val-status val-err">Enter a model name first</span>'; return; }
+  el.innerHTML = '<span class="val-status val-testing"><span class="loader"></span> Testing model…</span>';
+  try {
+    const r = await POST('/admin/validate/model', { providerId, modelName: model });
+    el.innerHTML = r.ok
+      ? `<span class="val-status val-ok">✓ Model works (${r.latencyMs}ms)</span>`
+      : `<span class="val-status val-err">✗ ${r.error}</span>`;
+  } catch(e) { el.innerHTML = `<span class="val-status val-err">✗ ${e.message}</span>`; }
+}
+
+async function submitEditProvider(id) {
+  const model = document.getElementById('edit-model').value.trim();
+  const tier  = document.getElementById('edit-tier').value;
+  try {
+    await PATCH(`/admin/providers/${id}`, { preferredModel: model || null, tier });
+    toast('Provider updated');
+    closeModal();
+    loadProviders();
+    loadConnect();
+  } catch(e) { toast(e.message, true); }
+}
+
+// ── Team Keys ──────────────────────────────────────────────────────
+async function loadTeamKeys() {
+  try {
+    const data = await GET('/admin/team-keys');
+    teamKeys = data.keys || [];
+  } catch { teamKeys = []; }
+}
+
+function renderTeamKeys() {
+  const el = document.getElementById('team-list');
+  if (!teamKeys.length) {
+    el.innerHTML = `<div class="empty-state"><div class="icon">👥</div><p>No team keys yet.<br/>Create keys for each team member.</p></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>Key (masked)</th><th>Created</th><th>Actions</th></tr></thead>
+    <tbody>${teamKeys.map(k => `<tr>
+      <td><strong>${k.name}</strong></td>
+      <td><span style="font-family:monospace;font-size:12px">${k.maskedKey}</span></td>
+      <td style="color:var(--muted)">${new Date(k.createdAt).toLocaleDateString()}</td>
+      <td style="display:flex;gap:6px">
+        <button class="btn-icon btn-sm" onclick="copyTeamKey('${k.id}')">Copy key</button>
+        <button class="btn-danger btn-sm" onclick="revokeTeamKey('${k.id}','${k.name}')">Revoke</button>
+      </td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function showCreateTeamKey() {
+  document.getElementById('modal-box').innerHTML = `
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title">Create team key</div>
+    <div class="form-row">
+      <label class="form-label">Name</label>
+      <input id="tk-name" placeholder="e.g. Abbas, Frontend Team, John"/>
+    </div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="submitCreateTeamKey()">Create key</button>
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>`;
+  openModal();
+}
+
+async function submitCreateTeamKey() {
+  const name = document.getElementById('tk-name').value.trim();
+  if (!name) { toast('Name is required', true); return; }
+  try {
+    const r = await POST('/admin/team-keys', { name });
+    closeModal();
+    teamKeys = [...teamKeys, r.key];
+    renderTeamKeys();
+    toast(`Key for "${name}" created — copy it now, shown once`);
+    showFullKeyModal(r.key.name, r.key.plainKey);
+  } catch(e) { toast(e.message, true); }
+}
+
+function showFullKeyModal(name, key) {
+  document.getElementById('modal-box').innerHTML = `
+    <div class="modal-title">Key for ${name}</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Copy this key now. It won't be shown again.</p>
+    <div class="copy-row">
+      <span class="copy-val" style="font-family:monospace">${key}</span>
+      <button class="copy-btn" onclick="copyText('${key}',this)">Copy</button>
+    </div>
+    <div class="form-actions" style="margin-top:12px">
+      <button class="btn-primary" onclick="closeModal()">Done</button>
+    </div>`;
+  openModal();
+}
+
+async function copyTeamKey(id) {
+  try {
+    const r = await GET(`/admin/team-keys/${id}/reveal`);
+    copyText(r.key);
+    toast('Key copied');
+  } catch { toast('Cannot re-reveal key for security', true); }
+}
+
+async function revokeTeamKey(id, name) {
+  if (!confirm(`Revoke key for "${name}"? This cannot be undone.`)) return;
+  try {
+    await DEL(`/admin/team-keys/${id}`);
+    teamKeys = teamKeys.filter(k => k.id !== id);
+    renderTeamKeys();
+    toast('Key revoked');
+  } catch(e) { toast(e.message, true); }
+}
+
+// ── Usage ──────────────────────────────────────────────────────────
+async function loadUsage(period) {
+  ['today','7d','30d'].forEach(p => {
+    const b = document.getElementById('u-'+p);
+    b.style.background = p===period ? 'var(--accent-bg)' : '';
+    b.style.color = p===period ? 'var(--accent)' : '';
+  });
+  const el = document.getElementById('usage-content');
+  el.innerHTML = '<div style="text-align:center;padding:2rem"><div class="loader"></div></div>';
+  try {
+    const data = await GET(`/admin/usage?period=${period}`);
+    const t = data.totals;
+    el.innerHTML = `
+      <div class="grid-3" style="margin-bottom:1rem">
+        <div class="stat"><div class="stat-label">Total tokens</div><div class="stat-value">${fmtNum(t.totalTokens)}</div></div>
+        <div class="stat"><div class="stat-label">Input tokens</div><div class="stat-value">${fmtNum(t.inputTokens)}</div></div>
+        <div class="stat"><div class="stat-label">Output tokens</div><div class="stat-value">${fmtNum(t.outputTokens)}</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">By model</div>
+        ${renderByModel(data.byModel, t.totalTokens)}
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="card-title">By day</div>
+        ${renderByDay(data.byDay)}
+      </div>`;
+  } catch(e) { el.innerHTML = `<div style="color:var(--red)">${e.message}</div>`; }
+}
+
+function renderByModel(byModel, total) {
+  const entries = Object.entries(byModel).sort((a,b) => b[1].tokens - a[1].tokens);
+  if (!entries.length) return '<div style="color:var(--muted);font-size:13px">No usage yet</div>';
+  return entries.map(([model, d]) => {
+    const pct = total > 0 ? Math.round(d.tokens/total*100) : 0;
+    return `<div class="usage-bar-wrap">
+      <div class="usage-bar-label"><span>${model}</span><span>${fmtNum(d.tokens)} tokens</span></div>
+      <div class="usage-bar"><div class="usage-bar-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderByDay(byDay) {
+  if (!byDay.length) return '<div style="color:var(--muted);font-size:13px">No usage yet</div>';
+  const max = Math.max(...byDay.map(d => d.tokens));
+  return `<div style="display:flex;align-items:flex-end;gap:4px;height:80px;padding-top:8px">
+    ${byDay.slice(-30).map(d => {
+      const h = max > 0 ? Math.max(4, Math.round(d.tokens/max*64)) : 4;
+      const label = new Date(d.date+'T00:00:00Z').toLocaleDateString('en',{month:'short',day:'numeric'});
+      return `<div title="${label}: ${fmtNum(d.tokens)}" style="flex:1;min-width:4px;height:${h}px;background:var(--accent);border-radius:2px 2px 0 0;opacity:.8;cursor:default"></div>`;
+    }).join('')}
+  </div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px">
+    <span>${byDay[0]?.date||''}</span><span>${byDay[byDay.length-1]?.date||''}</span>
+  </div>`;
+}
+
+// ── Settings ───────────────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const cfg = await GET('/admin/config');
+    document.getElementById('settings-key-raw').value = cfg.nexusApiKey || '';
+    document.getElementById('settings-key').textContent = (cfg.nexusApiKey||'').slice(0,8) + '••••••••';
+  } catch {}
+}
+
+let keyVisible = false;
+function toggleShowKey() {
+  keyVisible = !keyVisible;
+  const raw = document.getElementById('settings-key-raw').value;
+  document.getElementById('settings-key').textContent = keyVisible ? raw : raw.slice(0,8)+'••••••••';
+  document.getElementById('show-key-btn').textContent = keyVisible ? 'Hide' : 'Show';
+}
+
+async function rotateKey() {
+  if (!confirm('Rotate the Nexus API key? All existing sessions will stop working.')) return;
+  try {
+    const r = await POST('/admin/api-key/regenerate');
+    document.getElementById('settings-key-raw').value = r.key;
+    document.getElementById('settings-key').textContent = r.key.slice(0,8)+'••••••••';
+    keyVisible = false;
+    toast('API key rotated — copy the new key');
+    loadConnect();
+  } catch(e) { toast(e.message, true); }
+}
+
+// ── Modal ──────────────────────────────────────────────────────────
+function openModal()  { document.getElementById('modal-bg').classList.add('open'); }
+function closeModal(e) { if (!e || e.target===document.getElementById('modal-bg')) document.getElementById('modal-bg').classList.remove('open'); }
+
+// ── Utils ──────────────────────────────────────────────────────────
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Copied to clipboard');
+    if (btn) { const orig=btn.textContent; btn.textContent='✓'; btn.classList.add('copied'); setTimeout(()=>{btn.textContent=orig;btn.classList.remove('copied');},2000); }
+  });
+}
+
+function fmtNum(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
+  return String(n||0);
+}
+
+// ── Boot ──────────────────────────────────────────────────────────
+if (PWD) {
+  fetch('/admin/status', { headers: { Authorization: `Bearer ${PWD}` } }).then(r => {
+    if (r.ok) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      initApp();
+    } else { PWD = ''; sessionStorage.removeItem('nx_pwd'); }
+  });
+}
+</script>
+</body>
+</html>

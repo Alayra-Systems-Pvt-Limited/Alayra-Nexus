@@ -68,6 +68,15 @@ model TokenUsage {
   @@index([createdAt])
 }
 
+model NexusTeamKey {
+  id           String   @id @default(uuid())
+  name         String
+  encryptedKey String
+  keyHash      String   @unique
+  maskedKey    String
+  createdAt    DateTime @default(now())
+}
+
 model AppSettings {
   id        String   @id @default(uuid())
   key       String   @unique

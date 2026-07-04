@@ -53,6 +53,17 @@ CREATE TABLE "TokenUsage" (
 CREATE INDEX "TokenUsage_modelId_createdAt_idx" ON "TokenUsage"("modelId", "createdAt");
 CREATE INDEX "TokenUsage_createdAt_idx" ON "TokenUsage"("createdAt");
 
+CREATE TABLE "NexusTeamKey" (
+  "id"           TEXT NOT NULL DEFAULT gen_random_uuid()::text,
+  "name"         TEXT NOT NULL,
+  "encryptedKey" TEXT NOT NULL,
+  "keyHash"      TEXT NOT NULL,
+  "maskedKey"    TEXT NOT NULL,
+  "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "NexusTeamKey_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "NexusTeamKey_keyHash_key" ON "NexusTeamKey"("keyHash");
+
 CREATE TABLE "AppSettings" (
   "id"        TEXT NOT NULL DEFAULT gen_random_uuid()::text,
   "key"       TEXT NOT NULL,

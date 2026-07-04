@@ -3,6 +3,8 @@ import Fastify            from 'fastify';
 import cors               from '@fastify/cors';
 import helmet             from '@fastify/helmet';
 import rateLimit          from '@fastify/rate-limit';
+import staticFiles        from '@fastify/static';
+import path               from 'path';
 import proxyRoutes        from './routes/proxy';
 import adminRoutes        from './routes/admin';
 import { prisma }         from './lib/prisma';
@@ -28,6 +30,10 @@ async function bootstrap() {
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors,   { origin: true });
   await app.register(rateLimit, { max: 200, timeWindow: '1 minute' });
+  await app.register(staticFiles, {
+    root:   path.join(__dirname, '..', 'public'),
+    prefix: '/',
+  });
 
   // Health
   app.get('/health', async () => ({ ok: true, ts: new Date().toISOString() }));

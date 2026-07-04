@@ -3,7 +3,8 @@ import { z }                   from 'zod';
 import { randomUUID }          from 'crypto';
 import { verifyAdminPassword } from '../middleware/auth.middleware';
 import { prisma }              from '../lib/prisma';
-import { encrypt, maskKey }    from '../lib/encryption';
+import { encrypt, decrypt, maskKey } from '../lib/encryption';
+import { createHash, randomBytes } from 'crypto';
 import { getSetting, setSetting } from '../services/settings.service';
 import { getModelRegistry, updateModelRegistry } from '../services/model.service';
 import { getUsageSummary }     from '../services/token.service';
@@ -14,6 +15,17 @@ import { REGISTRY_CACHE_KEY }  from '../lib/registryCacheKey';
 const adminGuard = { preHandler: [verifyAdminPassword] };
 
 export default async function adminRoutes(fastify: FastifyInstance) {
+
+  // ── Dashboard config (auto-detects base URL from request) ────────
+
+  fastify.get('/admin/config', adminGuard, async (request, reply) => {
+    const apiKey    = await getSetting('NEXUS_API_KEY');
+    const providers = await prisma.nexusProvider.count();
+    const proto     = (request.headers['x-forwarded-proto'] as string) ?? 'http';
+    const host      = (request.headers['x-forwarded-host'] as string) ?? request.hostname;
+    const baseUrl   = `${proto}://${host}/v1`;
+    return reply.send({ baseUrl, nexusApiKey: apiKey, isFirstRun: providers === 0 });
+  });
 
   // ── Setup / health ────────────────────────────────────────────────
 
@@ -199,6 +211,41 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     const { key, value } = request.body as { key: string; value: string };
     if (key === 'ENCRYPTION_SECRET') return reply.code(403).send({ error: 'Forbidden' });
     await setSetting(key, value);
+    return reply.send({ success: true });
+  });
+
+  // ── Team keys ─────────────────────────────────────────────────────
+
+  fastify.get('/admin/team-keys', adminGuard, async (_req, reply) => {
+    const keys = await prisma.nexusTeamKey.findMany({ orderBy: { createdAt: 'asc' } });
+    return reply.send({ keys: keys.map(k => ({ id: k.id, name: k.name, maskedKey: k.maskedKey, createdAt: k.createdAt })) });
+  });
+
+  fastify.post('/admin/team-keys', adminGuard, async (request, reply) => {
+    const { name } = request.body as { name: string };
+    if (!name?.trim()) return reply.code(400).send({ error: 'name is required' });
+    const plain      = 'nx_' + randomBytes(24).toString('hex');
+    const keyHash    = createHash('sha256').update(plain).digest('hex');
+    const maskedKey  = plain.slice(0, 6) + '••••••••' + plain.slice(-4);
+    const created    = await prisma.nexusTeamKey.create({
+      data: { id: randomUUID(), name: name.trim(), encryptedKey: encrypt(plain), keyHash, maskedKey },
+    });
+    return reply.code(201).send({
+      key: { id: created.id, name: created.name, maskedKey, createdAt: created.createdAt, plainKey: plain },
+    });
+  });
+
+  fastify.get('/admin/team-keys/:id/reveal', adminGuard, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const tk = await prisma.nexusTeamKey.findUnique({ where: { id } });
+    if (!tk) return reply.code(404).send({ error: 'Not found' });
+    return reply.send({ key: decrypt(tk.encryptedKey) });
+  });
+
+  fastify.delete('/admin/team-keys/:id', adminGuard, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    await prisma.nexusTeamKey.delete({ where: { id } });
+    await redis.del(`nexus:teamkey:${id}`);
     return reply.send({ success: true });
   });
 
