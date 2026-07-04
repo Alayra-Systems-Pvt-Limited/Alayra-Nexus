@@ -91,12 +91,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   });
 
   const keySchema = z.object({
-    apiKey:          z.string().min(1),
-    label:           z.string().optional(),
-    rpmLimit:        z.number().int().min(1).default(60),
-    tpmLimit:        z.number().int().min(1).default(100000),
-    maxUsers:        z.number().int().min(1).default(10),
-    availableModels: z.array(z.string()).default([]),
+    apiKey:   z.string().min(1),
+    label:    z.string().optional(),
+    rpmLimit: z.number().int().min(1).default(60),
+    tpmLimit: z.number().int().min(1).default(100000),
   });
 
   fastify.post('/admin/providers/:providerId/keys', adminGuard, async (request, reply) => {
@@ -104,15 +102,13 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     const body = keySchema.parse(request.body);
     const key = await prisma.nexusKey.create({
       data: {
-        id:              randomUUID(),
+        id:           randomUUID(),
         providerId,
-        label:           body.label,
-        encryptedKey:    encrypt(body.apiKey),
-        maskedKey:       maskKey(body.apiKey),
-        rpmLimit:        body.rpmLimit,
-        tpmLimit:        body.tpmLimit,
-        maxUsers:        body.maxUsers,
-        availableModels: body.availableModels,
+        label:        body.label,
+        encryptedKey: encrypt(body.apiKey),
+        maskedKey:    maskKey(body.apiKey),
+        rpmLimit:     body.rpmLimit,
+        tpmLimit:     body.tpmLimit,
       },
     });
     return reply.code(201).send({ key: { ...key, encryptedKey: undefined } });

@@ -36,12 +36,8 @@ model NexusKey {
   status          String        @default("active")
   rpmLimit        Int           @default(60)
   tpmLimit        Int           @default(100000)
-  maxUsers        Int           @default(10)
-  currentUsers    Int           @default(0)
-  availableModels String[]
   lastUsedAt      DateTime?
   coolingUntil    DateTime?
-  errorCount      Int           @default(0)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
