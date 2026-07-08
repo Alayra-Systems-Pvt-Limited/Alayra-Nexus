@@ -1,0 +1,57 @@
+name: Bug report
+description: Report something that isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please **do not include real API keys, tokens, or `.env` values** — redact them.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I send a request to /v1/chat/completions with ..., I get ... but expected ...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps (and a minimal request/config) that reproduce the issue.
+      placeholder: |
+        1. Configure provider pool with ...
+        2. Send request ...
+        3. See error ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or error output
+      description: Paste any server logs or error responses. Redact secrets.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Which release or git commit are you running?
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running Kinetic Nexus?
+      options:
+        - Docker Compose
+        - Manual (Node.js)
+        - Railway / other PaaS
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Node.js version, OS, PostgreSQL and Redis versions.
+      placeholder: Node 20.x, Ubuntu 24.04, PostgreSQL 16, Redis 7

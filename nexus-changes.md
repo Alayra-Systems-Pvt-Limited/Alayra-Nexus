@@ -11,6 +11,28 @@
 
 ---
 
+**Date:** 2026-07-08 · Session 5  
+**Author:** Abbas  
+**Title:** Community Health Files, Security Policy, and Dependency Automation Hardening  
+
+**Summary:**  
+Added the standard open-source community health set so the repository is ready for
+external contributors and reporters. Wrote `SECURITY.md` with a private
+vulnerability-disclosure process (report to `report-nexus@alayrasystems.com`),
+scope, and a no-secrets-in-reports rule. Wrote `CONTRIBUTING.md` covering local
+setup, the required check gate (`lint` / `typecheck` / `test` / `build`), the pull
+request process, and commit conventions. Added a pull request template and two
+structured GitHub issue forms (bug report and feature request) with an issue
+template config that routes security reports and questions to the right place.
+Added a `FUNDING.yml` sponsor configuration.
+
+Hardened the Dependabot configuration: grouped the Prisma client and CLI packages
+so they always upgrade together (a mismatched bump breaks client generation), and
+configured it to skip breaking major-version Prisma upgrades so they are performed
+deliberately rather than via automated pull requests.
+
+---
+
 **Date:** 2026-07-08 · Session 4  
 **Author:** Abbas  
 **Title:** Launch Readiness — CI Pipeline, Test Suite, Linting, and Zero-Vulnerability Dependency Tree  

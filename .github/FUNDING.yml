@@ -1,0 +1,6 @@
+# Sponsor / support links for Kinetic Nexus.
+# The `custom` URLs render a "Sponsor" button on the repository.
+# TODO: point these at dedicated support/sponsor pages once they are live.
+custom:
+  - "https://kinetic-ide.com"
+  - "https://alayrasystems.com"

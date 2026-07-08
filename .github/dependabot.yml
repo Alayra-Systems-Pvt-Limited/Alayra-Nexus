@@ -6,9 +6,22 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
+      # Prisma's client and CLI must move together — bumping one without the
+      # other breaks `prisma generate`. Keep them in a single PR.
+      prisma:
+        patterns:
+          - "prisma"
+          - "@prisma/*"
       # Batch routine dev-tooling bumps into one PR to cut noise.
       dev-dependencies:
         dependency-type: development
+    ignore:
+      # Major upgrades of these are breaking changes — do them deliberately,
+      # not via an automated PR that will just fail CI (as Prisma 5 -> 7 did).
+      - dependency-name: "prisma"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@prisma/client"
+        update-types: ["version-update:semver-major"]
     labels:
       - dependencies
 
