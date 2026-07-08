@@ -46,11 +46,11 @@ Kinetic Nexus is the infrastructure layer that sits between your application and
 | Capability | Details |
 |---|---|
 | **Key Pool Management** | Store unlimited API keys per provider, encrypted at rest with AES-256-GCM |
-| **Intelligent Load Balancing** | Round-robin across active keys; cooling and banned keys are automatically bypassed |
+| **Intelligent Load Balancing** | Automatic rotation across active keys; cooling and banned keys are automatically bypassed |
 | **Tiered Failover** | Premium → Standard → Fast chains; when the best key fails the next tier fires instantly |
 | **OpenAI-Compatible API** | Drop-in `/v1/chat/completions` — change one base URL, nothing else |
-| **Team Key Issuance** | Create scoped access tokens per team with independent RPM and TPM limits |
-| **Real-Time Rate Limiting** | Per-key RPM and TPM tracking via Redis with live utilization meters |
+| **Team Key Issuance** | Create scoped access tokens per team, each with an independently configurable RPM limit |
+| **Real-Time Rate Limiting** | Per-key RPM enforcement via Redis with live utilization meters (per-key TPM budgets are configurable; enforcement is on the roadmap) |
 | **Cost Tracking** | Per-request USD cost computed from model pricing, attributed to the requesting team |
 | **Full Analytics Dashboard** | Request trends, token breakdowns, team leaderboard, provider split — powered by Chart.js |
 | **Custom Date Ranges** | Analytics filterable by today / 7d / 30d / 90d or any custom from→to window |
@@ -235,17 +235,18 @@ curl http://localhost:3000/v1/chat/completions \
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/admin/nexus/summary` | Provider pool overview (active / cooling / banned counts) |
-| `GET` | `/admin/nexus/pools` | Full list of provider pools with keys |
-| `POST` | `/admin/nexus/pools` | Create a provider pool |
-| `POST` | `/admin/nexus/pools/:id/keys` | Add an API key to a pool |
+| `GET` | `/admin/providers` | Full list of provider pools |
+| `POST` | `/admin/providers` | Create a provider pool |
+| `POST` | `/admin/providers/:providerId/keys` | Add an API key to a pool |
 | `POST` | `/admin/keys/:id/test` | Test a key and check latency |
 | `POST` | `/admin/keys/:id/ban` | Ban a key from rotation |
+| `GET` | `/admin/keys/:id/metrics` | Live RPM and status for a key |
 | `GET` | `/admin/models` | List model registry |
-| `POST` | `/admin/models` | Add a model to the registry |
+| `PUT` | `/admin/models` | Add or update a model in the registry |
 | `GET` | `/admin/team-keys` | List team keys |
 | `POST` | `/admin/team-keys` | Issue a new team key |
-| `GET` | `/admin/analytics/summary` | Usage totals for a period |
-| `GET` | `/admin/analytics/by-team` | Usage breakdown by team key |
+| `GET` | `/admin/usage` | Usage totals for a period |
+| `GET` | `/admin/usage/by-team-key` | Usage breakdown by team key |
 | `GET` | `/admin/analytics/timeseries/teams` | Daily time series by team |
 | `GET` | `/admin/analytics/timeseries/models` | Daily time series by model |
 
@@ -258,7 +259,7 @@ All admin routes require `Authorization: Bearer <ADMIN_PASSWORD>`.
 The built-in web dashboard (`/dashboard`) gives you full operational control:
 
 - **Connect** — server status, endpoint URL, one-click team key generator
-- **Nexus** — provider pool overview with per-key RPM/TPM utilization meters; add, test, and ban keys without touching the CLI
+- **Nexus** — provider pool overview with per-key RPM utilization meters; add, test, and ban keys without touching the CLI
 - **Models** — model registry with tier assignment, capability flags (Primary / Fallback / Vision / FIM / Tools), context window, and per-1M token pricing
 - **Team Keys** — issue scoped access tokens with configurable rate limits; view attribution in analytics
 - **Analytics** — request and token trend charts, stacked model breakdown, cost area chart, input/output comparison, team leaderboard with medals, CSV export, and custom date range picker
@@ -288,10 +289,13 @@ The built-in web dashboard (`/dashboard`) gives you full operational control:
 - [x] Key pool management with AES-256-GCM encryption
 - [x] Multi-provider routing with tiered failover
 - [x] OpenAI-compatible proxy API with full streaming support
-- [x] Team key issuance with RPM and TPM limits
+- [x] Team key issuance with per-key RPM limits
 - [x] Admin dashboard — provider pools, model registry, team management
 - [x] Analytics — cost tracking, token trends, team leaderboard, CSV export
 - [x] Custom date range analytics
+- [x] Automated test suite and CI (lint, typecheck, test, build, audit)
+- [ ] Per-key TPM enforcement (limits are configurable today; enforcement upcoming)
+- [ ] Atomic pre-admission rate limiting with real token accounting
 - [ ] Webhook and email alerts on key failure or budget threshold
 - [ ] Custom domain / CNAME support
 - [ ] Per-team budget caps with automatic cutoff
