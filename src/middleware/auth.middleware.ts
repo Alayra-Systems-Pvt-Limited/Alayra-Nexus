@@ -18,7 +18,7 @@ export async function verifyApiKey(request: FastifyRequest, reply: FastifyReply)
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const teamKey   = await prisma.nexusTeamKey.findUnique({ where: { keyHash: tokenHash } });
   if (teamKey) {
-    (request as Record<string, unknown>).teamKeyId = teamKey.id;
+    request.teamKeyId = teamKey.id;
     return;
   }
 

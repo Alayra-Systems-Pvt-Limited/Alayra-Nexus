@@ -15,6 +15,7 @@
   --yellow:#f59e0b;--yellow-bg:rgba(245,158,11,.12);
   --red:#ef4444;--red-bg:rgba(239,68,68,.12);
   --blue:#3b82f6;--blue-bg:rgba(59,130,246,.12);
+  --orange:#f97316;--orange-bg:rgba(249,115,22,.12);
   --radius:8px;--r2:12px;
 }
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;font-size:14px;line-height:1.5}
@@ -60,6 +61,22 @@ h2{font-size:18px;font-weight:600;margin-bottom:4px}
 
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.grid-4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+.grid-5{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:1.25rem}
+
+/* ── Analytics ── */
+.chart-box{position:relative;height:210px;margin-top:8px}
+.a-heroes{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:1.25rem}
+.period-pills{display:flex;background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:3px;gap:2px}
+.period-btn{background:none;border:none;color:var(--muted);padding:4px 12px;border-radius:5px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
+.period-btn:hover{color:var(--text)}
+.period-btn.active-period{background:var(--accent);color:#fff}
+.date-range-wrap{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px}
+.date-range-wrap input[type="date"]{background:none;border:none;color:var(--muted);font-size:12px;padding:0;width:120px;cursor:pointer;outline:none}
+.date-range-wrap input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5);cursor:pointer}
+.date-range-sep{color:var(--subtle);font-size:11px}
+.a-sort-btn{cursor:pointer;user-select:none}
+.a-sort-btn:hover{color:var(--text)}
 
 button{cursor:pointer;border:none;border-radius:var(--radius);font-size:13px;font-weight:500;padding:8px 14px;transition:all .15s}
 .btn-primary{background:var(--accent);color:#fff}
@@ -68,6 +85,8 @@ button{cursor:pointer;border:none;border-radius:var(--radius);font-size:13px;fon
 .btn-secondary:hover{border-color:var(--border2)}
 .btn-danger{background:var(--red-bg);color:var(--red);border:1px solid transparent}
 .btn-danger:hover{border-color:var(--red)}
+.btn-warning{background:var(--yellow-bg);color:var(--yellow);border:1px solid transparent}
+.btn-warning:hover{border-color:var(--yellow)}
 .btn-sm{padding:5px 10px;font-size:12px}
 .btn-icon{padding:6px 8px;background:var(--card2);border:1px solid var(--border);color:var(--muted)}
 .btn-icon:hover{color:var(--text);border-color:var(--border2)}
@@ -78,6 +97,7 @@ button{cursor:pointer;border:none;border-radius:var(--radius);font-size:13px;fon
 .badge-red{background:var(--red-bg);color:var(--red)}
 .badge-purple{background:var(--accent-bg);color:var(--accent)}
 .badge-blue{background:var(--blue-bg);color:var(--blue)}
+.badge-orange{background:var(--orange-bg);color:var(--orange)}
 .badge-gray{background:var(--card2);color:var(--muted)}
 
 .copy-row{display:flex;align-items:center;background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;gap:10px;margin-bottom:8px}
@@ -94,6 +114,7 @@ select option{background:var(--card2)}
 .form-label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500}
 .form-hint{font-size:11px;color:var(--subtle);margin-top:4px}
 .form-actions{display:flex;gap:8px;margin-top:16px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -111,7 +132,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 /* ── Modal ── */
 #modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}
 #modal-bg.open{display:flex}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:1.5rem;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:1.5rem;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto}
 .modal-title{font-size:16px;font-weight:600;margin-bottom:1rem}
 .modal-close{float:right;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1}
 
@@ -121,13 +142,6 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .connect-hero p{color:var(--muted);margin-top:6px;font-size:14px}
 .tools-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:1rem}
 .tool-tag{background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;font-size:12px;color:var(--muted)}
-
-/* ── Setup wizard ── */
-.wizard{max-width:520px;margin:0 auto}
-.wizard-steps{display:flex;gap:8px;margin-bottom:1.5rem}
-.wizard-step{flex:1;height:3px;border-radius:2px;background:var(--border)}
-.wizard-step.done{background:var(--accent)}
-.wizard-step.active{background:var(--accent);opacity:.5}
 
 /* ── Stat cards ── */
 .stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1rem}
@@ -146,15 +160,52 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .loader{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-.tier-premium{color:#f59e0b}
-.tier-standard{color:#8b5cf6}
-.tier-fast{color:#22c55e}
-
 /* ── Usage bars ── */
 .usage-bar-wrap{margin-bottom:10px}
 .usage-bar-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px}
 .usage-bar{height:6px;background:var(--card2);border-radius:3px;overflow:hidden}
 .usage-bar-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .4s}
+
+/* ── Nexus tab specific ── */
+.provider-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:12px;overflow:hidden}
+.provider-card-header{display:flex;align-items:center;gap:12px;padding:1rem 1.25rem;cursor:pointer;user-select:none}
+.provider-card-header:hover{background:rgba(255,255,255,.02)}
+.provider-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.provider-card-body{border-top:1px solid var(--border);padding:1rem 1.25rem}
+.provider-dot-anthropic{background:#f97316}
+.provider-dot-openai{background:#22c55e}
+.provider-dot-google{background:#3b82f6}
+.provider-dot-groq{background:#a855f7}
+.provider-dot-openrouter{background:#f59e0b}
+.provider-dot-custom{background:#71717a}
+
+/* ── RPM/TPM meters ── */
+.meter-row{display:flex;align-items:center;gap:8px;min-width:100px}
+.meter-bar{flex:1;height:4px;background:var(--card2);border-radius:2px;overflow:hidden;min-width:60px}
+.meter-fill{height:100%;border-radius:2px;transition:width .4s}
+.meter-fill-green{background:var(--green)}
+.meter-fill-yellow{background:var(--yellow)}
+.meter-fill-red{background:var(--red)}
+.meter-label{font-size:11px;color:var(--muted);white-space:nowrap}
+
+/* ── Models tab ── */
+.model-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:1.25rem;margin-bottom:12px;display:flex;align-items:flex-start;gap:1rem}
+.model-card-info{flex:1;min-width:0}
+.model-name{font-weight:600;font-size:14px;margin-bottom:2px}
+.model-string{font-family:monospace;font-size:12px;color:var(--muted);margin-bottom:8px}
+.model-caps{display:flex;flex-wrap:wrap;gap:4px}
+.cap-badge{padding:2px 7px;border-radius:12px;font-size:11px;font-weight:500;background:var(--card2);border:1px solid var(--border);color:var(--muted)}
+.cap-badge.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.model-card-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.model-status-active{color:var(--green)}
+.model-status-paused{color:var(--yellow)}
+.model-status-retired{color:var(--muted)}
+
+/* ── Capability toggles ── */
+.cap-toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.cap-toggle{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;color:var(--muted);transition:all .15s;user-select:none}
+.cap-toggle.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.cap-toggle input{display:none}
 </style>
 </head>
 <body>
@@ -191,14 +242,17 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <div class="nav-item active" data-tab="connect" onclick="showTab('connect')">
         <span class="nav-icon">🔗</span> Connect
       </div>
-      <div class="nav-item" data-tab="providers" onclick="showTab('providers')">
-        <span class="nav-icon">🔑</span> Providers
+      <div class="nav-item" data-tab="nexus" onclick="showTab('nexus')">
+        <span class="nav-icon">⚡</span> Nexus
+      </div>
+      <div class="nav-item" data-tab="models" onclick="showTab('models')">
+        <span class="nav-icon">🧠</span> Models
       </div>
       <div class="nav-item" data-tab="team" onclick="showTab('team')">
         <span class="nav-icon">👥</span> Team Keys
       </div>
-      <div class="nav-item" data-tab="usage" onclick="showTab('usage')">
-        <span class="nav-icon">📊</span> Usage
+      <div class="nav-item" data-tab="analytics" onclick="showTab('analytics')">
+        <span class="nav-icon">📊</span> Analytics
       </div>
       <div class="nav-sep"></div>
       <div class="nav-item" data-tab="settings" onclick="showTab('settings')">
@@ -220,7 +274,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
           </div>
           <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
             <div class="card-title">Works with any OpenAI-compatible tool</div>
-            <div class="tools-row" id="tools-row">
+            <div class="tools-row">
               <span class="tool-tag">Cursor</span><span class="tool-tag">Cline</span>
               <span class="tool-tag">Windsurf</span><span class="tool-tag">Continue.dev</span>
               <span class="tool-tag">Aider</span><span class="tool-tag">Open WebUI</span>
@@ -236,14 +290,25 @@ tr:hover td{background:rgba(255,255,255,.02)}
         </div>
       </div>
 
-      <!-- Providers -->
-      <div class="tab-panel" id="tab-providers">
+      <!-- Nexus -->
+      <div class="tab-panel" id="tab-nexus">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <h2>Providers & Keys</h2>
-          <button class="btn-primary" onclick="showAddProvider()">+ Add provider</button>
+          <h2>Nexus — Provider Pools</h2>
+          <button class="btn-primary" onclick="showAddProvider()">+ Add pool</button>
         </div>
-        <div class="page-sub">Each provider needs at least one API key. Nexus routes across all active keys automatically.</div>
-        <div id="providers-list"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
+        <div class="page-sub">Each pool is an AI provider with one or more API keys. Nexus auto-routes across all active keys by tier (Premium → Standard → Fast).</div>
+        <div id="nexus-summary" style="margin-bottom:1.25rem"></div>
+        <div id="nexus-list"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
+      </div>
+
+      <!-- Models -->
+      <div class="tab-panel" id="tab-models">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h2>Model Registry</h2>
+          <button class="btn-primary" onclick="showAddModel()">+ Add model</button>
+        </div>
+        <div class="page-sub">Define available models with capabilities, tier, and routing priority. These inform the Nexus routing engine.</div>
+        <div id="models-list"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
       </div>
 
       <!-- Team Keys -->
@@ -256,18 +321,27 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <div id="team-list"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
       </div>
 
-      <!-- Usage -->
-      <div class="tab-panel" id="tab-usage">
+      <!-- Analytics -->
+      <div class="tab-panel" id="tab-analytics">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <h2>Usage</h2>
-          <div style="display:flex;gap:6px">
-            <button class="btn-secondary btn-sm" onclick="loadUsage('today')" id="u-today">Today</button>
-            <button class="btn-secondary btn-sm" onclick="loadUsage('7d')" id="u-7d">7 days</button>
-            <button class="btn-secondary btn-sm" onclick="loadUsage('30d')" id="u-30d" style="background:var(--accent-bg);color:var(--accent)">30 days</button>
+          <h2>Analytics</h2>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div class="period-pills">
+              <button class="period-btn" id="ap-today" onclick="loadAnalytics('today')">Today</button>
+              <button class="period-btn" id="ap-7d" onclick="loadAnalytics('7d')">7d</button>
+              <button class="period-btn active-period" id="ap-30d" onclick="loadAnalytics('30d')">30d</button>
+              <button class="period-btn" id="ap-90d" onclick="loadAnalytics('90d')">90d</button>
+            </div>
+            <div class="date-range-wrap">
+              <input type="date" id="ap-from" onchange="applyCustomRange()" title="From date"/>
+              <span class="date-range-sep">→</span>
+              <input type="date" id="ap-to" onchange="applyCustomRange()" title="To date"/>
+            </div>
+            <button class="btn-secondary btn-sm" onclick="exportAnalyticsCSV()">↓ CSV</button>
           </div>
         </div>
-        <div class="page-sub">Token usage tracked per model and per team key.</div>
-        <div id="usage-content"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
+        <div class="page-sub">Token usage, cost, and team activity across all providers.</div>
+        <div id="analytics-body"><div style="text-align:center;padding:3rem"><div class="loader"></div></div></div>
       </div>
 
       <!-- Settings -->
@@ -304,6 +378,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 // ── State ──────────────────────────────────────────────────────────
 let PWD = sessionStorage.getItem('nx_pwd') || '';
 let teamKeys = [];
+let modelRegistry = [];
 
 // ── Auth ───────────────────────────────────────────────────────────
 async function doLogin() {
@@ -311,22 +386,15 @@ async function doLogin() {
   if (!pwd) return;
   PWD = pwd;
   const res = await fetch('/admin/status', { headers: { Authorization: `Bearer ${pwd}` } });
-  if (res.status === 401) {
-    document.getElementById('login-err').textContent = 'Incorrect password';
-    return;
-  }
+  if (res.status === 401) { document.getElementById('login-err').textContent = 'Incorrect password'; return; }
   sessionStorage.setItem('nx_pwd', pwd);
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   initApp();
 }
-
 document.getElementById('login-pwd').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
-function doLogout() {
-  sessionStorage.removeItem('nx_pwd');
-  location.reload();
-}
+function doLogout() { sessionStorage.removeItem('nx_pwd'); location.reload(); }
 
 // ── API ────────────────────────────────────────────────────────────
 async function api(method, path, body) {
@@ -337,10 +405,11 @@ async function api(method, path, body) {
   if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(t || `HTTP ${res.status}`); }
   return res.json();
 }
-const GET  = p        => api('GET',    p);
-const POST = (p, b)   => api('POST',   p, b);
-const DEL  = p        => api('DELETE', p);
-const PATCH= (p, b)   => api('PATCH',  p, b);
+const GET   = p      => api('GET',    p);
+const POST  = (p, b) => api('POST',   p, b);
+const PUT   = (p, b) => api('PUT',    p, b);
+const DEL   = p      => api('DELETE', p);
+const PATCH = (p, b) => api('PATCH',  p, b);
 
 // ── Toast ──────────────────────────────────────────────────────────
 function toast(msg, isErr) {
@@ -374,37 +443,26 @@ function showTab(name) {
   document.getElementById('tab-'+name).classList.add('active');
   document.querySelector(`[data-tab="${name}"]`).classList.add('active');
   if (name==='connect')   loadConnect();
-  if (name==='providers') loadProviders();
+  if (name==='nexus')     loadNexus();
+  if (name==='models')    loadModels();
   if (name==='team')      renderTeamKeys();
-  if (name==='usage')     loadUsage('30d');
+  if (name==='analytics') loadAnalytics();
   if (name==='settings')  loadSettings();
 }
 
-// ── Connect tab ────────────────────────────────────────────────────
+// ── Connect ────────────────────────────────────────────────────────
 async function loadConnect() {
+  if (window._demoMode) return;
   try {
     const cfg = await GET('/admin/config');
-    const rows = document.getElementById('connect-rows');
-    const key  = cfg.nexusApiKey || '';
+    const key = cfg.nexusApiKey || '';
     const masked = key.slice(0,8) + '••••••••' + key.slice(-4);
-    rows.innerHTML = `
-      <div class="copy-row">
-        <span class="copy-label">Base URL</span>
-        <span class="copy-val">${cfg.baseUrl}</span>
-        <button class="copy-btn" onclick="copyText('${cfg.baseUrl}',this)">Copy</button>
-      </div>
-      <div class="copy-row">
-        <span class="copy-label">Model</span>
-        <span class="copy-val">kinetic-nexus-1</span>
-        <button class="copy-btn" onclick="copyText('kinetic-nexus-1',this)">Copy</button>
-      </div>
-      <div class="copy-row">
-        <span class="copy-label">API Key</span>
-        <span class="copy-val" id="connect-key-val">${masked}</span>
-        <button class="copy-btn" onclick="copyText('${key}',this)">Copy</button>
-      </div>`;
+    document.getElementById('connect-rows').innerHTML = `
+      <div class="copy-row"><span class="copy-label">Base URL</span><span class="copy-val">${cfg.baseUrl}</span><button class="copy-btn" onclick="copyText('${cfg.baseUrl}',this)">Copy</button></div>
+      <div class="copy-row"><span class="copy-label">Model</span><span class="copy-val">kinetic-nexus-1</span><button class="copy-btn" onclick="copyText('kinetic-nexus-1',this)">Copy</button></div>
+      <div class="copy-row"><span class="copy-label">API Key</span><span class="copy-val">${masked}</span><button class="copy-btn" onclick="copyText('${key}',this)">Copy</button></div>`;
     loadRoutingStatus();
-  } catch(e) { document.getElementById('connect-rows').innerHTML = `<div style="color:var(--red);font-size:13px">Failed to load config: ${e.message}</div>`; }
+  } catch(e) { document.getElementById('connect-rows').innerHTML = `<div style="color:var(--red);font-size:13px">${e.message}</div>`; }
 }
 
 async function loadRoutingStatus() {
@@ -413,58 +471,94 @@ async function loadRoutingStatus() {
     const el = document.getElementById('routing-status');
     const tierColor = { premium:'var(--yellow)', standard:'var(--accent)', fast:'var(--green)' };
     el.innerHTML = data.tiers.map(t => {
-      const providers = t.providers;
-      if (!providers.length) return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="badge badge-gray" style="text-transform:capitalize">${t.tier}</span><span style="color:var(--subtle);font-size:12px">No providers</span></div>`;
-      return providers.map(p => `
+      if (!t.providers.length) return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="badge badge-gray" style="text-transform:capitalize">${t.tier}</span><span style="color:var(--subtle);font-size:12px">No providers</span></div>`;
+      return t.providers.map(p => `
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
           <span class="badge" style="background:${tierColor[t.tier]}22;color:${tierColor[t.tier]};text-transform:capitalize">${t.tier}</span>
-          <span style="font-size:13px">${p.name || p.id}</span>
-          ${p.preferredModel ? `<span style="font-family:monospace;font-size:12px;color:var(--muted)">${p.preferredModel}</span>` : ''}
+          <span>${p.name||p.id}</span>
+          ${p.preferredModel?`<span style="font-family:monospace;font-size:12px;color:var(--muted)">${p.preferredModel}</span>`:''}
           <span class="badge ${p.activeKeys>0?'badge-green':'badge-red'}">${p.activeKeys} active</span>
         </div>`).join('');
     }).join('');
-  } catch { document.getElementById('routing-status').textContent = 'Could not load routing status'; }
+  } catch { document.getElementById('routing-status').textContent = 'Could not load'; }
 }
 
-// ── Providers ──────────────────────────────────────────────────────
-async function loadProviders() {
-  const el = document.getElementById('providers-list');
+// ── Nexus ──────────────────────────────────────────────────────────
+async function loadNexus() {
+  if (window._demoMode) return;
+  const listEl = document.getElementById('nexus-list');
+  const sumEl  = document.getElementById('nexus-summary');
+  listEl.innerHTML = '<div style="text-align:center;padding:2rem"><div class="loader"></div></div>';
   try {
-    const { providers } = await GET('/admin/providers');
+    const [{ providers }, summary] = await Promise.all([
+      GET('/admin/providers'),
+      GET('/admin/nexus/summary'),
+    ]);
+
+    // Summary stats
+    sumEl.innerHTML = `<div class="grid-4">
+      <div class="stat"><div class="stat-label">Pools</div><div class="stat-value">${summary.providers}</div></div>
+      <div class="stat"><div class="stat-label">Active keys</div><div class="stat-value" style="color:var(--green)">${summary.active}</div></div>
+      <div class="stat"><div class="stat-label">Cooling</div><div class="stat-value" style="color:var(--yellow)">${summary.cooling}</div></div>
+      <div class="stat"><div class="stat-label">Banned</div><div class="stat-value" style="color:var(--red)">${summary.banned}</div></div>
+    </div>`;
+
     if (!providers.length) {
-      el.innerHTML = `<div class="empty-state"><div class="icon">🔑</div><p>No providers yet.<br/>Add your first provider to start routing.</p></div>`;
+      listEl.innerHTML = `<div class="empty-state"><div class="icon">⚡</div><p>No provider pools yet.<br/>Add your first pool to start routing.</p></div>`;
       return;
     }
-    el.innerHTML = providers.map(p => renderProviderCard(p)).join('');
+
+    listEl.innerHTML = providers.map(p => renderProviderCard(p)).join('');
     providers.forEach(p => loadKeysForProvider(p.id));
-  } catch(e) { el.innerHTML = `<div style="color:var(--red)">${e.message}</div>`; }
+  } catch(e) { listEl.innerHTML = `<div style="color:var(--red)">${e.message}</div>`; }
 }
+
+const PROVIDER_COLORS = {
+  anthropic:'provider-dot-anthropic', openai:'provider-dot-openai',
+  google:'provider-dot-google', groq:'provider-dot-groq',
+  openrouter:'provider-dot-openrouter', custom:'provider-dot-custom',
+};
+const PROVIDER_LABELS = {
+  anthropic:'Anthropic', openai:'OpenAI', google:'Google',
+  groq:'Groq', openrouter:'OpenRouter', custom:'Custom',
+};
 
 function tierBadge(tier) {
   const map = { premium:'badge-yellow', standard:'badge-purple', fast:'badge-green' };
   return `<span class="badge ${map[tier]||'badge-gray'}" style="text-transform:capitalize">${tier}</span>`;
 }
 
-function providerBadge(slug) {
-  const icons = { anthropic:'🔵', openai:'🟢', google:'🔴', groq:'⚡', openrouter:'🌐', custom:'⚙️' };
-  return icons[slug] || '🔧';
+function renderProviderCard(p) {
+  const dot = PROVIDER_COLORS[p.provider] || 'provider-dot-custom';
+  const lbl = PROVIDER_LABELS[p.provider] || p.provider;
+  return `<div class="provider-card" id="pcard-${p.id}">
+    <div class="provider-card-header" onclick="toggleProviderBody('${p.id}')">
+      <div class="provider-dot ${dot}"></div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-weight:600;font-size:14px">${p.name}</span>
+          <span class="badge badge-gray" style="font-size:10px">${lbl}</span>
+          ${tierBadge(p.tier)}
+        </div>
+        <div style="font-family:monospace;font-size:12px;color:${p.preferredModel?'var(--muted)':'var(--red)'}">
+          ${p.preferredModel||'⚠ No preferred model set'}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn-icon btn-sm" onclick="event.stopPropagation();showAddKey('${p.id}','${p.name}')">+ Key</button>
+        <button class="btn-icon btn-sm" onclick="event.stopPropagation();showEditProvider('${p.id}')">Edit</button>
+        <button class="btn-danger btn-sm" onclick="event.stopPropagation();deleteProvider('${p.id}','${p.name}')">Delete</button>
+      </div>
+    </div>
+    <div class="provider-card-body" id="pbody-${p.id}">
+      <div id="keys-${p.id}"><div class="loader"></div></div>
+    </div>
+  </div>`;
 }
 
-function renderProviderCard(p) {
-  return `<div class="card" id="pcard-${p.id}">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-      <span style="font-size:20px">${providerBadge(p.provider)}</span>
-      <div style="flex:1">
-        <div style="font-weight:600;font-size:14px">${p.name}</div>
-        ${p.preferredModel ? `<div style="font-family:monospace;font-size:12px;color:var(--muted)">${p.preferredModel}</div>` : '<div style="font-size:12px;color:var(--red)">⚠ No preferred model set</div>'}
-      </div>
-      ${tierBadge(p.tier)}
-      <button class="btn-icon btn-sm" onclick="showAddKey('${p.id}','${p.name}')">+ Key</button>
-      <button class="btn-icon btn-sm" onclick="showEditProvider('${p.id}')">Edit</button>
-      <button class="btn-danger btn-sm" onclick="deleteProvider('${p.id}','${p.name}')">Delete</button>
-    </div>
-    <div id="keys-${p.id}"><div class="loader"></div></div>
-  </div>`;
+function toggleProviderBody(id) {
+  const body = document.getElementById('pbody-'+id);
+  body.style.display = body.style.display === 'none' ? '' : 'none';
 }
 
 async function loadKeysForProvider(providerId) {
@@ -472,8 +566,34 @@ async function loadKeysForProvider(providerId) {
   if (!el) return;
   try {
     const { keys } = await GET(`/admin/providers/${providerId}/keys`);
-    if (!keys.length) { el.innerHTML = `<div style="font-size:12px;color:var(--subtle);padding:4px 0">No keys — click "+ Key" to add one</div>`; return; }
-    el.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px">${keys.map(k => renderKeyRow(k)).join('')}</div>`;
+    if (!keys.length) {
+      el.innerHTML = `<div style="font-size:12px;color:var(--subtle)">No keys — click "+ Key" to add one</div>`;
+      return;
+    }
+    el.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Label / Key</th><th>Status</th><th>RPM</th><th>Actions</th></tr></thead>
+      <tbody>${keys.map(k => `<tr id="krow-${k.id}">
+        <td>
+          <div style="font-family:monospace;font-size:12px">${k.maskedKey}</div>
+          ${k.label?`<div style="font-size:11px;color:var(--muted)">${k.label}</div>`:''}
+        </td>
+        <td>${keyStatusBadge(k)}</td>
+        <td><div class="meter-row" id="meter-${k.id}">
+          <div class="meter-bar"><div class="meter-fill meter-fill-green" style="width:0%" id="meter-fill-${k.id}"></div></div>
+          <span class="meter-label" id="meter-label-${k.id}">0/${k.rpmLimit}</span>
+        </div></td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn-icon btn-sm" onclick="testProvKey('${k.id}',this)">Test</button>
+            ${k.status==='banned'
+              ? `<button class="btn-secondary btn-sm" onclick="unbanKey('${k.id}','${providerId}')">Unban</button>`
+              : `<button class="btn-warning btn-sm" onclick="banKey('${k.id}','${providerId}')">Ban</button>`}
+            <button class="btn-danger btn-sm" onclick="deleteKey('${k.id}','${providerId}')">✕</button>
+          </div>
+        </td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+    keys.forEach(k => pollKeyMetrics(k.id, k.rpmLimit));
   } catch(e) { el.innerHTML = `<div style="color:var(--red);font-size:12px">${e.message}</div>`; }
 }
 
@@ -483,21 +603,22 @@ function keyStatusBadge(k) {
   return '<span class="badge badge-green">Active</span>';
 }
 
-function renderKeyRow(k) {
-  return `<div style="display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:8px 10px" id="krow-${k.id}">
-    <span style="font-family:monospace;font-size:12px;color:var(--muted);flex:1">${k.maskedKey || k.label || k.id.slice(0,8)}</span>
-    ${k.label ? `<span style="font-size:12px;color:var(--muted)">${k.label}</span>` : ''}
-    ${keyStatusBadge(k)}
-    <span style="font-size:11px;color:var(--subtle)">${k.rpmLimit} RPM</span>
-    <button class="btn-icon btn-sm" onclick="testProvKey('${k.id}')">Test</button>
-    ${k.status==='banned' ? `<button class="btn-secondary btn-sm" onclick="unbanKey('${k.id}')">Unban</button>` : `<button class="btn-icon btn-sm" onclick="banKey('${k.id}')">Ban</button>`}
-    <button class="btn-danger btn-sm" onclick="deleteKey('${k.id}','${k.providerId}')">✕</button>
-  </div>`;
+async function pollKeyMetrics(keyId, rpmLimit) {
+  try {
+    const m = await GET(`/admin/keys/${keyId}/metrics`);
+    const fill = document.getElementById('meter-fill-'+keyId);
+    const label = document.getElementById('meter-label-'+keyId);
+    if (!fill || !label) return;
+    const pct = rpmLimit > 0 ? Math.min(100, Math.round(m.rpm / rpmLimit * 100)) : 0;
+    fill.style.width = pct + '%';
+    fill.className = 'meter-fill ' + (pct >= 85 ? 'meter-fill-red' : pct >= 60 ? 'meter-fill-yellow' : 'meter-fill-green');
+    label.textContent = `${m.rpm}/${rpmLimit}`;
+  } catch {}
 }
 
 async function deleteProvider(id, name) {
-  if (!confirm(`Delete provider "${name}" and all its keys?`)) return;
-  try { await DEL(`/admin/providers/${id}`); toast('Provider deleted'); loadProviders(); }
+  if (!confirm(`Delete pool "${name}" and all its keys?`)) return;
+  try { await DEL(`/admin/providers/${id}`); toast('Pool deleted'); loadNexus(); }
   catch(e) { toast(e.message, true); }
 }
 
@@ -506,67 +627,109 @@ async function deleteKey(id, providerId) {
   catch(e) { toast(e.message, true); }
 }
 
-async function banKey(id) {
-  try { await POST(`/admin/keys/${id}/ban`); toast('Key banned'); loadProviders(); }
+async function banKey(id, providerId) {
+  try { await POST(`/admin/keys/${id}/ban`); toast('Key banned'); loadKeysForProvider(providerId); }
   catch(e) { toast(e.message, true); }
 }
 
-async function unbanKey(id) {
-  try { await POST(`/admin/keys/${id}/unban`); toast('Key unbanned'); loadProviders(); }
+async function unbanKey(id, providerId) {
+  try { await POST(`/admin/keys/${id}/unban`); toast('Key unbanned'); loadKeysForProvider(providerId); }
   catch(e) { toast(e.message, true); }
 }
 
-async function testProvKey(id) {
-  const btn = event.target;
+async function testProvKey(id, btn) {
+  const orig = btn.textContent;
   btn.textContent = '…'; btn.disabled = true;
   try {
     const r = await POST(`/admin/keys/${id}/test`);
     btn.textContent = r.success ? `✓ ${r.latencyMs}ms` : '✗ fail';
     btn.style.color = r.success ? 'var(--green)' : 'var(--red)';
-    setTimeout(() => { btn.textContent='Test'; btn.style.color=''; btn.disabled=false; }, 3000);
+    setTimeout(() => { btn.textContent=orig; btn.style.color=''; btn.disabled=false; }, 3000);
   } catch { btn.textContent='err'; btn.disabled=false; }
 }
 
 // ── Add provider modal ──────────────────────────────────────────────
+const PROVIDER_DEFAULTS = {
+  anthropic:  { name:'Anthropic',  model:'claude-3-5-sonnet-20241022',   tier:'premium',  baseUrl:'https://api.anthropic.com/v1',                           rpm:60,  tpm:100000 },
+  openai:     { name:'OpenAI',     model:'gpt-4o-mini',                  tier:'standard', baseUrl:'https://api.openai.com/v1',                              rpm:60,  tpm:100000 },
+  google:     { name:'Google',     model:'gemini-2.0-flash',             tier:'standard', baseUrl:'https://generativelanguage.googleapis.com/v1beta/openai', rpm:60,  tpm:100000 },
+  groq:       { name:'Groq',       model:'llama-3.3-70b-versatile',      tier:'fast',     baseUrl:'https://api.groq.com/openai/v1',                         rpm:30,  tpm:6000   },
+  openrouter: { name:'OpenRouter', model:'openai/gpt-4o-mini',           tier:'standard', baseUrl:'https://openrouter.ai/api/v1',                           rpm:60,  tpm:100000 },
+  custom:     { name:'Custom',     model:'',                             tier:'standard', baseUrl:'',                                                       rpm:60,  tpm:100000 },
+};
+
 function showAddProvider() {
   document.getElementById('modal-box').innerHTML = `
     <button class="modal-close" onclick="closeModal()">×</button>
-    <div class="modal-title">Add provider</div>
+    <div class="modal-title">Add provider pool</div>
     <div class="form-row">
       <label class="form-label">Provider type</label>
       <select id="prov-type" onchange="fillProviderDefaults()">
         <option value="anthropic">Anthropic (Claude)</option>
         <option value="openai">OpenAI (GPT)</option>
         <option value="google">Google (Gemini)</option>
-        <option value="groq">Groq (Llama/Mixtral)</option>
+        <option value="groq">Groq</option>
         <option value="openrouter">OpenRouter</option>
         <option value="custom">Custom</option>
       </select>
     </div>
-    <div class="form-row">
-      <label class="form-label">Display name</label>
-      <input id="prov-name" placeholder="e.g. Anthropic Primary"/>
+    <div class="form-grid">
+      <div class="form-row">
+        <label class="form-label">Display name</label>
+        <input id="prov-name" placeholder="e.g. Anthropic Primary"/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Tier</label>
+        <select id="prov-tier">
+          <option value="premium">Premium (tried first)</option>
+          <option value="standard" selected>Standard</option>
+          <option value="fast">Fast (fallback)</option>
+        </select>
+      </div>
     </div>
     <div class="form-row">
-      <label class="form-label">API Key</label>
-      <input id="prov-key" type="password" placeholder="sk-ant-... or sk-... or AIza..."/>
-    </div>
-    <div class="form-row">
-      <label class="form-label">Preferred model (the actual model ID to use)</label>
+      <label class="form-label">Preferred model</label>
       <input id="prov-model" placeholder="e.g. claude-3-5-sonnet-20241022"/>
-      <div class="form-hint">This is what Nexus sends to the provider API</div>
+      <div class="form-hint">The actual model ID sent to the provider API</div>
     </div>
     <div class="form-row">
-      <label class="form-label">Tier</label>
-      <select id="prov-tier">
-        <option value="premium">Premium (tried first)</option>
-        <option value="standard" selected>Standard</option>
-        <option value="fast">Fast (fallback)</option>
-      </select>
+      <label class="form-label">Base URL</label>
+      <input id="prov-base-url" placeholder="https://api.anthropic.com/v1"/>
+    </div>
+    <div class="form-grid">
+      <div class="form-row">
+        <label class="form-label">Auth header</label>
+        <input id="prov-auth-header" value="Authorization"/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Auth prefix</label>
+        <input id="prov-auth-prefix" placeholder="Bearer (default)"/>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);margin:12px 0 16px;padding-top:14px">
+      <div class="card-title">First API key</div>
+      <div class="form-row">
+        <label class="form-label">API key</label>
+        <input id="prov-key" type="password" placeholder="sk-ant-... or AIza... or sk-..."/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Key label (optional)</label>
+        <input id="prov-key-label" placeholder="e.g. Primary, Work, Key 1"/>
+      </div>
+      <div class="form-grid">
+        <div class="form-row">
+          <label class="form-label">RPM limit</label>
+          <input id="prov-rpm" type="number" value="60" min="1"/>
+        </div>
+        <div class="form-row">
+          <label class="form-label">TPM limit</label>
+          <input id="prov-tpm" type="number" value="100000" min="1"/>
+        </div>
+      </div>
     </div>
     <div class="val-row" id="prov-val-status"></div>
     <div class="form-actions">
-      <button class="btn-primary" onclick="submitAddProvider()">Add provider</button>
+      <button class="btn-primary" onclick="submitAddProvider()">Add pool</button>
       <button class="btn-secondary" onclick="testNewProvider()">Test credentials</button>
       <button class="btn-secondary" onclick="closeModal()">Cancel</button>
     </div>`;
@@ -574,31 +737,29 @@ function showAddProvider() {
   fillProviderDefaults();
 }
 
-const PROVIDER_DEFAULTS = {
-  anthropic:  { name:'Anthropic', model:'claude-3-5-sonnet-20241022', tier:'premium' },
-  openai:     { name:'OpenAI',    model:'gpt-4o-mini',                tier:'standard' },
-  google:     { name:'Google',    model:'gemini-2.0-flash',           tier:'standard' },
-  groq:       { name:'Groq',      model:'llama-3.3-70b-versatile',    tier:'fast' },
-  openrouter: { name:'OpenRouter',model:'openai/gpt-4o-mini',         tier:'standard' },
-  custom:     { name:'Custom',    model:'',                           tier:'standard' },
-};
-
 function fillProviderDefaults() {
   const type = document.getElementById('prov-type').value;
   const d = PROVIDER_DEFAULTS[type] || PROVIDER_DEFAULTS.custom;
-  if (!document.getElementById('prov-name').value) document.getElementById('prov-name').value = d.name;
+  const nameEl = document.getElementById('prov-name');
+  if (!nameEl.value || Object.values(PROVIDER_DEFAULTS).some(x => x.name === nameEl.value)) nameEl.value = d.name;
   if (!document.getElementById('prov-model').value) document.getElementById('prov-model').value = d.model;
   document.getElementById('prov-tier').value = d.tier;
+  document.getElementById('prov-base-url').value = d.baseUrl;
+  document.getElementById('prov-rpm').value = d.rpm;
+  document.getElementById('prov-tpm').value = d.tpm;
 }
 
 async function testNewProvider() {
   const type = document.getElementById('prov-type').value;
   const key  = document.getElementById('prov-key').value.trim();
-  const el   = document.getElementById('prov-val-status');
+  const baseUrl = document.getElementById('prov-base-url').value.trim();
+  const authHeader = document.getElementById('prov-auth-header').value.trim() || 'Authorization';
+  const authPrefix = document.getElementById('prov-auth-prefix').value.trim() || null;
+  const el = document.getElementById('prov-val-status');
   if (!key) { el.innerHTML = '<span class="val-status val-err">Enter an API key first</span>'; return; }
   el.innerHTML = '<span class="val-status val-testing"><span class="loader"></span> Testing…</span>';
   try {
-    const r = await POST('/admin/validate/provider', { provider: type, apiKey: key });
+    const r = await POST('/admin/validate/provider', { provider: type, baseUrl: baseUrl||null, apiKey: key, authHeader, authPrefix });
     el.innerHTML = r.ok
       ? `<span class="val-status val-ok">✓ Connected (${r.latencyMs}ms)</span>`
       : `<span class="val-status val-err">✗ ${r.error}</span>`;
@@ -606,24 +767,27 @@ async function testNewProvider() {
 }
 
 async function submitAddProvider() {
-  const type  = document.getElementById('prov-type').value;
-  const name  = document.getElementById('prov-name').value.trim();
-  const key   = document.getElementById('prov-key').value.trim();
-  const model = document.getElementById('prov-model').value.trim();
-  const tier  = document.getElementById('prov-tier').value;
+  const type       = document.getElementById('prov-type').value;
+  const name       = document.getElementById('prov-name').value.trim();
+  const key        = document.getElementById('prov-key').value.trim();
+  const keyLabel   = document.getElementById('prov-key-label').value.trim();
+  const model      = document.getElementById('prov-model').value.trim();
+  const tier       = document.getElementById('prov-tier').value;
+  const baseUrl    = document.getElementById('prov-base-url').value.trim();
+  const authHeader = document.getElementById('prov-auth-header').value.trim() || 'Authorization';
+  const authPrefix = document.getElementById('prov-auth-prefix').value.trim() || undefined;
+  const rpm        = parseInt(document.getElementById('prov-rpm').value) || 60;
+  const tpm        = parseInt(document.getElementById('prov-tpm').value) || 100000;
   if (!name || !key) { toast('Name and API key are required', true); return; }
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') + '-' + Date.now().toString(36);
   try {
-    const prov = await POST('/admin/providers', { name, slug, provider: type, tier, preferredModel: model || undefined });
-    await POST(`/admin/providers/${prov.provider.id}/keys`, { apiKey: key, label: 'Primary', rpmLimit: 60 });
+    const prov = await POST('/admin/providers', { name, slug, provider: type, tier, preferredModel: model||undefined, baseUrl: baseUrl||undefined, authHeader, authPrefix });
+    await POST(`/admin/providers/${prov.provider.id}/keys`, { apiKey: key, label: keyLabel||undefined, rpmLimit: rpm, tpmLimit: tpm });
     if (model) {
       const vr = await POST('/admin/validate/model', { providerId: prov.provider.id, modelName: model });
-      if (!vr.ok) toast(`Provider added but model test failed: ${vr.error}`, true);
-      else toast(`Provider added and model verified ✓`);
-    } else { toast('Provider added'); }
-    closeModal();
-    loadProviders();
-    loadConnect();
+      toast(vr.ok ? 'Pool added and model verified ✓' : `Pool added but model test failed: ${vr.error}`, !vr.ok);
+    } else { toast('Pool added'); }
+    closeModal(); loadNexus(); loadConnect();
   } catch(e) { toast(e.message, true); }
 }
 
@@ -631,18 +795,24 @@ async function submitAddProvider() {
 function showAddKey(providerId, providerName) {
   document.getElementById('modal-box').innerHTML = `
     <button class="modal-close" onclick="closeModal()">×</button>
-    <div class="modal-title">Add key to ${providerName}</div>
+    <div class="modal-title">Add key — ${providerName}</div>
     <div class="form-row">
-      <label class="form-label">API Key</label>
-      <input id="new-key-val" type="password" placeholder="sk-ant-..."/>
+      <label class="form-label">API key</label>
+      <input id="new-key-val" type="password" placeholder="sk-ant-... or AIza..."/>
     </div>
     <div class="form-row">
       <label class="form-label">Label (optional)</label>
       <input id="new-key-label" placeholder="e.g. Key 2, Backup, Work account"/>
     </div>
-    <div class="form-row">
-      <label class="form-label">RPM limit</label>
-      <input id="new-key-rpm" type="number" value="60" min="1"/>
+    <div class="form-grid">
+      <div class="form-row">
+        <label class="form-label">RPM limit</label>
+        <input id="new-key-rpm" type="number" value="60" min="1"/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">TPM limit</label>
+        <input id="new-key-tpm" type="number" value="100000" min="1"/>
+      </div>
     </div>
     <div class="val-row" id="key-val-status"></div>
     <div class="form-actions">
@@ -656,23 +826,26 @@ async function submitAddKey(providerId) {
   const apiKey = document.getElementById('new-key-val').value.trim();
   const label  = document.getElementById('new-key-label').value.trim();
   const rpm    = parseInt(document.getElementById('new-key-rpm').value) || 60;
+  const tpm    = parseInt(document.getElementById('new-key-tpm').value) || 100000;
   if (!apiKey) { toast('API key is required', true); return; }
   try {
-    await POST(`/admin/providers/${providerId}/keys`, { apiKey, label: label || undefined, rpmLimit: rpm });
-    toast('Key added');
-    closeModal();
-    loadKeysForProvider(providerId);
+    await POST(`/admin/providers/${providerId}/keys`, { apiKey, label: label||undefined, rpmLimit: rpm, tpmLimit: tpm });
+    toast('Key added'); closeModal(); loadKeysForProvider(providerId);
   } catch(e) { toast(e.message, true); }
 }
 
-// ── Edit provider modal ──────────────────────────────────────────────
+// ── Edit provider modal ─────────────────────────────────────────────
 async function showEditProvider(id) {
   const { providers } = await GET('/admin/providers');
   const p = providers.find(x => x.id === id);
   if (!p) return;
   document.getElementById('modal-box').innerHTML = `
     <button class="modal-close" onclick="closeModal()">×</button>
-    <div class="modal-title">Edit ${p.name}</div>
+    <div class="modal-title">Edit pool — ${p.name}</div>
+    <div class="form-row">
+      <label class="form-label">Display name</label>
+      <input id="edit-name" value="${p.name}"/>
+    </div>
     <div class="form-row">
       <label class="form-label">Preferred model</label>
       <input id="edit-model" value="${p.preferredModel||''}" placeholder="e.g. claude-3-5-sonnet-20241022"/>
@@ -685,6 +858,20 @@ async function showEditProvider(id) {
         <option value="fast" ${p.tier==='fast'?'selected':''}>Fast</option>
       </select>
     </div>
+    <div class="form-row">
+      <label class="form-label">Base URL</label>
+      <input id="edit-base-url" value="${p.baseUrl||''}"/>
+    </div>
+    <div class="form-grid">
+      <div class="form-row">
+        <label class="form-label">Auth header</label>
+        <input id="edit-auth-header" value="${p.authHeader||'Authorization'}"/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Auth prefix</label>
+        <input id="edit-auth-prefix" value="${p.authPrefix||''}" placeholder="Bearer"/>
+      </div>
+    </div>
     <div class="val-row" id="edit-val-status"></div>
     <div class="form-actions">
       <button class="btn-primary" onclick="submitEditProvider('${id}')">Save</button>
@@ -696,38 +883,232 @@ async function showEditProvider(id) {
 
 async function testEditModel(providerId) {
   const model = document.getElementById('edit-model').value.trim();
-  const el    = document.getElementById('edit-val-status');
+  const el = document.getElementById('edit-val-status');
   if (!model) { el.innerHTML = '<span class="val-status val-err">Enter a model name first</span>'; return; }
-  el.innerHTML = '<span class="val-status val-testing"><span class="loader"></span> Testing model…</span>';
+  el.innerHTML = '<span class="val-status val-testing"><span class="loader"></span> Testing…</span>';
   try {
     const r = await POST('/admin/validate/model', { providerId, modelName: model });
-    el.innerHTML = r.ok
-      ? `<span class="val-status val-ok">✓ Model works (${r.latencyMs}ms)</span>`
-      : `<span class="val-status val-err">✗ ${r.error}</span>`;
+    el.innerHTML = r.ok ? `<span class="val-status val-ok">✓ (${r.latencyMs}ms)</span>` : `<span class="val-status val-err">✗ ${r.error}</span>`;
   } catch(e) { el.innerHTML = `<span class="val-status val-err">✗ ${e.message}</span>`; }
 }
 
 async function submitEditProvider(id) {
-  const model = document.getElementById('edit-model').value.trim();
-  const tier  = document.getElementById('edit-tier').value;
+  const name       = document.getElementById('edit-name').value.trim();
+  const model      = document.getElementById('edit-model').value.trim();
+  const tier       = document.getElementById('edit-tier').value;
+  const baseUrl    = document.getElementById('edit-base-url').value.trim();
+  const authHeader = document.getElementById('edit-auth-header').value.trim() || 'Authorization';
+  const authPrefix = document.getElementById('edit-auth-prefix').value.trim() || null;
   try {
-    await PATCH(`/admin/providers/${id}`, { preferredModel: model || null, tier });
-    toast('Provider updated');
-    closeModal();
-    loadProviders();
-    loadConnect();
+    await PATCH(`/admin/providers/${id}`, { name: name||undefined, preferredModel: model||null, tier, baseUrl: baseUrl||null, authHeader, authPrefix });
+    toast('Pool updated'); closeModal(); loadNexus(); loadConnect();
+  } catch(e) { toast(e.message, true); }
+}
+
+// ── Models ─────────────────────────────────────────────────────────
+const MODEL_CAPS = ['isPrimary','isFallback','hasVision','hasFIM','hasToolCalling'];
+const CAP_LABELS = { isPrimary:'Primary', isFallback:'Fallback', hasVision:'Vision', hasFIM:'FIM', hasToolCalling:'Tools' };
+const TIER_MAP = { premium:'badge-yellow', standard:'badge-purple', fast:'badge-green' };
+const STATUS_COLORS = { active:'var(--green)', paused:'var(--yellow)', retired:'var(--muted)' };
+
+async function loadModels() {
+  if (window._demoMode) return;
+  const el = document.getElementById('models-list');
+  try {
+    const { models } = await GET('/admin/models');
+    modelRegistry = Array.isArray(models) ? models : [];
+    if (!modelRegistry.length) {
+      el.innerHTML = `<div class="empty-state"><div class="icon">🧠</div><p>No models in registry yet.<br/>Add models to define capabilities and routing priority.</p></div>`;
+      return;
+    }
+    const sorted = [...modelRegistry].sort((a,b) => (a.priority||99)-(b.priority||99));
+    el.innerHTML = sorted.map(m => renderModelCard(m)).join('');
+  } catch(e) { el.innerHTML = `<div style="color:var(--red)">${e.message}</div>`; }
+}
+
+function renderModelCard(m) {
+  const caps = MODEL_CAPS.filter(c => m[c]);
+  const statusColor = STATUS_COLORS[m.status] || 'var(--muted)';
+  const cost = (m.inputCostPer1M || m.outputCostPer1M)
+    ? `<span style="font-size:11px;color:var(--muted)">$${(m.inputCostPer1M||0).toFixed(2)} / $${(m.outputCostPer1M||0).toFixed(2)} per 1M</span>`
+    : '';
+  return `<div class="model-card">
+    <div class="model-card-info">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+        <span class="model-name">${m.displayName||m.modelString}</span>
+        <span class="badge ${TIER_MAP[m.tier]||'badge-gray'}" style="text-transform:capitalize">${m.tier||'standard'}</span>
+        <span style="font-size:12px;font-weight:500;color:${statusColor}">${m.status||'active'}</span>
+        ${m.priority!=null?`<span style="font-size:11px;color:var(--subtle)">Priority ${m.priority}</span>`:''}
+      </div>
+      <div class="model-string">${m.modelString}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div class="model-caps">
+          ${MODEL_CAPS.map(c=>`<span class="cap-badge ${m[c]?'active':''}">${CAP_LABELS[c]}</span>`).join('')}
+        </div>
+        ${cost}
+        ${m.contextWindow?`<span style="font-size:11px;color:var(--muted)">${fmtNum(m.contextWindow)} ctx</span>`:''}
+      </div>
+    </div>
+    <div class="model-card-actions">
+      <button class="btn-icon btn-sm" onclick="showEditModel('${m.id}')">Edit</button>
+      ${m.status==='active'
+        ? `<button class="btn-warning btn-sm" onclick="setModelStatus('${m.id}','paused')">Pause</button>`
+        : m.status==='paused'
+          ? `<button class="btn-secondary btn-sm" onclick="setModelStatus('${m.id}','active')">Activate</button>`
+          : ''}
+      <button class="btn-danger btn-sm" onclick="deleteModel('${m.id}')">Delete</button>
+    </div>
+  </div>`;
+}
+
+function showAddModel() {
+  document.getElementById('modal-box').innerHTML = buildModelForm(null);
+  openModal();
+}
+
+async function showEditModel(id) {
+  const m = modelRegistry.find(x => x.id === id);
+  if (!m) return;
+  document.getElementById('modal-box').innerHTML = buildModelForm(m);
+  openModal();
+}
+
+function buildModelForm(m) {
+  const isNew = !m;
+  const caps = MODEL_CAPS.map(c =>
+    `<label class="cap-toggle ${m&&m[c]?'on':''}" onclick="this.classList.toggle('on')">
+      <input type="checkbox" id="cap-${c}" ${m&&m[c]?'checked':''}/>${CAP_LABELS[c]}
+    </label>`
+  ).join('');
+  return `
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title">${isNew?'Add model':'Edit — '+(m.displayName||m.modelString)}</div>
+    <div class="form-row">
+      <label class="form-label">Display name</label>
+      <input id="m-display-name" value="${m?m.displayName||'':''}" placeholder="e.g. Claude 3.5 Sonnet"/>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Model string (actual API ID)</label>
+      <input id="m-model-string" value="${m?m.modelString||'':''}" placeholder="e.g. claude-3-5-sonnet-20241022"/>
+    </div>
+    <div class="form-grid">
+      <div class="form-row">
+        <label class="form-label">Provider</label>
+        <select id="m-provider">
+          ${['anthropic','openai','google','groq','openrouter','custom'].map(p=>`<option value="${p}" ${m&&m.provider===p?'selected':''}>${PROVIDER_LABELS[p]||p}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Tier</label>
+        <select id="m-tier">
+          <option value="premium" ${m&&m.tier==='premium'?'selected':''}>Premium</option>
+          <option value="standard" ${!m||m.tier==='standard'?'selected':''}>Standard</option>
+          <option value="fast" ${m&&m.tier==='fast'?'selected':''}>Fast</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row">
+        <label class="form-label">Status</label>
+        <select id="m-status">
+          <option value="active" ${!m||m.status==='active'?'selected':''}>Active</option>
+          <option value="paused" ${m&&m.status==='paused'?'selected':''}>Paused</option>
+          <option value="retired" ${m&&m.status==='retired'?'selected':''}>Retired</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Priority (lower = first)</label>
+        <input id="m-priority" type="number" value="${m?m.priority||1:1}" min="1"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Capabilities</label>
+      <div class="cap-toggle-row">${caps}</div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row">
+        <label class="form-label">Input cost ($ per 1M tokens)</label>
+        <input id="m-input-cost" type="number" step="0.01" value="${m?m.inputCostPer1M||0:0}" min="0"/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Output cost ($ per 1M tokens)</label>
+        <input id="m-output-cost" type="number" step="0.01" value="${m?m.outputCostPer1M||0:0}" min="0"/>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row">
+        <label class="form-label">Context window</label>
+        <input id="m-ctx" type="number" value="${m?m.contextWindow||0:0}" min="0"/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Max output tokens</label>
+        <input id="m-max-tokens" type="number" value="${m?m.maxTokens||0:0}" min="0"/>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="submitModel('${m?m.id:''}')">Save</button>
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>`;
+}
+
+async function submitModel(existingId) {
+  const id = existingId || crypto.randomUUID();
+  const model = {
+    id,
+    displayName:     document.getElementById('m-display-name').value.trim(),
+    modelString:     document.getElementById('m-model-string').value.trim(),
+    provider:        document.getElementById('m-provider').value,
+    tier:            document.getElementById('m-tier').value,
+    status:          document.getElementById('m-status').value,
+    priority:        parseInt(document.getElementById('m-priority').value) || 1,
+    isPrimary:       document.getElementById('cap-isPrimary').checked,
+    isFallback:      document.getElementById('cap-isFallback').checked,
+    hasVision:       document.getElementById('cap-hasVision').checked,
+    hasFIM:          document.getElementById('cap-hasFIM').checked,
+    hasToolCalling:  document.getElementById('cap-hasToolCalling').checked,
+    inputCostPer1M:  parseFloat(document.getElementById('m-input-cost').value) || 0,
+    outputCostPer1M: parseFloat(document.getElementById('m-output-cost').value) || 0,
+    contextWindow:   parseInt(document.getElementById('m-ctx').value) || 0,
+    maxTokens:       parseInt(document.getElementById('m-max-tokens').value) || 0,
+  };
+  if (!model.modelString) { toast('Model string is required', true); return; }
+  if (existingId) {
+    modelRegistry = modelRegistry.map(m => m.id === existingId ? model : m);
+  } else {
+    modelRegistry = [...modelRegistry, model];
+  }
+  try {
+    await PUT('/admin/models', { models: modelRegistry });
+    toast(existingId ? 'Model updated' : 'Model added');
+    closeModal(); loadModels();
+  } catch(e) { toast(e.message, true); }
+}
+
+async function setModelStatus(id, status) {
+  modelRegistry = modelRegistry.map(m => m.id === id ? {...m, status} : m);
+  try {
+    await PUT('/admin/models', { models: modelRegistry });
+    toast(`Model ${status}`); loadModels();
+  } catch(e) { toast(e.message, true); }
+}
+
+async function deleteModel(id) {
+  if (!confirm('Delete this model from the registry?')) return;
+  modelRegistry = modelRegistry.filter(m => m.id !== id);
+  try {
+    await PUT('/admin/models', { models: modelRegistry });
+    toast('Model deleted'); loadModels();
   } catch(e) { toast(e.message, true); }
 }
 
 // ── Team Keys ──────────────────────────────────────────────────────
 async function loadTeamKeys() {
-  try {
-    const data = await GET('/admin/team-keys');
-    teamKeys = data.keys || [];
-  } catch { teamKeys = []; }
+  try { const data = await GET('/admin/team-keys'); teamKeys = data.keys || []; }
+  catch { teamKeys = []; }
 }
 
 function renderTeamKeys() {
+  if (window._demoMode) return;
   const el = document.getElementById('team-list');
   if (!teamKeys.length) {
     el.innerHTML = `<div class="empty-state"><div class="icon">👥</div><p>No team keys yet.<br/>Create keys for each team member.</p></div>`;
@@ -735,14 +1116,14 @@ function renderTeamKeys() {
   }
   el.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Name</th><th>Key (masked)</th><th>Created</th><th>Actions</th></tr></thead>
-    <tbody>${teamKeys.map(k => `<tr>
+    <tbody>${teamKeys.map(k=>`<tr>
       <td><strong>${k.name}</strong></td>
       <td><span style="font-family:monospace;font-size:12px">${k.maskedKey}</span></td>
       <td style="color:var(--muted)">${new Date(k.createdAt).toLocaleDateString()}</td>
-      <td style="display:flex;gap:6px">
+      <td><div style="display:flex;gap:6px">
         <button class="btn-icon btn-sm" onclick="copyTeamKey('${k.id}')">Copy key</button>
         <button class="btn-danger btn-sm" onclick="revokeTeamKey('${k.id}','${k.name}')">Revoke</button>
-      </td>
+      </div></td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -753,7 +1134,7 @@ function showCreateTeamKey() {
     <div class="modal-title">Create team key</div>
     <div class="form-row">
       <label class="form-label">Name</label>
-      <input id="tk-name" placeholder="e.g. Abbas, Frontend Team, John"/>
+      <input id="tk-name" placeholder="e.g. Abbas, Frontend Team"/>
     </div>
     <div class="form-actions">
       <button class="btn-primary" onclick="submitCreateTeamKey()">Create key</button>
@@ -767,10 +1148,8 @@ async function submitCreateTeamKey() {
   if (!name) { toast('Name is required', true); return; }
   try {
     const r = await POST('/admin/team-keys', { name });
-    closeModal();
-    teamKeys = [...teamKeys, r.key];
-    renderTeamKeys();
-    toast(`Key for "${name}" created — copy it now, shown once`);
+    closeModal(); teamKeys = [...teamKeys, r.key]; renderTeamKeys();
+    toast(`Key for "${name}" created — copy it now`);
     showFullKeyModal(r.key.name, r.key.plainKey);
   } catch(e) { toast(e.message, true); }
 }
@@ -779,120 +1158,308 @@ function showFullKeyModal(name, key) {
   document.getElementById('modal-box').innerHTML = `
     <div class="modal-title">Key for ${name}</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Copy this key now. It won't be shown again.</p>
-    <div class="copy-row">
-      <span class="copy-val" style="font-family:monospace">${key}</span>
-      <button class="copy-btn" onclick="copyText('${key}',this)">Copy</button>
-    </div>
-    <div class="form-actions" style="margin-top:12px">
-      <button class="btn-primary" onclick="closeModal()">Done</button>
-    </div>`;
+    <div class="copy-row"><span class="copy-val" style="font-family:monospace">${key}</span><button class="copy-btn" onclick="copyText('${key}',this)">Copy</button></div>
+    <div class="form-actions" style="margin-top:12px"><button class="btn-primary" onclick="closeModal()">Done</button></div>`;
   openModal();
 }
 
 async function copyTeamKey(id) {
-  try {
-    const r = await GET(`/admin/team-keys/${id}/reveal`);
-    copyText(r.key);
-    toast('Key copied');
-  } catch { toast('Cannot re-reveal key for security', true); }
+  try { const r = await GET(`/admin/team-keys/${id}/reveal`); copyText(r.key); toast('Key copied'); }
+  catch { toast('Cannot re-reveal key for security', true); }
 }
 
 async function revokeTeamKey(id, name) {
-  if (!confirm(`Revoke key for "${name}"? This cannot be undone.`)) return;
-  try {
-    await DEL(`/admin/team-keys/${id}`);
-    teamKeys = teamKeys.filter(k => k.id !== id);
-    renderTeamKeys();
-    toast('Key revoked');
-  } catch(e) { toast(e.message, true); }
+  if (!confirm(`Revoke key for "${name}"?`)) return;
+  try { await DEL(`/admin/team-keys/${id}`); teamKeys = teamKeys.filter(k=>k.id!==id); renderTeamKeys(); toast('Key revoked'); }
+  catch(e) { toast(e.message, true); }
 }
 
-// ── Usage ──────────────────────────────────────────────────────────
-async function loadUsage(period) {
-  if (window._demoMode) return;
-  ['today','7d','30d'].forEach(p => {
-    const b = document.getElementById('u-'+p);
-    b.style.background = p===period ? 'var(--accent-bg)' : '';
-    b.style.color = p===period ? 'var(--accent)' : '';
+// ── Analytics ─────────────────────────────────────────────────────
+const CHART_PALETTE = ['#8b5cf6','#3b82f6','#22c55e','#f59e0b','#ef4444','#ec4899','#14b8a6','#f97316','#a78bfa','#60a5fa'];
+let _charts = {};
+let _analyticsData = null;
+let _analyticsPeriod = '30d';
+let _customFrom = '', _customTo = '';
+let _sortCol = 'totalTokens', _sortDir = -1;
+let _chartJsLoaded = false, _chartJsPromise = null;
+
+function ensureChartJs() {
+  if (_chartJsLoaded) return Promise.resolve();
+  if (_chartJsPromise) return _chartJsPromise;
+  _chartJsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    s.onload = () => {
+      _chartJsLoaded = true;
+      Chart.defaults.color = '#71717a';
+      Chart.defaults.borderColor = '#2a2a32';
+      Chart.defaults.font.family = "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
+      resolve();
+    };
+    s.onerror = reject;
+    document.head.appendChild(s);
   });
-  const el = document.getElementById('usage-content');
-  el.innerHTML = '<div style="text-align:center;padding:2rem"><div class="loader"></div></div>';
+  return _chartJsPromise;
+}
+
+function _destroyChart(k) { if (_charts[k]) { _charts[k].destroy(); delete _charts[k]; } }
+
+function fmtUsd(v) {
+  if (!v || v === 0) return '$0.00';
+  if (v < 0.01) return '$<0.01';
+  return '$' + v.toFixed(2);
+}
+
+function fmtDateLbl(iso) {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en', { month: 'short', day: 'numeric' });
+}
+
+function _darkOpts(extra) {
+  const base = {
+    responsive: true, maintainAspectRatio: false, animation: { duration: 350 },
+    plugins: {
+      legend: { position: 'bottom', labels: { color:'#71717a', boxWidth:10, padding:10, font:{size:11} } },
+      tooltip: { backgroundColor:'#18181b', borderColor:'#3a3a44', borderWidth:1, titleColor:'#f4f4f5', bodyColor:'#a1a1aa', padding:10, cornerRadius:6, callbacks: {} },
+    },
+    scales: {
+      x: { ticks:{ color:'#71717a', maxTicksLimit:8, font:{size:11} }, grid:{ color:'#1c1c24' } },
+      y: { ticks:{ color:'#71717a', font:{size:11} }, grid:{ color:'#1c1c24' }, beginAtZero:true },
+    },
+  };
+  return Object.assign(base, extra || {});
+}
+
+function applyCustomRange() {
+  const from = document.getElementById('ap-from')?.value;
+  const to   = document.getElementById('ap-to')?.value;
+  if (!from && !to) return;
+  if (from && to && from > to) { toast('From date must be before To date', true); return; }
+  _customFrom = from || '';
+  _customTo   = to   || '';
+  // Deactivate all period pills when custom range is active
+  ['today','7d','30d','90d'].forEach(p => document.getElementById('ap-'+p)?.classList.remove('active-period'));
+  loadAnalytics(null);
+}
+
+async function loadAnalytics(period) {
+  if (window._demoMode) { _renderDemoAnalytics(); return; }
+  const usingCustom = _customFrom || _customTo;
+  if (!usingCustom) {
+    period = period || _analyticsPeriod;
+    _analyticsPeriod = period;
+    _customFrom = ''; _customTo = '';
+    // Clear date inputs when switching back to a preset
+    const fromEl = document.getElementById('ap-from');
+    const toEl   = document.getElementById('ap-to');
+    if (fromEl) fromEl.value = '';
+    if (toEl)   toEl.value   = '';
+    ['today','7d','30d','90d'].forEach(p => {
+      document.getElementById('ap-'+p)?.classList.toggle('active-period', p === period);
+    });
+  }
+  const el = document.getElementById('analytics-body');
+  el.innerHTML = '<div style="text-align:center;padding:3rem"><div class="loader"></div></div>';
   try {
-    const [data, tkData] = await Promise.all([
-      GET(`/admin/usage?period=${period}`),
-      GET(`/admin/usage/by-team-key?period=${period}`),
+    await ensureChartJs();
+    const qs = usingCustom
+      ? `from=${_customFrom}&to=${_customTo || new Date().toISOString().slice(0,10)}`
+      : `period=${period}`;
+    const [summary, teamsTs, modelsTs, tkData] = await Promise.all([
+      GET(`/admin/usage?${qs}`),
+      GET(`/admin/analytics/timeseries/teams?${qs}`),
+      GET(`/admin/analytics/timeseries/models?${qs}`),
+      GET(`/admin/usage/by-team-key?${qs}`),
     ]);
-    const t = data.totals;
-    el.innerHTML = `
-      <div class="grid-3" style="margin-bottom:1rem">
-        <div class="stat"><div class="stat-label">Total tokens</div><div class="stat-value">${fmtNum(t.totalTokens)}</div></div>
-        <div class="stat"><div class="stat-label">Input tokens</div><div class="stat-value">${fmtNum(t.inputTokens)}</div></div>
-        <div class="stat"><div class="stat-label">Output tokens</div><div class="stat-value">${fmtNum(t.outputTokens)}</div></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Team key leaderboard</div>
-        ${renderTeamKeyLeaderboard(tkData?.leaderboard ?? [], t.totalTokens)}
-      </div>
-      <div class="card" style="margin-top:12px">
-        <div class="card-title">By model</div>
-        ${renderByModel(data.byModel, t.totalTokens)}
-      </div>
-      <div class="card" style="margin-top:12px">
-        <div class="card-title">By day</div>
-        ${renderByDay(data.byDay)}
-      </div>`;
-  } catch(e) { el.innerHTML = `<div style="color:var(--red)">${e.message}</div>`; }
+    _analyticsData = { summary, teamTs: teamsTs.series || [], modelTs: modelsTs.series || [], leaderboard: tkData.leaderboard || [] };
+    _renderAnalyticsBody(_analyticsData);
+  } catch(e) { el.innerHTML = `<div style="color:var(--red);padding:2rem">${e.message}</div>`; }
 }
 
-function renderTeamKeyLeaderboard(leaderboard, globalTotal) {
-  if (!leaderboard.length) return '<div style="color:var(--muted);font-size:13px">No team key usage yet — requests made with the main API key are not attributed to a team member.</div>';
-  const maxTokens = leaderboard[0].totalTokens; // already sorted desc
-  return leaderboard.map((entry, i) => {
-    const pct = maxTokens > 0 ? Math.round(entry.totalTokens / maxTokens * 100) : 0;
-    const share = globalTotal > 0 ? Math.round(entry.totalTokens / globalTotal * 100) : 0;
-    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
-    return `<div class="usage-bar-wrap">
-      <div class="usage-bar-label">
-        <span><span style="margin-right:6px">${medal}</span>${entry.name}</span>
-        <span style="color:var(--muted);font-size:12px">${entry.requests} req &nbsp;·&nbsp; ${fmtNum(entry.totalTokens)} tokens &nbsp;·&nbsp; ${share}% of total</span>
+function _renderAnalyticsBody(d) {
+  const t = d.summary.totals;
+  const inPct  = t.totalTokens > 0 ? Math.round(t.inputTokens  / t.totalTokens * 100) : 0;
+  const outPct = t.totalTokens > 0 ? Math.round(t.outputTokens / t.totalTokens * 100) : 0;
+  document.getElementById('analytics-body').innerHTML = `
+    <div class="a-heroes">
+      <div class="stat"><div class="stat-label">Requests</div><div class="stat-value">${fmtNum(t.requests)}</div><div class="stat-sub">this period</div></div>
+      <div class="stat"><div class="stat-label">Total tokens</div><div class="stat-value">${fmtNum(t.totalTokens)}</div><div class="stat-sub">input + output</div></div>
+      <div class="stat"><div class="stat-label">Input tokens</div><div class="stat-value">${fmtNum(t.inputTokens)}</div><div class="stat-sub">${inPct}% of total</div></div>
+      <div class="stat"><div class="stat-label">Output tokens</div><div class="stat-value">${fmtNum(t.outputTokens)}</div><div class="stat-sub">${outPct}% of total</div></div>
+      <div class="stat"><div class="stat-label">Est. cost</div><div class="stat-value" style="color:var(--green)">${fmtUsd(t.estimatedUsd)}</div><div class="stat-sub">model pricing</div></div>
+    </div>
+    <div class="grid-2" style="margin-bottom:12px">
+      <div class="card"><div class="card-title">Requests over time</div><div class="chart-box"><canvas id="chart-req"></canvas></div></div>
+      <div class="card"><div class="card-title">Token usage by model</div><div class="chart-box"><canvas id="chart-tok"></canvas></div></div>
+    </div>
+    <div class="grid-2" style="margin-bottom:12px">
+      <div class="card"><div class="card-title">Cost trend (USD)</div><div class="chart-box"><canvas id="chart-cost"></canvas></div></div>
+      <div class="card"><div class="card-title">Input vs Output by model</div><div class="chart-box"><canvas id="chart-io"></canvas></div></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">By team</div>
+        <button class="btn-secondary btn-sm" onclick="exportAnalyticsCSV()">↓ CSV</button>
       </div>
-      <div class="usage-bar"><div class="usage-bar-fill" style="width:${pct}%"></div></div>
+      <div id="team-analytics-table">${_renderTeamTable(d.leaderboard)}</div>
     </div>`;
-  }).join('');
+  requestAnimationFrame(() => {
+    _buildReqChart(d.teamTs, d.summary.byDay);
+    _buildTokChart(d.modelTs);
+    _buildCostChart(d.summary.byDay);
+    _buildIOChart(d.summary.byModel);
+  });
 }
 
-function renderByModel(byModel, total) {
-  const entries = Object.entries(byModel).sort((a,b) => b[1].tokens - a[1].tokens);
-  if (!entries.length) return '<div style="color:var(--muted);font-size:13px">No usage yet</div>';
-  return entries.map(([model, d]) => {
-    const pct = total > 0 ? Math.round(d.tokens/total*100) : 0;
-    return `<div class="usage-bar-wrap">
-      <div class="usage-bar-label"><span>${model}</span><span>${fmtNum(d.tokens)} tokens</span></div>
-      <div class="usage-bar"><div class="usage-bar-fill" style="width:${pct}%"></div></div>
-    </div>`;
-  }).join('');
+// Chart 1 — Requests over time (line, multi-color per team)
+function _buildReqChart(teamTs, byDay) {
+  _destroyChart('req');
+  const canvas = document.getElementById('chart-req');
+  if (!canvas) return;
+  const dates  = [...new Set(byDay.map(d => d.date))].sort();
+  const teams  = [...new Set(teamTs.map(r => r.teamName))];
+  let datasets;
+  if (teams.length) {
+    datasets = teams.map((team, i) => {
+      const c = CHART_PALETTE[i % CHART_PALETTE.length];
+      return { label: team, data: dates.map(date => { const r = teamTs.find(x => x.date===date && x.teamName===team); return r ? r.requests : 0; }),
+        borderColor: c, backgroundColor: c+'18', borderWidth:2, pointRadius:3, pointHoverRadius:5, tension:0.35, fill:false };
+    });
+  } else {
+    const reqMap = new Map(byDay.map(d => [d.date, d.requests || 0]));
+    datasets = [{ label:'Total requests', data: dates.map(d => reqMap.get(d) || 0),
+      borderColor: CHART_PALETTE[0], backgroundColor: CHART_PALETTE[0]+'18', borderWidth:2, pointRadius:3, tension:0.35, fill:false }];
+  }
+  _charts['req'] = new Chart(canvas, { type:'line', data:{ labels: dates.map(fmtDateLbl), datasets }, options: _darkOpts() });
 }
 
-function renderByDay(byDay) {
-  if (!byDay.length) return '<div style="color:var(--muted);font-size:13px">No usage yet</div>';
-  const max = Math.max(...byDay.map(d => d.tokens));
-  return `<div style="display:flex;align-items:flex-end;gap:4px;height:80px;padding-top:8px">
-    ${byDay.slice(-30).map(d => {
-      const h = max > 0 ? Math.max(4, Math.round(d.tokens/max*64)) : 4;
-      const label = new Date(d.date+'T00:00:00Z').toLocaleDateString('en',{month:'short',day:'numeric'});
-      return `<div title="${label}: ${fmtNum(d.tokens)}" style="flex:1;min-width:4px;height:${h}px;background:var(--accent);border-radius:2px 2px 0 0;opacity:.8;cursor:default"></div>`;
-    }).join('')}
-  </div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px">
-    <span>${byDay[0]?.date||''}</span><span>${byDay[byDay.length-1]?.date||''}</span>
-  </div>`;
+// Chart 2 — Tokens by model (stacked bar)
+function _buildTokChart(modelTs) {
+  _destroyChart('tok');
+  const canvas = document.getElementById('chart-tok');
+  if (!canvas) return;
+  if (!modelTs || !modelTs.length) { canvas.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:13px">No data yet</div>'; return; }
+  const dates  = [...new Set(modelTs.map(r => r.date))].sort();
+  const models = [...new Set(modelTs.map(r => r.model))];
+  const datasets = models.map((model, i) => {
+    const c = CHART_PALETTE[i % CHART_PALETTE.length];
+    return { label: model, data: dates.map(date => { const r = modelTs.find(x => x.date===date && x.model===model); return r ? r.tokens : 0; }),
+      backgroundColor: c + 'cc', borderColor: c, borderWidth:1 };
+  });
+  _charts['tok'] = new Chart(canvas, { type:'bar', data:{ labels: dates.map(fmtDateLbl), datasets },
+    options: _darkOpts({ scales: { x:{ stacked:true, ticks:{color:'#71717a',maxTicksLimit:8,font:{size:11}}, grid:{color:'#1c1c24'} }, y:{ stacked:true, ticks:{color:'#71717a',font:{size:11},callback:v=>fmtNum(v)}, grid:{color:'#1c1c24'}, beginAtZero:true } } }) });
+}
+
+// Chart 3 — Cost trend (area)
+function _buildCostChart(byDay) {
+  _destroyChart('cost');
+  const canvas = document.getElementById('chart-cost');
+  if (!canvas) return;
+  const usdData = byDay.map(d => +(d.usd || 0).toFixed(5));
+  if (!usdData.some(v => v > 0)) {
+    canvas.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:12px;text-align:center;padding:1rem">Set model pricing in the Models tab<br>to see cost estimates here.</div>';
+    return;
+  }
+  _charts['cost'] = new Chart(canvas, { type:'line',
+    data: { labels: byDay.map(d => fmtDateLbl(d.date)), datasets: [{ label:'Est. cost (USD)', data: usdData,
+      borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,0.07)', borderWidth:2, fill:true, pointRadius:2, tension:0.3 }] },
+    options: _darkOpts({ plugins:{ legend:{ display:false } }, scales:{ x:{ ticks:{color:'#71717a',maxTicksLimit:8,font:{size:11}}, grid:{color:'#1c1c24'} }, y:{ ticks:{color:'#71717a',font:{size:11},callback:v=>'$'+v.toFixed(3)}, grid:{color:'#1c1c24'}, beginAtZero:true } } }) });
+}
+
+// Chart 4 — Input vs Output by model (horizontal grouped bar)
+function _buildIOChart(byModel) {
+  _destroyChart('io');
+  const canvas = document.getElementById('chart-io');
+  if (!canvas) return;
+  const entries = Object.entries(byModel).sort((a,b) => b[1].tokens - a[1].tokens).slice(0, 8);
+  if (!entries.length) { canvas.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:13px">No data yet</div>'; return; }
+  const labels = entries.map(([m]) => m.length > 26 ? m.slice(0,24)+'…' : m);
+  _charts['io'] = new Chart(canvas, { type:'bar',
+    data: { labels, datasets: [
+      { label:'Input',  data: entries.map(([,v]) => v.inputTokens),  backgroundColor:'rgba(59,130,246,0.75)',  borderColor:'#3b82f6', borderWidth:1 },
+      { label:'Output', data: entries.map(([,v]) => v.outputTokens), backgroundColor:'rgba(139,92,246,0.75)', borderColor:'#8b5cf6', borderWidth:1 },
+    ]},
+    options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, animation:{duration:350},
+      plugins:{ legend:{ position:'bottom', labels:{color:'#71717a',boxWidth:10,padding:10,font:{size:11}} }, tooltip:{backgroundColor:'#18181b',borderColor:'#3a3a44',borderWidth:1,titleColor:'#f4f4f5',bodyColor:'#a1a1aa',padding:10,cornerRadius:6} },
+      scales:{ x:{ ticks:{color:'#71717a',font:{size:11},callback:v=>fmtNum(v)}, grid:{color:'#1c1c24'}, beginAtZero:true }, y:{ ticks:{color:'#71717a',font:{size:11}}, grid:{color:'#1c1c24'} } } } });
+}
+
+// Team table (client-side sortable)
+function _renderTeamTable(leaderboard) {
+  if (!leaderboard || !leaderboard.length) return '<div style="color:var(--muted);font-size:13px;padding:8px 0">No team key usage in this period.</div>';
+  const sorted = [...leaderboard].sort((a,b) => _sortDir * ((a[_sortCol]||0) > (b[_sortCol]||0) ? 1 : -1));
+  const th = (col, label) => `<th class="a-sort-btn" onclick="sortTeamTable('${col}')" style="cursor:pointer">${label}${_sortCol===col?(_sortDir>0?' ↑':' ↓'):''}</th>`;
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Team</th>${th('totalTokens','Tokens')}${th('requests','Requests')}${th('estimatedUsd','Est. cost')}<th title="Estimated lines of code (tokens ÷ 50)">Est. LoC ⓘ</th><th>Input / Output</th></tr></thead>
+    <tbody>${sorted.map((e,i) => `<tr>
+      <td>${i===0?'🥇 ':i===1?'🥈 ':i===2?'🥉 ':''}<strong>${e.name}</strong></td>
+      <td>${fmtNum(e.totalTokens)}</td>
+      <td>${e.requests}</td>
+      <td>${fmtUsd(e.estimatedUsd||0)}</td>
+      <td>~${fmtNum(Math.round(e.totalTokens/50))}</td>
+      <td><span style="color:var(--blue)">${fmtNum(e.inputTokens)}</span> <span style="color:var(--muted)">/</span> <span style="color:var(--accent)">${fmtNum(e.outputTokens)}</span></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function sortTeamTable(col) {
+  if (_sortCol === col) _sortDir *= -1; else { _sortCol = col; _sortDir = -1; }
+  if (_analyticsData) document.getElementById('team-analytics-table').innerHTML = _renderTeamTable(_analyticsData.leaderboard);
+}
+
+function exportAnalyticsCSV() {
+  if (!_analyticsData) { toast('No data to export', true); return; }
+  const rows = [['Team','Requests','Input Tokens','Output Tokens','Total Tokens','Est. Cost USD','Est. LoC']];
+  (_analyticsData.leaderboard || []).forEach(e => rows.push([e.name, e.requests, e.inputTokens, e.outputTokens, e.totalTokens, (e.estimatedUsd||0).toFixed(4), Math.round(e.totalTokens/50)]));
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})), download: `nexus-analytics-${_analyticsPeriod}-${new Date().toISOString().slice(0,10)}.csv` });
+  a.click();
+}
+
+// Demo analytics
+function _renderDemoAnalytics() {
+  ensureChartJs().then(() => {
+    const demoDays = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(Date.now() - i*86400000);
+      const iso = d.toISOString().slice(0,10);
+      const tok = Math.round(60000 + Math.random()*80000);
+      const req = Math.round(3 + Math.random()*6);
+      demoDays.push({ date:iso, tokens:tok, requests:req, usd:+(tok*0.0000035).toFixed(5) });
+    }
+    const demoTeamTs = demoDays.flatMap(d => [
+      { date:d.date, teamName:'Abbas',          requests: Math.round(d.requests*0.6), tokens: Math.round(d.tokens*0.6) },
+      { date:d.date, teamName:'Frontend Team',  requests: Math.round(d.requests*0.4), tokens: Math.round(d.tokens*0.4) },
+    ]);
+    const demoModelTs = demoDays.flatMap(d => [
+      { date:d.date, model:'claude-3-5-sonnet-20241022', tokens: Math.round(d.tokens*0.65) },
+      { date:d.date, model:'gemini-2.0-flash',           tokens: Math.round(d.tokens*0.35) },
+    ]);
+    const totTok = demoDays.reduce((s,d)=>s+d.tokens,0);
+    const totReq = demoDays.reduce((s,d)=>s+d.requests,0);
+    const totUsd = demoDays.reduce((s,d)=>s+d.usd,0);
+    _analyticsData = {
+      summary: { totals:{ requests:totReq, totalTokens:totTok, inputTokens:Math.round(totTok*0.75), outputTokens:Math.round(totTok*0.25), estimatedUsd:totUsd }, byModel:{
+        'claude-3-5-sonnet-20241022':{ inputTokens:Math.round(totTok*0.49), outputTokens:Math.round(totTok*0.16), tokens:Math.round(totTok*0.65), usd:totUsd*0.85, requests:Math.round(totReq*0.65) },
+        'gemini-2.0-flash':          { inputTokens:Math.round(totTok*0.26), outputTokens:Math.round(totTok*0.09), tokens:Math.round(totTok*0.35), usd:totUsd*0.15, requests:Math.round(totReq*0.35) },
+      }, byDay: demoDays },
+      teamTs: demoTeamTs,
+      modelTs: demoModelTs,
+      leaderboard:[
+        { id:'1', name:'Abbas',         inputTokens:Math.round(totTok*0.45), outputTokens:Math.round(totTok*0.15), totalTokens:Math.round(totTok*0.6), requests:Math.round(totReq*0.6), estimatedUsd:totUsd*0.6 },
+        { id:'2', name:'Frontend Team', inputTokens:Math.round(totTok*0.30), outputTokens:Math.round(totTok*0.10), totalTokens:Math.round(totTok*0.4), requests:Math.round(totReq*0.4), estimatedUsd:totUsd*0.4 },
+      ],
+    };
+    _renderAnalyticsBody(_analyticsData);
+  }).catch(() => { document.getElementById('analytics-body').innerHTML = '<div style="color:var(--muted);text-align:center;padding:3rem">Chart.js failed to load (offline?)</div>'; });
 }
 
 // ── Settings ───────────────────────────────────────────────────────
 async function loadSettings() {
+  if (window._demoMode) return;
   try {
     const cfg = await GET('/admin/config');
     document.getElementById('settings-key-raw').value = cfg.nexusApiKey || '';
-    document.getElementById('settings-key').textContent = (cfg.nexusApiKey||'').slice(0,8) + '••••••••';
+    document.getElementById('settings-key').textContent = (cfg.nexusApiKey||'').slice(0,8)+'••••••••';
   } catch {}
 }
 
@@ -910,15 +1477,13 @@ async function rotateKey() {
     const r = await POST('/admin/api-key/regenerate');
     document.getElementById('settings-key-raw').value = r.key;
     document.getElementById('settings-key').textContent = r.key.slice(0,8)+'••••••••';
-    keyVisible = false;
-    toast('API key rotated — copy the new key');
-    loadConnect();
+    keyVisible = false; toast('Key rotated'); loadConnect();
   } catch(e) { toast(e.message, true); }
 }
 
 // ── Modal ──────────────────────────────────────────────────────────
-function openModal()  { document.getElementById('modal-bg').classList.add('open'); }
-function closeModal(e) { if (!e || e.target===document.getElementById('modal-bg')) document.getElementById('modal-bg').classList.remove('open'); }
+function openModal()   { document.getElementById('modal-bg').classList.add('open'); }
+function closeModal(e) { if (!e||e.target===document.getElementById('modal-bg')) document.getElementById('modal-bg').classList.remove('open'); }
 
 // ── Utils ──────────────────────────────────────────────────────────
 function copyText(text, btn) {
@@ -927,65 +1492,87 @@ function copyText(text, btn) {
     if (btn) { const orig=btn.textContent; btn.textContent='✓'; btn.classList.add('copied'); setTimeout(()=>{btn.textContent=orig;btn.classList.remove('copied');},2000); }
   });
 }
-
 function fmtNum(n) {
-  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
-  if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
+  if (n>=1e6) return (n/1e6).toFixed(1)+'M';
+  if (n>=1e3) return (n/1e3).toFixed(1)+'K';
   return String(n||0);
 }
 
 // ── Demo mode ─────────────────────────────────────────────────────
 function enterDemoMode() {
-  PWD = 'demo';
-  sessionStorage.setItem('nx_pwd', 'demo');
+  PWD = 'demo'; sessionStorage.setItem('nx_pwd','demo');
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('status-label').textContent = '3 keys active';
   document.getElementById('status-dot').style.background = 'var(--green)';
-
-  // Patch api() to return demo data instead of hitting real endpoints
   window._demoMode = true;
 
+  // Connect
   document.getElementById('connect-rows').innerHTML =
     '<div class="copy-row"><span class="copy-label">Base URL</span><span class="copy-val">http://localhost:3000/v1</span><button class="copy-btn" onclick="copyText(\'http://localhost:3000/v1\',this)">Copy</button></div>' +
     '<div class="copy-row"><span class="copy-label">Model</span><span class="copy-val">kinetic-nexus-1</span><button class="copy-btn" onclick="copyText(\'kinetic-nexus-1\',this)">Copy</button></div>' +
     '<div class="copy-row"><span class="copy-label">API Key</span><span class="copy-val">nx_a3f9b2••••••••d2e1</span><button class="copy-btn">Copy</button></div>';
-
   document.getElementById('routing-status').innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span class="badge" style="background:var(--yellow-bg);color:var(--yellow)">Premium</span><span>Anthropic</span><span style="font-family:monospace;font-size:12px;color:var(--muted)">claude-3-5-sonnet-20241022</span><span class="badge badge-green">2 active</span></div>' +
     '<div style="display:flex;align-items:center;gap:10px"><span class="badge" style="background:var(--accent-bg);color:var(--accent)">Standard</span><span>Google</span><span style="font-family:monospace;font-size:12px;color:var(--muted)">gemini-2.0-flash</span><span class="badge badge-green">1 active</span></div>';
 
-  // Demo providers
-  const el = document.getElementById('providers-list');
-  el.innerHTML =
-    '<div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><span style="font-size:20px">🔵</span><div style="flex:1"><div style="font-weight:600">Anthropic</div><div style="font-family:monospace;font-size:12px;color:var(--muted)">claude-3-5-sonnet-20241022</div></div><span class="badge" style="background:var(--yellow-bg);color:var(--yellow)">Premium</span><button class="btn-icon btn-sm">+ Key</button><button class="btn-icon btn-sm">Edit</button><button class="btn-danger btn-sm">Delete</button></div><div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:8px 10px"><span style="font-family:monospace;font-size:12px;color:var(--muted);flex:1">sk-ant-••••d4f2</span><span style="font-size:12px;color:var(--muted)">Primary</span><span class="badge badge-green">Active</span><span style="font-size:11px;color:var(--subtle)">60 RPM</span><button class="btn-icon btn-sm">Test</button><button class="btn-danger btn-sm">✕</button></div><div style="display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:8px 10px"><span style="font-family:monospace;font-size:12px;color:var(--muted);flex:1">sk-ant-••••a9c1</span><span style="font-size:12px;color:var(--muted)">Backup</span><span class="badge badge-yellow">Cooling</span><span style="font-size:11px;color:var(--subtle)">60 RPM</span><button class="btn-icon btn-sm">Test</button><button class="btn-danger btn-sm">✕</button></div></div></div>' +
-    '<div class="card" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><span style="font-size:20px">🔴</span><div style="flex:1"><div style="font-weight:600">Google</div><div style="font-family:monospace;font-size:12px;color:var(--muted)">gemini-2.0-flash</div></div><span class="badge" style="background:var(--accent-bg);color:var(--accent)">Standard</span><button class="btn-icon btn-sm">+ Key</button><button class="btn-icon btn-sm">Edit</button><button class="btn-danger btn-sm">Delete</button></div><div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:8px 10px"><span style="font-family:monospace;font-size:12px;color:var(--muted);flex:1">AIza••••7b3e</span><span style="font-size:12px;color:var(--muted)">Main</span><span class="badge badge-green">Active</span><span style="font-size:11px;color:var(--subtle)">60 RPM</span><button class="btn-icon btn-sm">Test</button><button class="btn-danger btn-sm">✕</button></div></div></div>';
+  // Nexus summary
+  document.getElementById('nexus-summary').innerHTML =
+    '<div class="grid-4"><div class="stat"><div class="stat-label">Pools</div><div class="stat-value">2</div></div><div class="stat"><div class="stat-label">Active keys</div><div class="stat-value" style="color:var(--green)">3</div></div><div class="stat"><div class="stat-label">Cooling</div><div class="stat-value" style="color:var(--yellow)">1</div></div><div class="stat"><div class="stat-label">Banned</div><div class="stat-value" style="color:var(--red)">0</div></div></div>';
 
-  // Demo team keys
+  // Nexus provider cards
+  document.getElementById('nexus-list').innerHTML =
+    `<div class="provider-card">
+      <div class="provider-card-header">
+        <div class="provider-dot provider-dot-anthropic"></div>
+        <div style="flex:1"><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600">Anthropic</span><span class="badge badge-gray" style="font-size:10px">Anthropic</span><span class="badge badge-yellow">premium</span></div><div style="font-family:monospace;font-size:12px;color:var(--muted)">claude-3-5-sonnet-20241022</div></div>
+        <div style="display:flex;gap:6px"><button class="btn-icon btn-sm">+ Key</button><button class="btn-icon btn-sm">Edit</button><button class="btn-danger btn-sm">Delete</button></div>
+      </div>
+      <div class="provider-card-body">
+        <div class="table-wrap"><table><thead><tr><th>Label / Key</th><th>Status</th><th>RPM</th><th>Actions</th></tr></thead><tbody>
+          <tr><td><div style="font-family:monospace;font-size:12px">sk-ant-api03-••••d4f2</div><div style="font-size:11px;color:var(--muted)">Primary</div></td><td><span class="badge badge-green">Active</span></td><td><div class="meter-row"><div class="meter-bar"><div class="meter-fill meter-fill-green" style="width:28%"></div></div><span class="meter-label">17/60</span></div></td><td><div style="display:flex;gap:6px"><button class="btn-icon btn-sm">Test</button><button class="btn-warning btn-sm">Ban</button><button class="btn-danger btn-sm">✕</button></div></td></tr>
+          <tr><td><div style="font-family:monospace;font-size:12px">sk-ant-api03-••••a9c1</div><div style="font-size:11px;color:var(--muted)">Backup</div></td><td><span class="badge badge-yellow">Cooling</span></td><td><div class="meter-row"><div class="meter-bar"><div class="meter-fill meter-fill-red" style="width:100%"></div></div><span class="meter-label">60/60</span></div></td><td><div style="display:flex;gap:6px"><button class="btn-icon btn-sm">Test</button><button class="btn-warning btn-sm">Ban</button><button class="btn-danger btn-sm">✕</button></div></td></tr>
+        </tbody></table></div>
+      </div>
+    </div>
+    <div class="provider-card">
+      <div class="provider-card-header">
+        <div class="provider-dot provider-dot-google"></div>
+        <div style="flex:1"><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600">Google</span><span class="badge badge-gray" style="font-size:10px">Google</span><span class="badge badge-purple">standard</span></div><div style="font-family:monospace;font-size:12px;color:var(--muted)">gemini-2.0-flash</div></div>
+        <div style="display:flex;gap:6px"><button class="btn-icon btn-sm">+ Key</button><button class="btn-icon btn-sm">Edit</button><button class="btn-danger btn-sm">Delete</button></div>
+      </div>
+      <div class="provider-card-body">
+        <div class="table-wrap"><table><thead><tr><th>Label / Key</th><th>Status</th><th>RPM</th><th>Actions</th></tr></thead><tbody>
+          <tr><td><div style="font-family:monospace;font-size:12px">AIzaSy••••7b3e</div><div style="font-size:11px;color:var(--muted)">Main</div></td><td><span class="badge badge-green">Active</span></td><td><div class="meter-row"><div class="meter-bar"><div class="meter-fill meter-fill-green" style="width:8%"></div></div><span class="meter-label">5/60</span></div></td><td><div style="display:flex;gap:6px"><button class="btn-icon btn-sm">Test</button><button class="btn-warning btn-sm">Ban</button><button class="btn-danger btn-sm">✕</button></div></td></tr>
+        </tbody></table></div>
+      </div>
+    </div>`;
+
+  // Models
+  document.getElementById('models-list').innerHTML =
+    `<div class="model-card"><div class="model-card-info"><div style="display:flex;align-items:center;gap:8px;margin-bottom:2px"><span class="model-name">Claude 3.5 Sonnet</span><span class="badge badge-yellow">premium</span><span style="font-size:12px;font-weight:500;color:var(--green)">active</span><span style="font-size:11px;color:var(--subtle)">Priority 1</span></div><div class="model-string">claude-3-5-sonnet-20241022</div><div style="display:flex;align-items:center;gap:8px"><div class="model-caps"><span class="cap-badge active">Primary</span><span class="cap-badge">Fallback</span><span class="cap-badge active">Vision</span><span class="cap-badge">FIM</span><span class="cap-badge active">Tools</span></div><span style="font-size:11px;color:var(--muted)">$3.00 / $15.00 per 1M</span><span style="font-size:11px;color:var(--muted)">200K ctx</span></div></div><div class="model-card-actions"><button class="btn-icon btn-sm">Edit</button><button class="btn-warning btn-sm">Pause</button><button class="btn-danger btn-sm">Delete</button></div></div>` +
+    `<div class="model-card"><div class="model-card-info"><div style="display:flex;align-items:center;gap:8px;margin-bottom:2px"><span class="model-name">Gemini 2.0 Flash</span><span class="badge badge-purple">standard</span><span style="font-size:12px;font-weight:500;color:var(--green)">active</span><span style="font-size:11px;color:var(--subtle)">Priority 2</span></div><div class="model-string">gemini-2.0-flash</div><div style="display:flex;align-items:center;gap:8px"><div class="model-caps"><span class="cap-badge">Primary</span><span class="cap-badge active">Fallback</span><span class="cap-badge active">Vision</span><span class="cap-badge">FIM</span><span class="cap-badge active">Tools</span></div><span style="font-size:11px;color:var(--muted)">$0.10 / $0.40 per 1M</span><span style="font-size:11px;color:var(--muted)">1M ctx</span></div></div><div class="model-card-actions"><button class="btn-icon btn-sm">Edit</button><button class="btn-warning btn-sm">Pause</button><button class="btn-danger btn-sm">Delete</button></div></div>` +
+    `<div class="model-card"><div class="model-card-info"><div style="display:flex;align-items:center;gap:8px;margin-bottom:2px"><span class="model-name">Llama 3.3 70B</span><span class="badge badge-green">fast</span><span style="font-size:12px;font-weight:500;color:var(--yellow)">paused</span><span style="font-size:11px;color:var(--subtle)">Priority 3</span></div><div class="model-string">llama-3.3-70b-versatile</div><div style="display:flex;align-items:center;gap:8px"><div class="model-caps"><span class="cap-badge">Primary</span><span class="cap-badge active">Fallback</span><span class="cap-badge">Vision</span><span class="cap-badge">FIM</span><span class="cap-badge">Tools</span></div><span style="font-size:11px;color:var(--muted)">$0.00 / $0.00 per 1M</span><span style="font-size:11px;color:var(--muted)">128K ctx</span></div></div><div class="model-card-actions"><button class="btn-icon btn-sm">Edit</button><button class="btn-secondary btn-sm">Activate</button><button class="btn-danger btn-sm">Delete</button></div></div>`;
+
+  // Team keys
   document.getElementById('team-list').innerHTML =
-    '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Key (masked)</th><th>Created</th><th>Actions</th></tr></thead><tbody><tr><td><strong>Abbas</strong></td><td><span style="font-family:monospace;font-size:12px">nx_a3f9••••d2e1</span></td><td style="color:var(--muted)">Jul 4, 2026</td><td style="display:flex;gap:6px"><button class="btn-icon btn-sm">Copy key</button><button class="btn-danger btn-sm">Revoke</button></td></tr><tr><td><strong>Frontend Team</strong></td><td><span style="font-family:monospace;font-size:12px">nx_b7c2••••f4a9</span></td><td style="color:var(--muted)">Jul 4, 2026</td><td style="display:flex;gap:6px"><button class="btn-icon btn-sm">Copy key</button><button class="btn-danger btn-sm">Revoke</button></td></tr></tbody></table></div>';
+    '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Key (masked)</th><th>Created</th><th>Actions</th></tr></thead><tbody>' +
+    '<tr><td><strong>Abbas</strong></td><td><span style="font-family:monospace;font-size:12px">nx_a3f9••••d2e1</span></td><td style="color:var(--muted)">Jul 4, 2026</td><td><div style="display:flex;gap:6px"><button class="btn-icon btn-sm">Copy key</button><button class="btn-danger btn-sm">Revoke</button></div></td></tr>' +
+    '<tr><td><strong>Frontend Team</strong></td><td><span style="font-family:monospace;font-size:12px">nx_b7c2••••f4a9</span></td><td style="color:var(--muted)">Jul 4, 2026</td><td><div style="display:flex;gap:6px"><button class="btn-icon btn-sm">Copy key</button><button class="btn-danger btn-sm">Revoke</button></div></td></tr>' +
+    '</tbody></table></div>';
 
-  // Demo usage
-  document.getElementById('usage-content').innerHTML =
-    '<div class="grid-3" style="margin-bottom:1rem"><div class="stat"><div class="stat-label">Total tokens</div><div class="stat-value">2.4M</div></div><div class="stat"><div class="stat-label">Input tokens</div><div class="stat-value">1.8M</div></div><div class="stat"><div class="stat-label">Output tokens</div><div class="stat-value">560K</div></div></div>' +
-    '<div class="card"><div class="card-title">Team key leaderboard</div>' +
-    '<div class="usage-bar-wrap"><div class="usage-bar-label"><span><span style="margin-right:6px">🥇</span>Abbas</span><span style="color:var(--muted);font-size:12px">84 req &nbsp;·&nbsp; 1.4M tokens &nbsp;·&nbsp; 58% of total</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:100%"></div></div></div>' +
-    '<div class="usage-bar-wrap"><div class="usage-bar-label"><span><span style="margin-right:6px">🥈</span>Frontend Team</span><span style="color:var(--muted);font-size:12px">31 req &nbsp;·&nbsp; 620K tokens &nbsp;·&nbsp; 26% of total</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:44%"></div></div></div>' +
-    '<div class="usage-bar-wrap"><div class="usage-bar-label"><span><span style="margin-right:6px">🥉</span>Liaqat</span><span style="color:var(--muted);font-size:12px">12 req &nbsp;·&nbsp; 380K tokens &nbsp;·&nbsp; 16% of total</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:27%"></div></div></div>' +
-    '</div>' +
-    '<div class="card" style="margin-top:12px"><div class="card-title">By model</div><div class="usage-bar-wrap"><div class="usage-bar-label"><span>claude-3-5-sonnet-20241022</span><span>1.5M tokens</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:63%"></div></div></div><div class="usage-bar-wrap"><div class="usage-bar-label"><span>gemini-2.0-flash</span><span>900K tokens</span></div><div class="usage-bar"><div class="usage-bar-fill" style="width:37%"></div></div></div></div>';
+  // Analytics — rendered on tab click via _renderDemoAnalytics()
 }
 
 // ── Boot ──────────────────────────────────────────────────────────
-if (PWD === 'demo') {
-  document.getElementById('login-screen').style.display = 'none';
+if (PWD==='demo') {
+  document.getElementById('login-screen').style.display='none';
   enterDemoMode();
 } else if (PWD) {
-  fetch('/admin/status', { headers: { Authorization: `Bearer ${PWD}` } }).then(r => {
-    if (r.ok) {
-      try { return r.json().then(d => { if (d.ok !== undefined) { document.getElementById('login-screen').style.display = 'none'; document.getElementById('app').style.display = 'flex'; initApp(); } else throw new Error(); }); } catch { PWD = ''; sessionStorage.removeItem('nx_pwd'); }
-    } else { PWD = ''; sessionStorage.removeItem('nx_pwd'); }
-  }).catch(() => { PWD = ''; sessionStorage.removeItem('nx_pwd'); });
+  fetch('/admin/status',{headers:{Authorization:`Bearer ${PWD}`}}).then(r=>{
+    if(r.ok) r.json().then(d=>{ if(d.ok!==undefined){document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='flex';initApp();}else{PWD='';sessionStorage.removeItem('nx_pwd');}}).catch(()=>{PWD='';sessionStorage.removeItem('nx_pwd');});
+    else{PWD='';sessionStorage.removeItem('nx_pwd');}
+  }).catch(()=>{PWD='';sessionStorage.removeItem('nx_pwd');});
 }
 </script>
 </body>

@@ -1,11 +1,4 @@
-﻿// Copyright (c) 2026 Alayra Systems LLC (United States)
-//                    Alayra Systems Pvt. Limited (Pakistan)
-//                    All rights reserved.
-//
-// Kinetic IDE is a proprietary product of Alayra Systems.
-// Unauthorized reproduction, distribution, or modification
-// is strictly prohibited under applicable law.
-
+// Kinetic Nexus — MIT License — https://github.com/Kinetic-Ide/kinetic-nexus
 import { PrismaClient } from '@prisma/client';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };

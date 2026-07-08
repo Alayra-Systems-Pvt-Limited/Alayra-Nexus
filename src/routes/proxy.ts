@@ -5,7 +5,7 @@ import type { CompletionsBody } from '../services/completionsProxy.service';
 
 export default async function proxyRoutes(fastify: FastifyInstance) {
   fastify.post('/v1/chat/completions', { preHandler: [verifyApiKey] }, async (request, reply) => {
-    const teamKeyId = (request as Record<string, unknown>).teamKeyId as string | undefined;
+    const teamKeyId = request.teamKeyId;
     return handleProxy(request.body as CompletionsBody, reply, teamKeyId);
   });
 

@@ -7,7 +7,7 @@ import { encrypt, decrypt, maskKey } from '../lib/encryption';
 import { createHash, randomBytes } from 'crypto';
 import { getSetting, setSetting } from '../services/settings.service';
 import { getModelRegistry, updateModelRegistry } from '../services/model.service';
-import { getUsageSummary, getUsageByTeamKey } from '../services/token.service';
+import { getUsageSummary, getUsageByTeamKey, getTimeSeriesByTeam, getTimeSeriesByModel } from '../services/token.service';
 import { testKey, banKey, coolKey, validateProviderCredentials, validateModel, providerDefaultUrl } from '../services/nexus.service';
 import { redis }               from '../lib/redis';
 import { REGISTRY_CACHE_KEY }  from '../lib/registryCacheKey';
@@ -174,14 +174,18 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   // ── Usage / Analytics ─────────────────────────────────────────────
 
   fastify.get('/admin/usage', adminGuard, async (request, reply) => {
-    const { period = '30d' } = request.query as { period?: 'today' | '7d' | '30d' };
-    const summary = await getUsageSummary(period);
+    const { period = '30d', from, to } = request.query as { period?: 'today' | '7d' | '30d' | '90d'; from?: string; to?: string };
+    const cSince = from ? new Date(from + 'T00:00:00.000Z') : undefined;
+    const cUntil = to   ? new Date(to   + 'T23:59:59.999Z') : undefined;
+    const summary = await getUsageSummary(period, cSince, cUntil);
     return reply.send(summary);
   });
 
   fastify.get('/admin/usage/by-team-key', adminGuard, async (request, reply) => {
-    const { period = '30d' } = request.query as { period?: 'today' | '7d' | '30d' };
-    const leaderboard = await getUsageByTeamKey(period);
+    const { period = '30d', from, to } = request.query as { period?: 'today' | '7d' | '30d' | '90d'; from?: string; to?: string };
+    const cSince = from ? new Date(from + 'T00:00:00.000Z') : undefined;
+    const cUntil = to   ? new Date(to   + 'T23:59:59.999Z') : undefined;
+    const leaderboard = await getUsageByTeamKey(period, cSince, cUntil);
     return reply.send({ leaderboard });
   });
 
@@ -200,6 +204,24 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     return reply.send({
       byDay: Array.from(dayMap.entries()).map(([date, tokens]) => ({ date, tokens })),
     });
+  });
+
+  // ── Analytics time series ─────────────────────────────────────────
+
+  fastify.get('/admin/analytics/timeseries/teams', adminGuard, async (request, reply) => {
+    const { period = '30d', from, to } = request.query as { period?: 'today' | '7d' | '30d' | '90d'; from?: string; to?: string };
+    const cSince = from ? new Date(from + 'T00:00:00.000Z') : undefined;
+    const cUntil = to   ? new Date(to   + 'T23:59:59.999Z') : undefined;
+    const series = await getTimeSeriesByTeam(period, cSince, cUntil);
+    return reply.send({ series });
+  });
+
+  fastify.get('/admin/analytics/timeseries/models', adminGuard, async (request, reply) => {
+    const { period = '30d', from, to } = request.query as { period?: 'today' | '7d' | '30d' | '90d'; from?: string; to?: string };
+    const cSince = from ? new Date(from + 'T00:00:00.000Z') : undefined;
+    const cUntil = to   ? new Date(to   + 'T23:59:59.999Z') : undefined;
+    const series = await getTimeSeriesByModel(period, cSince, cUntil);
+    return reply.send({ series });
   });
 
   // ── Settings ──────────────────────────────────────────────────────
@@ -304,6 +326,29 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     const defaultBaseUrl = providerDefaultUrl;
     void defaultBaseUrl;
     return reply.send({ tiers: status });
+  });
+
+  // ── Nexus summary ─────────────────────────────────────────────────
+
+  fastify.get('/admin/nexus/summary', adminGuard, async (_req, reply) => {
+    const now       = new Date();
+    const providers = await prisma.nexusProvider.count({ where: { isActive: true } });
+    const allKeys   = await prisma.nexusKey.findMany({ select: { status: true, coolingUntil: true } });
+    const active    = allKeys.filter(k => k.status === 'active' && (!k.coolingUntil || k.coolingUntil <= now)).length;
+    const cooling   = allKeys.filter(k => k.status === 'cooling' || (k.coolingUntil && k.coolingUntil > now)).length;
+    const banned    = allKeys.filter(k => k.status === 'banned').length;
+    return reply.send({ providers, active, cooling, banned, total: allKeys.length });
+  });
+
+  // ── Key RPM metrics ───────────────────────────────────────────────
+
+  fastify.get('/admin/keys/:id/metrics', adminGuard, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const key    = await prisma.nexusKey.findUnique({ where: { id }, select: { rpmLimit: true, tpmLimit: true, status: true } });
+    if (!key) return reply.code(404).send({ error: 'Not found' });
+    const rpmRaw = await redis.get(`nexus:rpm:${id}`);
+    const rpm    = parseInt(rpmRaw ?? '0', 10);
+    return reply.send({ rpm, rpmLimit: key.rpmLimit, tpm: 0, tpmLimit: key.tpmLimit, status: key.status });
   });
 
   // ── Cache bust ────────────────────────────────────────────────────

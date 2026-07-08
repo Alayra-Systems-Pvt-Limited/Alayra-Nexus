@@ -8,7 +8,12 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "migrate": "npx prisma migrate deploy",
-    "db:push": "npx prisma db push"
+    "db:push": "npx prisma db push",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",
@@ -25,6 +30,11 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@types/node": "^20.11.24"
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^20.11.24",
+    "eslint": "^9.39.4",
+    "globals": "^15.15.0",
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^4.1.10"
   }
 }
