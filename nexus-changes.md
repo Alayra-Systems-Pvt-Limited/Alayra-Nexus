@@ -11,6 +11,23 @@
 
 ---
 
+**Date:** 2026-07-09 · Session 19  
+**Author:** Abbas  
+**Title:** Release v1.1.0 — Teams & Budgets, Observability, and an Important Install Fix  
+
+**Summary:**  
+Tagged and published version 1.1.0, bundling the work since launch into one coherent
+release: the team and budget hierarchy with admission-path enforcement, the
+Prometheus metrics endpoint with optional distributed tracing, the copy-paste client
+connection guide, and — most importantly for anyone installing fresh — the fix that
+makes database migrations genuinely apply at container startup. Users of the 1.0.0
+single-container quickstart should upgrade to 1.1.0, which provisions a fresh
+database correctly; upgrade notes for existing deployments are in the changelog.
+The multi-architecture container image for 1.1.0 is published to the registry under
+the same name, and the package version now tracks the release version.
+
+---
+
 **Date:** 2026-07-09 · Session 18  
 **Author:** Abbas  
 **Title:** Phase 5 — Teams, Budget Hierarchy, and a Migration-Pipeline Fix  

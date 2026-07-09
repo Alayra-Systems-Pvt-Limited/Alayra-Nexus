@@ -9,6 +9,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-09
+
 ### Added
 - **Teams & budget hierarchy (Phase 5):** a `Team` entity groups scoped access keys
   and carries a per-period USD budget cap (daily / weekly / monthly). Enforcement
@@ -83,5 +85,6 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/releases/tag/v1.0.0
