@@ -42,6 +42,11 @@ First tagged release and first published container image
   quickstart, CI (lint / typecheck / test / build / security audit), and CodeQL
   scanning.
 
+### Fixed
+- Container image: install OpenSSL in the Alpine build and runtime stages so Prisma
+  resolves the correct `openssl-3.0.x` engine instead of mis-guessing `1.1.x`, which
+  could otherwise fail the query engine at container startup.
+
 ### Security
 - Apache-2.0 licensed. Outbound SSRF blocking on by default; secrets encrypted at
   rest with AES-256-GCM.

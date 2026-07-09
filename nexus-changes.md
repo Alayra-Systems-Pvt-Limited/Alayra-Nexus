@@ -35,7 +35,10 @@ name) is the surface that versioning covers. The README leads with a no-clone
 carries release and container badges.
 
 Green gate: lint 0, typecheck 0, 93 tests pass, build 0, npm audit 0 vulns. (The
-container image itself is built and verified by the release workflow in CI.)
+container image itself is built and verified by the release workflow in CI. A
+follow-up hardened the image to install OpenSSL in both the build and runtime
+Alpine stages, so the Prisma query engine resolves the correct OpenSSL 3.x variant
+and starts cleanly.)
 
 ---
 

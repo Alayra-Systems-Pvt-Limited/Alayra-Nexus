@@ -3,6 +3,9 @@
 # ── Build stage ───────────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
 WORKDIR /app
+# OpenSSL so Prisma detects the correct engine at generate time (Alpine ships
+# OpenSSL 3.x; without libssl present Prisma mis-guesses openssl-1.1.x).
+RUN apk add --no-cache openssl
 COPY package*.json ./
 RUN npm ci
 COPY . .
@@ -12,6 +15,9 @@ RUN npx prisma generate && npm run build
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+# libssl must also be present in the runtime image so the Prisma query engine
+# loads when the container starts.
+RUN apk add --no-cache openssl
 
 LABEL org.opencontainers.image.title="Alayra Nexus" \
       org.opencontainers.image.description="Open-source AI gateway — one OpenAI-compatible endpoint for every provider, with load balancing, failover, rate limits, and cost analytics." \
