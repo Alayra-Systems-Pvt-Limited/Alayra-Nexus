@@ -1,0 +1,78 @@
+<svg width="680" height="384" viewBox="0 0 680 384" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>alayra-nexus crest lockup</title>
+<desc>The alayra-nexus crest above the ALAYRA NEXUS wordmark.</desc>
+<defs>
+<path id="ca" d="M340 66 C 286 100, 292 154, 340 174" fill="none"/>
+<path id="ba" d="M340 98 C 388 120, 384 158, 340 173" fill="none"/>
+<line id="tk" x1="340" y1="32" x2="340" y2="40"/>
+<line id="tkM" x1="340" y1="30" x2="340" y2="44"/>
+</defs>
+
+<circle cx="340" cy="180" r="158" fill="#0b1622"/>
+<circle cx="340" cy="180" r="158" fill="none" stroke="#173042" stroke-width="1"/>
+<circle cx="340" cy="180" r="151" fill="none" stroke="#3a2f1c" stroke-width="0.8"/>
+
+<g stroke="#3ce8e5" stroke-width="1" stroke-opacity="0.5">
+<use href="#tk"/><use href="#tk" transform="rotate(15 340 180)"/><use href="#tk" transform="rotate(30 340 180)"/><use href="#tk" transform="rotate(45 340 180)"/>
+<use href="#tk" transform="rotate(75 340 180)"/><use href="#tk" transform="rotate(105 340 180)"/><use href="#tk" transform="rotate(120 340 180)"/><use href="#tk" transform="rotate(135 340 180)"/>
+<use href="#tk" transform="rotate(165 340 180)"/><use href="#tk" transform="rotate(195 340 180)"/><use href="#tk" transform="rotate(210 340 180)"/><use href="#tk" transform="rotate(225 340 180)"/>
+<use href="#tk" transform="rotate(255 340 180)"/><use href="#tk" transform="rotate(285 340 180)"/><use href="#tk" transform="rotate(300 340 180)"/><use href="#tk" transform="rotate(315 340 180)"/><use href="#tk" transform="rotate(345 340 180)"/>
+</g>
+<g stroke="#d9b477" stroke-width="1.4" stroke-opacity="0.85">
+<use href="#tkM" transform="rotate(60 340 180)"/><use href="#tkM" transform="rotate(90 340 180)"/><use href="#tkM" transform="rotate(150 340 180)"/>
+<use href="#tkM" transform="rotate(180 340 180)"/><use href="#tkM" transform="rotate(240 340 180)"/><use href="#tkM" transform="rotate(270 340 180)"/><use href="#tkM" transform="rotate(330 340 180)"/><use href="#tkM"/>
+</g>
+
+<circle cx="340" cy="180" r="126" fill="none" stroke="#b8863f" stroke-width="1" stroke-opacity="0.7"/>
+<circle cx="340" cy="180" r="119" fill="none" stroke="#22d3ee" stroke-width="0.8" stroke-opacity="0.55"/>
+
+<g stroke="#b8863f" stroke-width="7" stroke-opacity="0.14" stroke-linecap="round" transform="rotate(30 340 180)">
+<use href="#ba"/><use href="#ba" transform="rotate(60 340 180)"/><use href="#ba" transform="rotate(120 340 180)"/><use href="#ba" transform="rotate(180 340 180)"/><use href="#ba" transform="rotate(240 340 180)"/><use href="#ba" transform="rotate(300 340 180)"/>
+</g>
+<g stroke="#e6c98f" stroke-width="2" stroke-opacity="0.9" stroke-linecap="round" transform="rotate(30 340 180)">
+<use href="#ba"/><use href="#ba" transform="rotate(60 340 180)"/><use href="#ba" transform="rotate(120 340 180)"/><use href="#ba" transform="rotate(180 340 180)"/><use href="#ba" transform="rotate(240 340 180)"/><use href="#ba" transform="rotate(300 340 180)"/>
+</g>
+
+<g stroke="#22d3ee" stroke-width="11" stroke-opacity="0.15" stroke-linecap="round">
+<use href="#ca"/><use href="#ca" transform="rotate(60 340 180)"/><use href="#ca" transform="rotate(120 340 180)"/><use href="#ca" transform="rotate(180 340 180)"/><use href="#ca" transform="rotate(240 340 180)"/><use href="#ca" transform="rotate(300 340 180)"/>
+</g>
+<g stroke="#22d3ee" stroke-width="4.5" stroke-opacity="0.5" stroke-linecap="round">
+<use href="#ca"/><use href="#ca" transform="rotate(60 340 180)"/><use href="#ca" transform="rotate(120 340 180)"/><use href="#ca" transform="rotate(180 340 180)"/><use href="#ca" transform="rotate(240 340 180)"/><use href="#ca" transform="rotate(300 340 180)"/>
+</g>
+<g stroke="#5df0ee" stroke-width="2" stroke-linecap="round">
+<use href="#ca"/><use href="#ca" transform="rotate(60 340 180)"/><use href="#ca" transform="rotate(120 340 180)"/><use href="#ca" transform="rotate(180 340 180)"/><use href="#ca" transform="rotate(240 340 180)"/><use href="#ca" transform="rotate(300 340 180)"/>
+</g>
+
+<g fill="#e6c98f">
+<g transform="translate(340 98)"><circle r="3.2"/></g>
+<g transform="rotate(90 340 180)"><g transform="translate(340 98)"><circle r="3.2"/></g></g>
+<g transform="rotate(150 340 180)"><g transform="translate(340 98)"><circle r="3.2"/></g></g>
+<g transform="rotate(210 340 180)"><g transform="translate(340 98)"><circle r="3.2"/></g></g>
+<g transform="rotate(270 340 180)"><g transform="translate(340 98)"><circle r="3.2"/></g></g>
+<g transform="rotate(330 340 180)"><g transform="translate(340 98)"><circle r="3.2"/></g></g>
+</g>
+<g fill="#8ff8f5">
+<g transform="translate(340 62)"><circle r="4.5"/></g>
+<g transform="rotate(60 340 180)"><g transform="translate(340 62)"><circle r="4.5"/></g></g>
+<g transform="rotate(120 340 180)"><g transform="translate(340 62)"><circle r="4.5"/></g></g>
+<g transform="rotate(180 340 180)"><g transform="translate(340 62)"><circle r="4.5"/></g></g>
+<g transform="rotate(240 340 180)"><g transform="translate(340 62)"><circle r="4.5"/></g></g>
+<g transform="rotate(300 340 180)"><g transform="translate(340 62)"><circle r="4.5"/></g></g>
+</g>
+
+<circle cx="340" cy="180" r="34" fill="#22d3ee" fill-opacity="0.12"/>
+<polygon points="340,156 356.97,163.03 340,180" fill="#16394a"/>
+<polygon points="356.97,163.03 364,180 340,180" fill="#0e2432"/>
+<polygon points="364,180 356.97,196.97 340,180" fill="#16394a"/>
+<polygon points="356.97,196.97 340,204 340,180" fill="#0e2432"/>
+<polygon points="340,204 323.03,196.97 340,180" fill="#16394a"/>
+<polygon points="323.03,196.97 316,180 340,180" fill="#0e2432"/>
+<polygon points="316,180 323.03,163.03 340,180" fill="#16394a"/>
+<polygon points="323.03,163.03 340,156 340,180" fill="#0e2432"/>
+<polygon points="340,156 356.97,163.03 364,180 356.97,196.97 340,204 323.03,196.97 316,180 323.03,163.03" fill="none" stroke="#5df0ee" stroke-width="2"/>
+<polygon points="340,163 351,168 355,180 351,192 340,197 329,192 325,180 329,168" fill="none" stroke="#d9b477" stroke-width="1" stroke-opacity="0.85"/>
+<circle cx="340" cy="180" r="6.5" fill="#aef9f6"/>
+<circle cx="340" cy="180" r="12" fill="none" stroke="#8ff8f5" stroke-width="1" stroke-opacity="0.55"/>
+
+<text x="340" y="366" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" letter-spacing="5"><tspan fill="#c9a15f">ALAYRA</tspan><tspan fill="#3f5a63"> &#183; </tspan><tspan fill="#4ecfd6">NEXUS</tspan></text>
+</svg>

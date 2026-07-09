@@ -2,7 +2,7 @@
 
 <br>
 
-# ⚡ Alayra Nexus™
+<img src="./brand/png/alayra-nexus-crest-lockup-800.png" alt="Alayra Nexus™" width="440"/>
 
 ### The Enterprise AI Gateway
 
@@ -108,7 +108,7 @@ Alayra Nexus is the infrastructure layer that sits between your application and 
   └──────────────────────────────────────────────────────────┘
            │
            ▼
-    Token usage logged → PostgreSQL
+    Token usage → async buffer → batched PostgreSQL write
     Real-time metrics  → Redis
     Analytics          → Admin Dashboard
 ```

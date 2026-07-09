@@ -7,7 +7,59 @@
 
 ---
 
-## 2026-07-08
+## 2026-07-09
+
+---
+
+**Date:** 2026-07-09 · Session 14  
+**Author:** Abbas  
+**Title:** Phase 4 — Async Analytics Pipeline  
+
+**Summary:**  
+Decoupled analytics writes from the request path. Previously every proxied request
+wrote its usage record to Postgres with an individual insert; at scale those
+per-request inserts compete with the transactional key-lookup queries on the same
+database. Usage events are now handed to an in-process pipeline that buffers them
+and writes them to Postgres in a single batched insert, either on a short interval
+(about one and a half seconds by default) or as soon as the buffer reaches a size
+threshold. The request path no longer waits on the analytics write at all.
+
+The pipeline is deliberately hidden behind a single `emit(event)` call. Swapping the
+in-process buffer for a durable queue later — a managed queue, or a streaming path
+into a columnar store if the project ever needs that scale — is a change to one
+module, not a change to every caller. That is the cheap-now, expensive-to-retrofit
+seam being put in early. The buffer is bounded so a database outage sheds load
+rather than growing memory without limit, a failed flush re-queues rather than
+dropping data, batched inserts are chunked and idempotent so a retry cannot
+duplicate rows, and a graceful-shutdown drain flushes anything still buffered before
+the process exits. Combined with the real tokenizer from Phase 2, the same pipe now
+carries accurate numbers rather than guesses.
+
+Added unit coverage for the buffering, size-threshold flush, failure re-queue,
+load-shedding cap, and drain behaviours (93 tests total, all green).
+
+---
+
+**Date:** 2026-07-09 · Session 13  
+**Author:** Abbas  
+**Title:** Brand Identity — Three-Tier Alayra Nexus™ Logo System  
+
+**Summary:**  
+Established a formal visual identity for Alayra Nexus™: a three-tier logo system
+built around a cyan neon vortex converging on a faceted core, with a bronze accent
+inherited from the Alayra Systems parent mark. The tiers scale from a ceremonial
+crest (with an ALAYRA · NEXUS wordmark lockup for marketing headers), through a
+working logo for site and documentation headers, down to a reduced glyph that stays
+legible as a favicon or avatar, plus a monochrome recolorable variant. Each mark is
+provided as a scalable vector source with rendered raster exports at the sizes each
+context needs, together with a short brand guide (usage and palette) and a
+regeneration script so the exports can be rebuilt whenever a source is refined.
+
+The kit was wired into the product surfaces: the dashboard now carries the glyph as
+its header logo and browser favicon, and the repository README leads with the crest
+lockup. The complete asset kit lives in the repository so the identity ships with the
+project. The Apache 2.0 license covers the code; the name and logo remain trademarks
+of Alayra Systems, as recorded in the trademark policy.
 
 ---
 

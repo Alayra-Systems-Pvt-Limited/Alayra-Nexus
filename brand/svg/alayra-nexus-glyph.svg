@@ -1,0 +1,24 @@
+<svg width="512" height="512" viewBox="0 0 400 400" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>alayra-nexus glyph</title>
+<desc>Reduced mark: a faceted cyan gem inside a single ring on a dark disc, legible at small sizes.</desc>
+
+<circle cx="200" cy="200" r="196" fill="#0b1622"/>
+<circle cx="200" cy="200" r="196" fill="none" stroke="#173042" stroke-width="2"/>
+
+<circle cx="200" cy="200" r="152" fill="none" stroke="#22d3ee" stroke-width="9" stroke-opacity="0.16"/>
+<circle cx="200" cy="200" r="152" fill="none" stroke="#3ce8e5" stroke-width="4"/>
+
+<circle cx="200" cy="200" r="108" fill="#22d3ee" fill-opacity="0.10"/>
+<polygon points="200,105 267.18,132.82 200,200" fill="#16394a"/>
+<polygon points="267.18,132.82 295,200 200,200" fill="#0e2432"/>
+<polygon points="295,200 267.18,267.18 200,200" fill="#16394a"/>
+<polygon points="267.18,267.18 200,295 200,200" fill="#0e2432"/>
+<polygon points="200,295 132.82,267.18 200,200" fill="#16394a"/>
+<polygon points="132.82,267.18 105,200 200,200" fill="#0e2432"/>
+<polygon points="105,200 132.82,132.82 200,200" fill="#16394a"/>
+<polygon points="132.82,132.82 200,105 200,200" fill="#0e2432"/>
+<polygon points="200,105 267.18,132.82 295,200 267.18,267.18 200,295 132.82,267.18 105,200 132.82,132.82" fill="none" stroke="#5df0ee" stroke-width="7"/>
+<polygon points="200,138 246.67,153.33 266,200 246.67,246.67 200,266 153.33,246.67 134,200 153.33,153.33" fill="none" stroke="#d9b477" stroke-width="3" stroke-opacity="0.85"/>
+<circle cx="200" cy="200" r="30" fill="#5df0ee"/>
+<circle cx="200" cy="200" r="15" fill="#d6fffe"/>
+</svg>

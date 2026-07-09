@@ -17,6 +17,7 @@
 import { prisma }          from '../lib/prisma';
 import { randomUUID }      from 'crypto';
 import { getModelRegistry } from './model.service';
+import { emit }            from './usagePipeline';
 
 type Period = 'today' | '7d' | '30d' | '90d';
 
@@ -61,19 +62,20 @@ export async function recordTokenUsage(p: RecordTokenUsageParams): Promise<void>
     if (m) estimatedUsd = modelCost(m, p.inputTokens, p.outputTokens);
   } catch { /* non-fatal — never block a proxy request */ }
 
-  await prisma.tokenUsage.create({
-    data: {
-      id:             randomUUID(),
-      sessionId:      p.sessionId,
-      modelId:        p.modelId,
-      modelName:      p.modelName,
-      provider:       p.provider,
-      inputTokens:    p.inputTokens,
-      outputTokens:   p.outputTokens,
-      totalTokens:    p.inputTokens + p.outputTokens,
-      estimatedUsd,
-      nexusTeamKeyId: p.nexusTeamKeyId ?? null,
-    },
+  // Hand off to the async pipeline instead of writing to Postgres inline: the
+  // request path never waits on the analytics INSERT, and writes are batched.
+  emit({
+    id:             randomUUID(),
+    sessionId:      p.sessionId,
+    modelId:        p.modelId,
+    modelName:      p.modelName,
+    provider:       p.provider,
+    inputTokens:    p.inputTokens,
+    outputTokens:   p.outputTokens,
+    totalTokens:    p.inputTokens + p.outputTokens,
+    estimatedUsd,
+    nexusTeamKeyId: p.nexusTeamKeyId ?? null,
+    createdAt:      new Date(),
   });
 }
 

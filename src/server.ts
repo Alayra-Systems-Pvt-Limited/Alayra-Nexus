@@ -27,6 +27,7 @@ import { prisma }         from './lib/prisma';
 import { redis }          from './lib/redis';
 import { deriveRateLimitKey } from './lib/rateLimitKey';
 import { getSetting, setSetting } from './services/settings.service';
+import { drainUsage }     from './services/usagePipeline';
 import { randomUUID }     from 'crypto';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -94,7 +95,13 @@ bootstrap().catch((err) => {
   process.exit(1);
 });
 
-process.on('SIGTERM', async () => {
+async function shutdown() {
+  // Flush any buffered usage events before the process exits so analytics that
+  // are still in the in-process pipeline are not lost on restart/redeploy.
+  try { await drainUsage(); } catch { /* best effort */ }
   await prisma.$disconnect();
   process.exit(0);
-});
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

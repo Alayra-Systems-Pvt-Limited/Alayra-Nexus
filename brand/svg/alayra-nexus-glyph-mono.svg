@@ -1,0 +1,9 @@
+<svg width="512" height="512" viewBox="0 0 400 400" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>alayra-nexus glyph (mono)</title>
+<desc>Flat single-color mark using currentColor: a faceted gem inside a ring, no background, for monochrome contexts.</desc>
+<g fill="none" stroke="currentColor" stroke-width="10" stroke-linejoin="round">
+<circle cx="200" cy="200" r="150"/>
+<polygon points="200,108 265,135 292,200 265,265 200,292 135,265 108,200 135,135"/>
+</g>
+<circle cx="200" cy="200" r="26" fill="currentColor"/>
+</svg>

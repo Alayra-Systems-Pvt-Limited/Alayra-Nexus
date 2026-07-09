@@ -1,0 +1,42 @@
+<svg width="512" height="512" viewBox="185 20 310 310" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>alayra-nexus logo</title>
+<desc>A six-arm cyan neon vortex converging into a faceted core on a dark disc.</desc>
+<defs>
+<path id="la" d="M340 63 C 286 96, 292 150, 340 171" fill="none"/>
+</defs>
+
+<circle cx="340" cy="175" r="150" fill="#0b1622"/>
+<circle cx="340" cy="175" r="150" fill="none" stroke="#173042" stroke-width="1"/>
+
+<circle cx="340" cy="175" r="133" fill="none" stroke="#22d3ee" stroke-width="6" stroke-opacity="0.18"/>
+<circle cx="340" cy="175" r="133" fill="none" stroke="#3ce8e5" stroke-width="1.3"/>
+<circle cx="340" cy="175" r="120" fill="none" stroke="#3ce8e5" stroke-width="0.8" stroke-opacity="0.55"/>
+
+<g stroke="#22d3ee" stroke-width="10" stroke-opacity="0.16" stroke-linecap="round">
+<use href="#la"/><use href="#la" transform="rotate(60 340 175)"/><use href="#la" transform="rotate(120 340 175)"/><use href="#la" transform="rotate(180 340 175)"/><use href="#la" transform="rotate(240 340 175)"/><use href="#la" transform="rotate(300 340 175)"/>
+</g>
+<g stroke="#22d3ee" stroke-width="4.5" stroke-opacity="0.45" stroke-linecap="round">
+<use href="#la"/><use href="#la" transform="rotate(60 340 175)"/><use href="#la" transform="rotate(120 340 175)"/><use href="#la" transform="rotate(180 340 175)"/><use href="#la" transform="rotate(240 340 175)"/><use href="#la" transform="rotate(300 340 175)"/>
+</g>
+<g stroke="#5df0ee" stroke-width="2" stroke-opacity="0.95" stroke-linecap="round">
+<use href="#la"/><use href="#la" transform="rotate(60 340 175)"/><use href="#la" transform="rotate(120 340 175)"/><use href="#la" transform="rotate(180 340 175)"/><use href="#la" transform="rotate(240 340 175)"/><use href="#la" transform="rotate(300 340 175)"/>
+</g>
+
+<g fill="#8ff8f5">
+<g transform="translate(340 59)"><circle r="4.5"/></g>
+<g transform="rotate(60 340 175)"><g transform="translate(340 59)"><circle r="4.5"/></g></g>
+<g transform="rotate(120 340 175)"><g transform="translate(340 59)"><circle r="4.5"/></g></g>
+<g transform="rotate(180 340 175)"><g transform="translate(340 59)"><circle r="4.5"/></g></g>
+<g transform="rotate(240 340 175)"><g transform="translate(340 59)"><circle r="4.5"/></g></g>
+<g transform="rotate(300 340 175)"><g transform="translate(340 59)"><circle r="4.5"/></g></g>
+</g>
+
+<circle cx="340" cy="175" r="30" fill="#22d3ee" fill-opacity="0.14"/>
+<polygon points="340,150 358,158 366,175 358,192 340,200 322,192 314,175 322,158" fill="#0a1a26" stroke="#5df0ee" stroke-width="2"/>
+<g stroke="#3ce8e5" stroke-width="0.9" stroke-opacity="0.8">
+<line x1="340" y1="150" x2="340" y2="200"/><line x1="314" y1="175" x2="366" y2="175"/>
+<line x1="322" y1="158" x2="358" y2="192"/><line x1="358" y1="158" x2="322" y2="192"/>
+</g>
+<circle cx="340" cy="175" r="7" fill="#aef9f6"/>
+<circle cx="340" cy="175" r="12" fill="none" stroke="#8ff8f5" stroke-width="1" stroke-opacity="0.6"/>
+</svg>

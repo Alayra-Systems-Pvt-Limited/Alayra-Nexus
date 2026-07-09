@@ -5,9 +5,10 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    // Never lint build output, deps, generated client, or the browser dashboard
-    // (public/index.html is a single-file vanilla-JS app with its own conventions).
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'public/**', 'prisma/migrations/**'],
+    // Never lint build output, deps, generated client, the browser dashboard
+    // (public/index.html is a single-file vanilla-JS app with its own conventions),
+    // or the brand kit (SVG/PNG assets plus a standalone CommonJS render script).
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'public/**', 'prisma/migrations/**', 'brand/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
