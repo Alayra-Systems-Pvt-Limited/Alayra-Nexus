@@ -1,13 +1,40 @@
-# Kinetic Nexus — Development Log
+# Alayra Nexus™ — Development Log
 
-**Project:** Kinetic Nexus  
-**Maintainer:** Alayra Systems Pvt. Limited  
+**Project:** Alayra Nexus™ (formerly Kinetic Nexus)  
+**Maintainer:** Alayra Systems Pvt. Limited & Alayra Systems LLC  
 **Author:** Abbas  
-**Purpose:** Official session-by-session development log for the Kinetic Nexus open-source AI gateway. Entries are recorded per work session in reverse chronological order — newest at the top.
+**Purpose:** Official session-by-session development log for the Alayra Nexus open-source AI gateway. Entries are recorded per work session in reverse chronological order — newest at the top. (Entries prior to the July 2026 rebrand reference the project's former name, Kinetic Nexus.)
 
 ---
 
 ## 2026-07-08
+
+---
+
+**Date:** 2026-07-09 · Session 12  
+**Author:** Abbas  
+**Title:** Rebrand to Alayra Nexus™ and Relicense under Apache 2.0  
+
+**Summary:**  
+Renamed the project from Kinetic Nexus to **Alayra Nexus™** across the codebase,
+dashboard, documentation, and package metadata, and moved the repository to its new
+home. The change is purely one of name and branding — no functional behaviour is
+affected. Internal identifiers that never carried the old brand (Redis key
+namespaces, response headers, and environment variables) are unchanged, so existing
+deployments and integrations continue to work without modification.
+
+The public virtual model identifier is now **`alayra-nexus-1`**, with the previous
+`kinetic-nexus-1` and `nexus` strings preserved as silent backward-compatible
+aliases so no existing client request breaks. The trademark symbol is applied to the
+brand in the primary interfaces.
+
+Alongside the rename, the project's license was changed from MIT to the **Apache
+License, Version 2.0**, chosen to keep the project fully open source while adding an
+explicit patent grant and an explicit statement that the license conveys no
+trademark rights. A standard Apache copyright-and-license header was added to every
+source file, and NOTICE and TRADEMARK files were added to record the copyright and
+the name/logo usage policy. The "Alayra Nexus" name and logo remain trademarks of
+Alayra Systems; the open-source license covers the code, not the brand.
 
 ---
 

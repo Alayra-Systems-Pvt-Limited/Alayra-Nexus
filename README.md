@@ -2,7 +2,7 @@
 
 <br>
 
-# ⚡ Kinetic Nexus
+# ⚡ Alayra Nexus™
 
 ### The Enterprise AI Gateway
 
@@ -10,8 +10,8 @@
 
 <br>
 
-[![CI](https://github.com/Kinetic-Ide/kinetic-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/Kinetic-Ide/kinetic-nexus/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-6d28d9.svg?style=for-the-badge)](./LICENSE)
+[![CI](https://github.com/Kinetic-Ide/alayra-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/Kinetic-Ide/alayra-nexus/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-6d28d9.svg?style=for-the-badge)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3b82f6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-v5-22c55e.svg?style=for-the-badge)](https://fastify.dev/)
 [![Node.js](https://img.shields.io/badge/Node.js-20+-f59e0b.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
@@ -34,11 +34,11 @@ with full usage analytics and cost tracking built in.
 
 ---
 
-## Why Kinetic Nexus?
+## Why Alayra Nexus?
 
 Most teams hit the same wall: multiple AI providers, API keys scattered across engineers, no visibility into who spent what, and a hard-coded provider string that makes switching models painful.
 
-Kinetic Nexus is the infrastructure layer that sits between your application and every AI provider. Change **one URL**. Get load balancing, automatic failover, team-level access control, and a live cost dashboard — without touching your application code.
+Alayra Nexus is the infrastructure layer that sits between your application and every AI provider. Change **one URL**. Get load balancing, automatic failover, team-level access control, and a live cost dashboard — without touching your application code.
 
 ---
 
@@ -88,7 +88,7 @@ Kinetic Nexus is the infrastructure layer that sits between your application and
            │  Authorization: Bearer <team-key>   ← optional, enables per-team analytics
            ▼
   ┌──────────────────────────────────────────────────────────┐
-  │                   Kinetic Nexus Gateway                  │
+  │                   Alayra Nexus Gateway                  │
   │                                                          │
   │   ┌───────────────┐          ┌─────────────────────────┐ │
   │   │  Team Auth    │          │     Rate Limiter        │ │
@@ -120,8 +120,8 @@ Kinetic Nexus is the infrastructure layer that sits between your application and
 ### Option A — Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/Kinetic-Ide/kinetic-nexus.git
-cd kinetic-nexus
+git clone https://github.com/Kinetic-Ide/alayra-nexus.git
+cd alayra-nexus
 
 cp .env.example .env
 # Edit .env — set MASTER_ENCRYPTION_KEY, ADMIN_PASSWORD, and DB/Redis URLs
@@ -138,8 +138,8 @@ Dashboard is live at `http://localhost:3000/dashboard`
 **Prerequisites:** Node.js 20+, PostgreSQL 15+, Redis 7+
 
 ```bash
-git clone https://github.com/Kinetic-Ide/kinetic-nexus.git
-cd kinetic-nexus
+git clone https://github.com/Kinetic-Ide/alayra-nexus.git
+cd alayra-nexus
 
 npm install
 
@@ -189,7 +189,7 @@ Dashboard is live at `http://localhost:3000/dashboard`
 
 ## Rate limits, explained
 
-Kinetic Nexus has **two independent limits**, and it's important not to confuse them:
+Alayra Nexus has **two independent limits**, and it's important not to confuse them:
 
 | Limit | Where | What it does | Who sets it |
 |---|---|---|---|
@@ -265,7 +265,7 @@ are ranked last but never dropped.
 
 > [!NOTE]
 > **Model exposure:** Nexus deliberately exposes a **single virtual model** — send
-> `model: "kinetic-nexus-1"` and the gateway routes across your pool by tier, health, and
+> `model: "alayra-nexus-1"` and the gateway routes across your pool by tier, health, and
 > cache affinity. This keeps the client contract to one stable name; task-class dispatch to
 > named virtual models (`nexus-fast`, `nexus-premium`, …) is intentionally out of scope for
 > now so the routing contract stays simple for early adopters.
@@ -287,13 +287,13 @@ curl http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-team-key>" \
   -d '{
-    "model": "kinetic-nexus-1",
+    "model": "alayra-nexus-1",
     "messages": [{ "role": "user", "content": "Hello" }],
     "stream": true
   }'
 ```
 
-`kinetic-nexus-1` routes to your highest-priority active pool. You can also specify an exact model string (`claude-3-5-sonnet-20241022`, `gpt-4o`, etc.) to target a specific provider directly.
+`alayra-nexus-1` routes to your highest-priority active pool. You can also specify an exact model string (`claude-3-5-sonnet-20241022`, `gpt-4o`, etc.) to target a specific provider directly.
 
 **Streaming** (`"stream": true`) is fully supported — server-sent events pass through from the upstream provider with no buffering.
 
@@ -449,13 +449,16 @@ npx prisma migrate dev --name your_migration_name
 
 ## License
 
-[MIT](./LICENSE) © 2026 Alayra Systems Pvt. Limited
+[Apache License 2.0](./LICENSE) © 2026 Alayra Systems Pvt. Limited & Alayra Systems LLC.
+
+**Alayra Nexus™** is a trademark of Alayra Systems — see [TRADEMARK.md](./TRADEMARK.md).
+The Apache 2.0 license covers the code; it does not grant rights to the name or logo.
 
 ---
 
 <div align="center">
 
-**Kinetic Nexus** is part of the [Kinetic IDE](https://github.com/Kinetic-Ide) ecosystem —  
+**Alayra Nexus** is part of the [Kinetic IDE](https://github.com/Kinetic-Ide) ecosystem —  
 sovereign AI infrastructure built for teams who refuse to depend on someone else's cloud.
 
 </div>

@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2026 Alayra Systems Pvt. Limited (Pakistan)
+ * & Alayra Systems LLC (USA).
+ *
+ * Alayra Nexus™ is a trademark of Alayra Systems. Use of the name or logo
+ * is not granted by the software license below.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * A copy of the License is in the LICENSE file at the repository root,
+ * or at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
+ * ANY KIND, either express or implied. See the License for details.
+ */
+
 import type { FastifyReply } from 'fastify';
 import { discoverBestPool, getNextCooldownSeconds, reportSuccess, reportServerFailure, reportRateLimit, reportAuthFailure } from './nexus.service';
 import { recordTokenUsage }          from './token.service';
@@ -107,9 +123,11 @@ export async function handleProxy(
   reqHeaders: Record<string, unknown> = {},
 ): Promise<FastifyReply | void> {
   const modelField = (body.model ?? '').trim().toLowerCase();
-  if (modelField && modelField !== 'kinetic-nexus-1' && modelField !== 'nexus') {
+  // Canonical id is `alayra-nexus-1`; `kinetic-nexus-1` and `nexus` stay as silent
+  // backward-compatible aliases so existing integrations keep routing.
+  if (modelField && modelField !== 'alayra-nexus-1' && modelField !== 'kinetic-nexus-1' && modelField !== 'nexus') {
     return reply.code(400).send({
-      error: `Invalid model "${body.model}". Use model: "kinetic-nexus-1" — Kinetic Nexus routes automatically.`,
+      error: `Invalid model "${body.model}". Use model: "alayra-nexus-1" — Alayra Nexus routes automatically.`,
     });
   }
 

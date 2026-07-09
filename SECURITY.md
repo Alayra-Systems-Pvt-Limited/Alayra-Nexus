@@ -1,6 +1,6 @@
 # Security Policy
 
-Kinetic Nexus is an AI gateway that handles provider API keys and proxies
+Alayra Nexus is an AI gateway that handles provider API keys and proxies
 traffic, so we take security seriously. Thank you for helping keep it and its
 users safe.
 
@@ -22,7 +22,7 @@ to release a fix before any public disclosure, and we are happy to credit you
 
 ## Supported versions
 
-Kinetic Nexus is pre-1.0 and under active development. Security fixes are applied
+Alayra Nexus is pre-1.0 and under active development. Security fixes are applied
 to the latest `main`. We recommend always running the most recent release.
 
 ## Scope

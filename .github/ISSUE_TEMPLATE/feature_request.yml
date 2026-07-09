@@ -14,7 +14,7 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: What would you like Kinetic Nexus to do?
+      description: What would you like Alayra Nexus to do?
     validations:
       required: true
   - type: textarea

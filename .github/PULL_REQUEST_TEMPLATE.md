@@ -1,4 +1,4 @@
-<!-- Thanks for contributing to Kinetic Nexus! Please fill this out so reviewers can move fast. -->
+<!-- Thanks for contributing to Alayra Nexus! Please fill this out so reviewers can move fast. -->
 
 ## Summary
 

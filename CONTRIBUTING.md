@@ -1,12 +1,12 @@
-# Contributing to Kinetic Nexus
+# Contributing to Alayra Nexus
 
-Thanks for your interest in improving Kinetic Nexus. This guide covers how to get
+Thanks for your interest in improving Alayra Nexus. This guide covers how to get
 set up, the quality bar we hold, and how to get a change merged.
 
 ## Ways to contribute
 
-- **Report a bug** — open a [bug report](https://github.com/Kinetic-Ide/kinetic-nexus/issues/new?template=bug_report.yml).
-- **Request a feature** — open a [feature request](https://github.com/Kinetic-Ide/kinetic-nexus/issues/new?template=feature_request.yml).
+- **Report a bug** — open a [bug report](https://github.com/Kinetic-Ide/alayra-nexus/issues/new?template=bug_report.yml).
+- **Request a feature** — open a [feature request](https://github.com/Kinetic-Ide/alayra-nexus/issues/new?template=feature_request.yml).
 - **Report a vulnerability** — see [SECURITY.md](./SECURITY.md). Please do **not** open a public issue for security problems.
 - **Submit a pull request** — see below.
 
@@ -15,8 +15,8 @@ set up, the quality bar we hold, and how to get a change merged.
 **Prerequisites:** Node.js 20+, PostgreSQL 15+, Redis 7+ (or just Docker).
 
 ```bash
-git clone https://github.com/Kinetic-Ide/kinetic-nexus.git
-cd kinetic-nexus
+git clone https://github.com/Kinetic-Ide/alayra-nexus.git
+cd alayra-nexus
 npm install
 
 cp .env.example .env
@@ -72,4 +72,4 @@ blocking database calls.
 ## License
 
 By contributing, you agree that your contributions will be licensed under the
-[MIT License](./LICENSE) that covers this project.
+[Apache License 2.0](./LICENSE) that covers this project.

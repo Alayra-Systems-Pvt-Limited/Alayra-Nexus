@@ -1,4 +1,4 @@
-// Kinetic Nexus — slim schema
+// Alayra Nexus — slim schema
 // Only what the proxy needs: providers, keys, model registry, token usage, settings
 
 generator client {
