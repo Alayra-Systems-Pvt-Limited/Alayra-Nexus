@@ -78,7 +78,10 @@ async function bootstrap() {
   });
 
   await app.register(staticFiles, {
-    root:   path.join(__dirname, '..', 'public'),
+    // The dashboard. `__dirname` is `dist/` after a build, so this resolves to the
+    // repo root's `frontend/` in dev and `/app/frontend` in the container — which is
+    // why the Dockerfile must copy it into the runtime stage.
+    root:   path.join(__dirname, '..', 'frontend'),
     prefix: '/',
   });
 

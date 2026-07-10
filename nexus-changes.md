@@ -11,6 +11,72 @@
 
 ---
 
+**Date:** 2026-07-10 · Session 22  
+**Author:** Abbas  
+**Title:** Phase 5.6 — Structural Split, Architecture Docs, and a Silent Packaging Defect  
+
+**Summary:**  
+The gateway's backend layering has been sound from the beginning — pure, unit-tested
+logic in one directory, side effects in another, HTTP handling in a third — but two
+files had grown past the point where that discipline was visible. The dashboard was a
+single document carrying its own markup, stylesheet, and every line of its behaviour,
+and the admin API had become one flat sequence of thirty handlers. Neither was
+incorrect. Both were becoming unreviewable, and a file nobody wants to open is where
+defects go to live quietly.
+
+This session moved them apart without changing what either does. The dashboard now
+lives under a directory named for what it is, its stylesheet extracted, its behaviour
+split into a small module per section and an entry point that composes them. The admin
+API is now one file per resource, with the authentication guard defined once so a new
+sub-router cannot accidentally publish an unauthenticated endpoint. The route paths,
+request shapes, and responses are untouched; the entire test suite passed before and
+after with no edits.
+
+The one deliberate compromise is a bridge in the entry point that republishes the
+dashboard's handler functions onto the global object, because roughly sixty inline
+event attributes in the markup still call them by name. Converting those to delegated
+listeners is correct and is coming, but doing it inside a commit that already moves
+two thousand lines would have made any regression untraceable. The bridge is marked
+for deletion in the redesign that follows.
+
+Splitting the dashboard into real modules had an immediate and unplanned benefit: it
+became lintable. The linter, run against it for the first time, found two functions
+that the split had separated from the code calling them — a latent break the move
+itself would otherwise have shipped. Because the previous single-file dashboard could
+not be linted at all, those checks now run on every commit, and the whole module graph
+is additionally exercised outside a browser to prove that every section still loads and
+every bridged handler resolves.
+
+Auditing the packaging for the directory rename surfaced something considerably more
+serious than the rename. The container image had never copied the dashboard's static
+files into its runtime stage. The static-file plugin does not treat a missing root as
+fatal — it emits a warning and continues — so every published image started cleanly,
+passed its healthcheck, served the API correctly, and returned a bare 404 to anyone who
+opened it in a browser. The defect is the same shape as the migration problem found
+earlier: a container that starts is not a container that works, and both were invisible
+precisely because the failure was silent. The image now carries the dashboard, and the
+changelog tells existing users which releases were affected.
+
+A separate finding, raised against the routing sweep, was that the tier-downgrade flag
+carried no information. It was assigned before the first routing attempt in every tier,
+so by the time it was read it was always true and the expression reduced to "we are not
+in the first tier". Simply deleting the redundant term would have preserved the
+behaviour, but the behaviour was itself wrong: an operator who had never configured a
+premium provider was told that every single request had been downgraded. The flag now
+records whether a higher tier existed, held providers, and failed to serve — which is
+what a downgrade is. An empty tier is skipped, because there was nothing to fall back
+from. Five tests pin the distinction.
+
+Finally, the repository gained an architecture directory. One document explains the
+layering rule, walks a request end to end through admission, breaker, scope, cache, and
+usage, and states which direction dependencies are allowed to point. The other is a
+where-to-look index of every source file plus a short checklist for adding a feature.
+The internal planning notes remain private; only these two are published.
+
+**Green gate:** lint 0 (now covering the dashboard) · typecheck 0 · 150 tests pass · build 0 · npm audit 0 vulnerabilities.
+
+---
+
 **Date:** 2026-07-10 · Session 21  
 **Author:** Abbas  
 **Title:** Phase 5.5 — BYOK (Bring Your Own Key)  

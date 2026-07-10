@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Alayra Nexus™</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg"/>
+<link rel="stylesheet" href="css/app.css"/>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo"><img src="logo.svg" alt="" style="height:1.15em;width:1.15em;vertical-align:-0.22em;margin-right:4px"/>Alayra Nexus™</div>
+    <div class="login-sub">by Alayra Systems</div>
+    <label>Admin password</label>
+    <input type="password" id="login-pwd" placeholder="Enter your ADMIN_PASSWORD" autofocus/>
+    <div class="login-err" id="login-err"></div>
+    <button class="btn-primary" style="width:100%;margin-top:14px" onclick="doLogin()">Sign in →</button>
+    <div style="text-align:center;margin-top:12px">
+      <span style="font-size:12px;color:var(--subtle)">No server? </span>
+      <span style="font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline" onclick="enterDemoMode()">Preview demo</span>
+    </div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-logo"><img src="logo.svg" alt="" style="height:1.15em;width:1.15em;vertical-align:-0.22em;margin-right:4px"/>Alayra Nexus™</div>
+    <div class="topbar-by">by Alayra Systems</div>
+    <div class="topbar-spacer"></div>
+    <div class="status-dot" id="status-dot"></div>
+    <div class="status-label" id="status-label">connecting…</div>
+    <button class="btn-secondary btn-sm" onclick="doLogout()">Sign out</button>
+  </div>
+
+  <div class="shell">
+    <nav class="sidebar">
+      <div class="nav-item active" data-tab="connect" onclick="showTab('connect')">
+        <span class="nav-icon">🔗</span> Connect
+      </div>
+      <div class="nav-item" data-tab="nexus" onclick="showTab('nexus')">
+        <span class="nav-icon">⚡</span> Nexus
+      </div>
+      <div class="nav-item" data-tab="models" onclick="showTab('models')">
+        <span class="nav-icon">🧠</span> Models
+      </div>
+      <div class="nav-item" data-tab="team" onclick="showTab('team')">
+        <span class="nav-icon">👥</span> Team Keys
+      </div>
+      <div class="nav-item" data-tab="analytics" onclick="showTab('analytics')">
+        <span class="nav-icon">📊</span> Analytics
+      </div>
+      <div class="nav-sep"></div>
+      <div class="nav-item" data-tab="settings" onclick="showTab('settings')">
+        <span class="nav-icon">⚙️</span> Settings
+      </div>
+    </nav>
+
+    <main class="content">
+
+      <!-- Connect -->
+      <div class="tab-panel active" id="tab-connect">
+        <div class="connect-hero">
+          <h1>Your endpoint is ready</h1>
+          <p>Paste these three values into any AI tool to start routing through Nexus</p>
+        </div>
+        <div class="card" style="max-width:600px;margin:0 auto">
+          <div id="connect-rows">
+            <div style="text-align:center;padding:2rem"><div class="loader"></div></div>
+          </div>
+          <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+            <div class="card-title">Works with any OpenAI-compatible tool</div>
+            <div class="tools-row">
+              <span class="tool-tag">Cursor</span><span class="tool-tag">Cline</span>
+              <span class="tool-tag">Windsurf</span><span class="tool-tag">Continue.dev</span>
+              <span class="tool-tag">Aider</span><span class="tool-tag">Open WebUI</span>
+              <span class="tool-tag">LM Studio</span><span class="tool-tag">Any OpenAI SDK</span>
+            </div>
+          </div>
+        </div>
+        <div style="max-width:600px;margin:1rem auto 0">
+          <div class="card">
+            <div class="card-title">Routing status</div>
+            <div id="routing-status"><div class="loader"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nexus -->
+      <div class="tab-panel" id="tab-nexus">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h2>Nexus — Provider Pools</h2>
+          <button class="btn-primary" onclick="showAddProvider()">+ Add pool</button>
+        </div>
+        <div class="page-sub">Each pool is an AI provider with one or more API keys. Nexus auto-routes across all active keys by tier (Premium → Standard → Fast).</div>
+        <div id="nexus-summary" style="margin-bottom:1.25rem"></div>
+        <div id="nexus-list"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
+      </div>
+
+      <!-- Models -->
+      <div class="tab-panel" id="tab-models">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h2>Model Registry</h2>
+          <button class="btn-primary" onclick="showAddModel()">+ Add model</button>
+        </div>
+        <div class="page-sub">Define available models with capabilities, tier, and routing priority. These inform the Nexus routing engine.</div>
+        <div id="models-list"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
+      </div>
+
+      <!-- Team Keys -->
+      <div class="tab-panel" id="tab-team">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h2>Team Keys</h2>
+          <button class="btn-primary" onclick="showCreateTeamKey()">+ New key</button>
+        </div>
+        <div class="page-sub">Give each team member their own named key. Track usage per person. Revoke anytime.</div>
+        <div id="team-list"><div style="text-align:center;padding:2rem"><div class="loader"></div></div></div>
+      </div>
+
+      <!-- Analytics -->
+      <div class="tab-panel" id="tab-analytics">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h2>Analytics</h2>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div class="period-pills">
+              <button class="period-btn" id="ap-today" onclick="loadAnalytics('today')">Today</button>
+              <button class="period-btn" id="ap-7d" onclick="loadAnalytics('7d')">7d</button>
+              <button class="period-btn active-period" id="ap-30d" onclick="loadAnalytics('30d')">30d</button>
+              <button class="period-btn" id="ap-90d" onclick="loadAnalytics('90d')">90d</button>
+            </div>
+            <div class="date-range-wrap">
+              <input type="date" id="ap-from" onchange="applyCustomRange()" title="From date"/>
+              <span class="date-range-sep">→</span>
+              <input type="date" id="ap-to" onchange="applyCustomRange()" title="To date"/>
+            </div>
+            <button class="btn-secondary btn-sm" onclick="exportAnalyticsCSV()">↓ CSV</button>
+          </div>
+        </div>
+        <div class="page-sub">Token usage, cost, and team activity across all providers.</div>
+        <div id="analytics-body"><div style="text-align:center;padding:3rem"><div class="loader"></div></div></div>
+      </div>
+
+      <!-- Settings -->
+      <div class="tab-panel" id="tab-settings">
+        <h2>Settings</h2>
+        <div class="page-sub">Manage your Nexus API key and configuration.</div>
+        <div class="card" style="max-width:500px">
+          <div class="card-title">Nexus API key</div>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">This is the key your team pastes into their AI tool. Rotating it invalidates all existing sessions.</p>
+          <div class="copy-row">
+            <span class="copy-label">API KEY</span>
+            <span class="copy-val" id="settings-key">••••••••••••••••</span>
+            <button class="copy-btn" onclick="toggleShowKey()" id="show-key-btn">Show</button>
+            <button class="copy-btn" onclick="copyText(document.getElementById('settings-key-raw').value)" id="copy-key-btn">Copy</button>
+          </div>
+          <input type="hidden" id="settings-key-raw"/>
+          <button class="btn-danger btn-sm" style="margin-top:8px" onclick="rotateKey()">⟳ Rotate key</button>
+        </div>
+
+        <div class="card" style="max-width:500px;margin-top:16px">
+          <div class="card-title">Network security (SSRF protection)</div>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">By default, Nexus refuses to call private, loopback, or internal addresses — this blocks a provider URL from being pointed at cloud metadata or your internal network. Running a local model (Ollama, LM Studio)? Add its host below to allow just that one.</p>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:12px">
+            <input type="checkbox" id="ssrf-allow-private"/>
+            <span>Allow private / localhost addresses (disables blocking — trusted networks only)</span>
+          </label>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Allowlisted hosts — one per line (<code>host</code> or <code>host:port</code>)</label>
+          <textarea id="ssrf-allowlist" rows="3" placeholder="localhost:11434&#10;127.0.0.1:11434" style="width:100%;font-family:monospace;font-size:12px;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);resize:vertical"></textarea>
+          <div id="ssrf-env-hint" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+          <button class="btn btn-sm" style="margin-top:10px" onclick="saveSsrf()">Save network settings</button>
+        </div>
+
+        <div class="card" style="max-width:500px;margin-top:16px">
+          <div class="card-title">Content guardrails</div>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Optional prompt/response filtering — redact PII or block banned content and injection patterns. Off by default. Rules are a JSON array; each has a <code>name</code>, <code>pattern</code> (regex), <code>action</code> (<code>block</code> or <code>redact</code>), and optional <code>appliesTo</code> (<code>input</code>/<code>output</code>/<code>both</code>) and <code>replacement</code>.</p>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:10px">
+            <input type="checkbox" id="gr-enabled"/>
+            <span>Enable content guardrails</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:10px">
+            <input type="checkbox" id="gr-buffered"/>
+            <span>Buffered-safe mode — filter streamed responses too (trades streaming latency for inspection)</span>
+          </label>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Rules (JSON array)</label>
+          <textarea id="gr-rules" rows="7" spellcheck="false" placeholder='[{"name":"email","pattern":"[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}","action":"redact","appliesTo":"both","replacement":"[REDACTED_EMAIL]"}]' style="width:100%;font-family:monospace;font-size:12px;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);resize:vertical"></textarea>
+          <div id="gr-hint" style="font-size:12px;color:var(--muted);margin-top:6px">Presets you can copy: <code>email</code>, <code>us-phone</code>, <code>credit-card</code>, <code>ssn</code>, <code>api-key</code>, <code>prompt-injection</code>.</div>
+          <button class="btn btn-sm" style="margin-top:10px" onclick="saveGuardrails()">Save guardrails</button>
+        </div>
+
+        <div class="card" style="max-width:500px;margin-top:16px">
+          <div class="card-title">Cost-aware routing</div>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Among providers that are healthy and in-headroom within a tier, bias routing toward the cheaper one (using model registry pricing). This only breaks ties — it never overrides tier priority, circuit-breaker/rate-limit state, or sticky cache affinity.</p>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">Cost weight — <span id="cw-val" style="color:var(--text);font-weight:600">0</span> <span style="color:var(--muted)">(0 = ignore cost · 1 = strict cheapest-first)</span></label>
+          <input type="range" id="cw-range" min="0" max="1" step="0.1" value="0" style="width:100%" oninput="document.getElementById('cw-val').textContent=this.value"/>
+          <button class="btn btn-sm" style="margin-top:12px" onclick="saveRouting()">Save routing</button>
+        </div>
+
+        <div class="card" style="max-width:500px;margin-top:16px">
+          <div class="card-title">Response cache</div>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Cache exact-match responses (same model, messages, and params). A repeat request is served straight from Redis — a real $0 call, the provider is skipped entirely. Off by default. Identical requests return the cached answer until the TTL expires.</p>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:10px">
+            <input type="checkbox" id="cache-enabled"/>
+            <span>Enable response caching</span>
+          </label>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">TTL — seconds a cached response stays fresh</label>
+          <input type="number" id="cache-ttl" min="1" max="2592000" value="3600" style="width:160px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)"/>
+          <div><button class="btn btn-sm" style="margin-top:12px" onclick="saveCache()">Save cache</button></div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="modal-bg" onclick="closeModal(event)">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

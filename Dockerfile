@@ -33,6 +33,11 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY prisma ./prisma
+# The admin dashboard is static and was never copied into the runtime stage, so
+# published images served the API but returned 404 for `/`. @fastify/static only
+# logs a warning for a missing root, so the container started clean and the gap was
+# invisible. Keep this in step with the static root in src/server.ts.
+COPY frontend ./frontend
 
 # Drop root: run as the image's built-in unprivileged `node` user.
 RUN chown -R node:node /app

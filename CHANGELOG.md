@@ -10,6 +10,9 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 ## [Unreleased]
 
 ### Added
+- **Architecture docs** (`docs/architecture/`): `PROJECT-STRUCTURE.md` covers the
+  layering rule and the full request path; `FILE-OVERVIEW.md` is a where-to-look
+  index and a checklist for adding a feature.
 - **BYOK — bring your own key (Phase 5.5):** a provider key can now be owned by a
   team (`ownerTeamId`) instead of living in the shared pool. An owned key serves only
   that team's traffic. Routing tries the team's own keys first, then — if the team's
@@ -23,6 +26,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   `POST /admin/providers/:providerId/keys`.
 
 ### Changed
+- **Repository layout.** The admin dashboard moved from `public/` to `frontend/`,
+  where its CSS and JavaScript are now separate files rather than one inline
+  `<script>`; `frontend/js/` is a set of ES modules and is linted like the rest of
+  the source. The admin API moved from `src/routes/admin.ts` to `src/routes/admin/`,
+  split by resource. No endpoint, request, or response changed. If you mount or copy
+  the dashboard yourself, update the path.
 - **The response cache is now partitioned by routing scope.** A response produced by
   a team's private key is never replayed to another team or to the shared pool. This
   changes the cache key, so entries written by an earlier version are ignored and the
@@ -36,6 +45,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   `budgetUsd: null` for a team that funds its own keys and should not be capped.
 
 ### Fixed
+- **The admin dashboard is now present in the container image.** The runtime stage
+  never copied the dashboard's static files, and `@fastify/static` only logs a
+  warning for a missing root — so published images started cleanly, served the API
+  correctly, and returned `404` for `/`. Affects `v1.0.0` and `v1.1.0`; if you run
+  the image, pull again once the next tag is published. Source installs were never
+  affected.
+- **Tier-downgrade reporting.** `X-Nexus-Tier-Downgrade` was set on every request a
+  non-premium tier served, including deployments that never configured a premium
+  provider. It now means what it says: a higher tier existed and could not serve the
+  request.
 - **Dashboard:** provider base URLs, team-key names, key labels, and error text are
   escaped before reaching `innerHTML`, and copy-button values moved out of inline
   `onclick` strings into `data-` attributes read by a delegated listener. A value

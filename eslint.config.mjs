@@ -5,13 +5,31 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    // Never lint build output, deps, generated client, the browser dashboard
-    // (public/index.html is a single-file vanilla-JS app with its own conventions),
-    // or the brand kit (SVG/PNG assets plus a standalone CommonJS render script).
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'public/**', 'prisma/migrations/**', 'brand/**'],
+    // Never lint build output, deps, the generated client, or the brand kit
+    // (SVG/PNG assets plus a standalone CommonJS render script).
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'prisma/migrations/**', 'brand/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    // The dashboard. Now that it is a set of ES modules rather than one inline
+    // <script>, it can be linted like real source — which is what catches a
+    // function that was moved between files but never imported.
+    files: ['frontend/js/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        Chart: 'readonly', // loaded from a CDN on first paint of the Analytics tab
+      },
+      parserOptions: { ecmaVersion: 2022, sourceType: 'module' },
+    },
+    rules: {
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // `try { ... } catch {}` is the dashboard's idiom for "this widget is optional,
+      // a failure here must not take the tab down". The intent is the empty block.
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
   {
     files: ['src/**/*.ts'],
     languageOptions: {

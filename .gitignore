@@ -47,9 +47,13 @@ prisma/*.db-journal
 # ── Internal planning docs (not for public repo) ────────────────────────────────
 # Roadmaps/upgrade plans live here for internal use only. User-facing docs
 # (Phase 10 "Docs tab" content, API reference, quickstart) must NOT live under
-# this folder — put those under a committed path (e.g. /website, /public-docs)
-# so they aren't accidentally hidden from the OSS repo.
-docs/
+# an ignored path — put those under a committed one so they aren't accidentally
+# hidden from the OSS repo.
+#
+# `docs/*` rather than `docs/`: git will not descend into an ignored *directory*,
+# so a negation for a child would never be evaluated.
+docs/*
+!docs/architecture/
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 .claude/

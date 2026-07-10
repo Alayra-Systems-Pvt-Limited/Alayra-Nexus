@@ -660,6 +660,14 @@ Named presets you can copy as starting points: `email`, `us-phone`, `credit-card
 
 Pull requests are welcome. For major changes, open an issue first to discuss the approach.
 
+**Start here:** [`docs/architecture/PROJECT-STRUCTURE.md`](docs/architecture/PROJECT-STRUCTURE.md)
+explains the layering rule and walks the full request path;
+[`docs/architecture/FILE-OVERVIEW.md`](docs/architecture/FILE-OVERVIEW.md) is a
+where-to-look index and a checklist for adding a feature.
+
+The backend lives in `src/` and the admin dashboard in `frontend/` — the dashboard is
+plain ES modules with no build step.
+
 ```bash
 # Development
 npm run dev
