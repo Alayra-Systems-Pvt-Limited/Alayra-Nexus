@@ -16,6 +16,7 @@
 
 import { createHash } from 'crypto';
 import { redis } from './redis';
+import { SHARED_NAMESPACE } from './scope';
 
 // ── Exact-match response cache (Phase 4.5) ────────────────────────────────────
 // Distinct from Phase 3's cache-*aware routing*: this caches the response itself.
@@ -53,12 +54,21 @@ export function isCacheable(body: { messages?: unknown[]; n?: unknown }): boolea
   return true;
 }
 
-/** Stable cache key for a request. Excludes `stream` and `user` by construction. */
-export function responseCacheKey(body: Record<string, unknown>): string {
+/**
+ * Stable cache key for a request. Excludes `stream` and `user` by construction, so
+ * a streamed and a non-streamed request share one entry.
+ *
+ * `namespace` (Phase 5.5) partitions the cache by routing scope. A response
+ * produced by a team's own BYOK key lives under `team:<id>` and is never replayed
+ * to the shared pool, or to another team — an isolated team must only ever receive
+ * responses its own keys paid for. Shared-pool callers use `shared` (the default),
+ * which reproduces the pre-BYOK key exactly.
+ */
+export function responseCacheKey(body: Record<string, unknown>, namespace: string = SHARED_NAMESPACE): string {
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const params: Record<string, unknown> = {};
   for (const p of CACHEABLE_PARAMS) if (body[p] !== undefined) params[p] = body[p];
-  const canonical = JSON.stringify({ model: CANONICAL_MODEL, messages, params });
+  const canonical = JSON.stringify({ ns: namespace, model: CANONICAL_MODEL, messages, params });
   return createHash('sha256').update(canonical).digest('hex');
 }
 

@@ -11,6 +11,74 @@
 
 ---
 
+**Date:** 2026-07-10 · Session 21  
+**Author:** Abbas  
+**Title:** Phase 5.5 — BYOK (Bring Your Own Key)  
+
+**Summary:**  
+A provider key may now be owned by a team rather than sitting in the shared pool. An
+owned key is encrypted with the same AES-256-GCM path as every other credential, and
+it serves only its owner's traffic. Routing resolves in two passes: the team's own
+keys first, in the usual tier order with least-recently-used selection inside a tier,
+and then — only when the team permits it — the shared pool. A team that disables
+fall-back is hard-isolated: once its own keys are exhausted it receives a 503 with a
+retry window, never a credential it did not bring. Teams that own no keys are
+untouched by any of this and continue to use the shared pool exactly as before.
+
+The governing constraint was that BYOK must not become a second code path. It has not.
+Ownership lives on the credential, not on the provider, so an owned key inherits the
+provider's shared configuration — base URL, tier, model, auth scheme — and passes
+through the identical admission control, circuit breaker, guardrail evaluation, SSRF
+validation, and analytics pipeline as a pooled key. Scoping is expressed as an equality
+filter on the key query and a second sweep of the same tier-selection routine. The
+proxy's request path grew by roughly a dozen lines; nothing was forked.
+
+Two isolation boundaries required work that the phase brief did not anticipate, and
+both were found by auditing the existing code rather than by writing the new feature.
+The first is sticky routing. A session's pin to its last-successful key lives in Redis
+and outlives any individual request, so a pin established while a caller was on the
+shared pool would have been honoured later for an isolated team, and the reverse. Pins
+are now re-authorised against the caller's scope on every use, and an ineligible pin
+simply falls through to ordinary discovery. The second is the response cache, whose
+identity was derived from the request content alone. Left as it was, a response paid
+for by one team's private key would have been replayed from Redis to another team, and
+an isolated team could have received an answer its own keys never produced. The cache
+key is now partitioned by routing scope, and both the scope used for routing and the
+scope used for caching are derived from a single resolved value, so the two cannot
+drift apart. Existing cached entries are ignored after upgrade and the cache
+repopulates over one expiry window.
+
+Deleting a team destroys the provider keys it owns. Every other relation in the schema
+nulls its foreign key on delete, and following that convention here would have quietly
+released a team's private credentials into the shared pool for every other caller to
+route through. The delete endpoint reports how many owned keys went with the team, and
+the behaviour is documented rather than merely implemented. Access keys are unaffected
+and survive unassigned, losing only their budget cap. Spend on owned keys continues to
+be costed, attributed, and counted against the team's cap; an operator who funds a
+team's own credentials simply leaves that team's budget unset.
+
+Observability follows the same principle as the rest of the gateway — a sustained
+fall-back rate is an operational signal, not an error — so the new counter records
+whether each request from a key-owning team was served by its own key, by the pool
+after its own keys were exhausted, or refused under isolation. Responses from an owned
+key are labelled in the headers alongside the existing tier and provider fields.
+
+This session also cleared the outstanding code-scanning findings on the dashboard.
+Values that originate outside the gateway — provider base URLs, team and key names,
+error text — are now escaped before they reach the document, and the copy buttons
+carry their payload in a data attribute read by a single delegated listener instead of
+being interpolated into an inline handler where a quote could break out. Separately, an
+optimistic write to the model registry no longer survives a rejected save, a button
+left in an error state now recovers, and the analytics charts index their series once
+rather than rescanning the result set for every plotted point.
+
+Migration 0004 is additive: existing keys carry no owner, which is precisely the shared
+pool, and existing routing behaviour is unchanged on upgrade.
+
+**Green gate:** lint 0 · typecheck 0 · 145 tests pass (+22) · build 0 · npm audit 0 vulnerabilities.
+
+---
+
 **Date:** 2026-07-10 · Session 20  
 **Author:** Abbas  
 **Title:** Phase 4.5 — Response Caching (Exact-Match)  

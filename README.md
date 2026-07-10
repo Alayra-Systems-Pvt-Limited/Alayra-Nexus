@@ -2,9 +2,9 @@
 
 <br>
 
-<img src="./brand/png/alayra-nexus-crest-lockup-800.png" alt="Alayra Nexus™" width="440"/>
+<img src="./brand/png/alayra-nexus-banner-readme.png" alt="Alayra Nexus — The Enterprise AI Gateway" width="100%"/>
 
-### The Enterprise AI Gateway
+<br>
 
 **One OpenAI-compatible endpoint. Every model. Zero key chaos.**
 
@@ -57,6 +57,7 @@ Alayra Nexus is the infrastructure layer that sits between your application and 
 | **Cost-Aware Routing** | Optional: within a tier, bias toward the cheapest healthy, in-headroom provider using registry pricing — a tiebreaker that never overrides health or cache affinity |
 | **OpenAI-Compatible API** | Drop-in `/v1/chat/completions` — change one base URL, nothing else |
 | **Team Key Issuance** | Create scoped access tokens per team, each with an independently configurable RPM limit |
+| **BYOK (Bring Your Own Key)** | A team can register its own provider keys, encrypted at rest and routed only for that team's traffic — with optional fall-back to the shared pool, or hard isolation |
 | **Real-Time Rate Limiting** | Per-key RPM enforcement via Redis with live utilization meters (per-key TPM budgets are configurable; enforcement is on the roadmap) |
 | **Cost Tracking** | Per-request USD cost computed from model pricing, attributed to the requesting team |
 | **Full Analytics Dashboard** | Request trends, token breakdowns, team leaderboard, provider split — powered by Chart.js |
@@ -406,6 +407,52 @@ this in an upcoming release.
 
 ---
 
+## BYOK — bring your own key
+
+A provider key can be **owned by a team** instead of living in the shared pool. An
+owned key serves only that team's traffic; nobody else can route through it. Set the
+owner when you add the key (**Pools → + Key → Owner**), or pass `ownerTeamId` to
+`POST /admin/providers/:providerId/keys`.
+
+Routing then works in two passes:
+
+1. **The team's own keys first**, in the usual tier order with LRU within a tier.
+2. **The shared pool**, but only if the team allows it.
+
+Per-team, `byokFallback` decides what happens when a team's own keys are all
+rate-limited, cooling, or banned:
+
+| `byokFallback` | Behaviour |
+|---|---|
+| `true` *(default)* | Fall back to the shared pool. Responses carry `X-Nexus-BYOK: true` only when an owned key served them |
+| `false` | **Hard isolation.** The request gets `503` + `Retry-After`. It never touches a credential the team did not bring |
+
+A BYOK key is **not a parallel proxy** — it is a scoped pool. Owned keys flow through
+the exact same admission control, circuit breaker, guardrails, SSRF checks, and
+analytics pipeline as pooled keys. There is one request path.
+
+Two guarantees worth stating explicitly:
+
+- **A caller with no team can never be routed through an owned key**, even when the
+  shared pool is completely exhausted.
+- **The response cache is partitioned by owner.** A response produced by one team's
+  private key is never replayed to another team or to the shared pool, so an isolated
+  team only ever sees responses its own keys paid for.
+
+BYOK spend is still costed, attributed, and **counted against the team's budget cap** —
+set `budgetUsd: null` for a team that funds its own keys and shouldn't be capped.
+
+> [!WARNING]
+> Deleting a team **deletes its owned provider keys** along with it. This is
+> deliberate: releasing a private credential into the shared pool would let every
+> other caller route through it. The team's *access* keys survive, losing only their
+> budget cap.
+
+Watch adoption with the `nexus_byok_requests_total{result}` metric — a sustained
+`fallback` rate means a team is under-provisioned on its own credentials.
+
+---
+
 ## API Reference
 
 ### Proxy Endpoint
@@ -438,7 +485,7 @@ curl http://localhost:3000/v1/chat/completions \
 | `GET` | `/admin/nexus/summary` | Provider pool overview (active / cooling / banned counts) |
 | `GET` | `/admin/providers` | Full list of provider pools |
 | `POST` | `/admin/providers` | Create a provider pool |
-| `POST` | `/admin/providers/:providerId/keys` | Add an API key to a pool |
+| `POST` | `/admin/providers/:providerId/keys` | Add an API key to a pool (`ownerTeamId` makes it private to a team — BYOK) |
 | `POST` | `/admin/keys/:id/test` | Test a key and check latency |
 | `POST` | `/admin/keys/:id/ban` | Ban a key from rotation |
 | `GET` | `/admin/keys/:id/metrics` | Live RPM and status for a key |
@@ -446,8 +493,8 @@ curl http://localhost:3000/v1/chat/completions \
 | `PUT` | `/admin/models` | Add or update a model in the registry |
 | `GET` | `/admin/teams` | List teams with key counts and current-period spend |
 | `POST` | `/admin/teams` | Create a team (name, budget cap + period, status) |
-| `PATCH` | `/admin/teams/:id` | Update a team (budget, status, tier) |
-| `DELETE` | `/admin/teams/:id` | Delete a team (its keys survive, unassigned) |
+| `PATCH` | `/admin/teams/:id` | Update a team (budget, status, tier, `byokFallback`) |
+| `DELETE` | `/admin/teams/:id` | Delete a team (access keys survive unassigned; **owned provider keys are deleted**) |
 | `GET` | `/admin/team-keys` | List team keys |
 | `POST` | `/admin/team-keys` | Issue a new team key (optionally assigned to a team) |
 | `PATCH` | `/admin/team-keys/:id` | Assign or unassign a key's team |
@@ -595,11 +642,15 @@ Named presets you can copy as starting points: `email`, `us-phone`, `credit-card
 - [x] SSRF protection — default-on private-host blocking with an opt-in allowlist
 - [x] Optional content guardrails — pluggable PII redaction and content/injection blocking
 - [x] Cost-aware routing — bias toward the cheapest healthy, in-headroom provider (tiebreaker)
-- [ ] Per-key TPM enforcement (limits are configurable today; enforcement upcoming)
-- [ ] Atomic pre-admission rate limiting with real token accounting
+- [x] Atomic pre-admission rate limiting with real token accounting
+- [x] Per-key TPM enforcement, with reservation and post-response reconciliation
+- [x] Per-team budget caps with automatic cutoff
+- [x] Optional exact-match response caching
+- [x] Prometheus `/metrics` endpoint and optional OpenTelemetry tracing
+- [x] BYOK — team-owned provider keys with optional hard isolation
+- [ ] Admin auth hardening — constant-time compare, login lockout, TOTP 2FA
 - [ ] Webhook and email alerts on key failure or budget threshold
 - [ ] Custom domain / CNAME support
-- [ ] Per-team budget caps with automatic cutoff
 - [ ] Integration test suite
 - [ ] Kubernetes Helm chart
 

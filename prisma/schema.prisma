@@ -40,10 +40,18 @@ model NexusKey {
   tpmLimit        Int           @default(100000)
   lastUsedAt      DateTime?
   coolingUntil    DateTime?
+  // BYOK (Phase 5.5): null = shared pool, set = private to that team. Ownership sits
+  // on the credential, not the provider, so a BYOK key reuses the provider's shared
+  // config (baseUrl/tier/auth) and the same admission + breaker + analytics path.
+  // Cascade, NOT SetNull: deleting a team must destroy its private keys, never
+  // release them into the shared pool.
+  ownerTeamId     String?
+  ownerTeam       Team?         @relation(fields: [ownerTeamId], references: [id], onDelete: Cascade)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   @@index([providerId, status])
+  @@index([ownerTeamId, status])
 }
 
 model AiModelRegistry {
@@ -81,9 +89,14 @@ model Team {
   assignedTier String?        // preferred routing tier — stored now, wired with the Teams tab rebuild
   budgetUsd    Float?         // USD spend cap per period; null = unlimited
   budgetPeriod String         @default("monthly") // daily | weekly | monthly
+  // BYOK (Phase 5.5): when the team owns provider keys, may its traffic fall back to
+  // the shared pool once its own keys are exhausted? false = hard isolation (503).
+  // Ignored for teams that own no keys — they always use the shared pool.
+  byokFallback Boolean        @default(true)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   teamKeys     NexusTeamKey[]
+  ownedKeys    NexusKey[]
 }
 
 model NexusTeamKey {

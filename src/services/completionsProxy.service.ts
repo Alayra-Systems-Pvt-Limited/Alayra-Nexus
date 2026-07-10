@@ -29,11 +29,14 @@ import { startUpstreamSpan, SpanStatusCode } from '../lib/tracing';
 import { checkTeamBudget, type BudgetPeriod } from './budget.service';
 import { getCacheConfig }              from './cache.service';
 import { isCacheable, responseCacheKey, getCached, setCached, toCompletionJson, buildFromCompletion, buildFromStream } from '../lib/responseCache';
+import { resolveRequestScope }         from './byok.service';
+import { isByok, isIsolated }          from '../lib/scope';
 
 export interface TeamContext {
   id:           string;
   budgetUsd:    number | null;
   budgetPeriod: string;
+  byokFallback?: boolean;
 }
 
 export interface CompletionsBody {
@@ -217,13 +220,18 @@ export async function handleProxy(
     guardHeaders['X-Nexus-Guardrails-Output'] = 'skipped-streaming';
   }
 
+  // ── BYOK scope (Phase 5.5) — resolved once, then threaded into BOTH the response
+  // cache namespace and pool discovery. Deriving them from one value is what keeps a
+  // response paid for by one team's private key out of another scope's cache.
+  const scope = await resolveRequestScope(team);
+
   // ── Response cache (Phase 4.5) — exact-match, checked BEFORE routing. A hit is
   // replayed straight from Redis (streamed if the client asked), skipping the
   // provider entirely; only a miss falls through to routing.
   const cacheCfg    = await getCacheConfig();
   let cacheStoreKey: string | null = null;
   if (cacheCfg.enabled && isCacheable(body)) {
-    const key = responseCacheKey(body);
+    const key = responseCacheKey(body, scope.namespace);
     const hit = await getCached(key);
     if (hit) {
       metrics.responseCache('hit');
@@ -261,15 +269,21 @@ export async function handleProxy(
   // Cache-aware sticky routing: pin a continuing conversation to its last key.
   const session  = sessionHash({ messages, user: body.user }, reqHeaders);
 
-  const route = await discoverBestPool(reserve, session);
+  const route = await discoverBestPool(reserve, session, scope);
   if (!route) {
     observe('no_capacity');
+    const isolated = isIsolated(scope);
+    if (isolated) metrics.byokRequest('isolated_block');
     const retryAfter = await getNextCooldownSeconds();
     return reply
       .code(503)
       .header('Retry-After', String(retryAfter))
       .send({
-        error: `All API keys are currently rate-limited. Retry in ${retryAfter}s or add more provider keys.`,
+        // An isolated team must be told the truth: the shared pool was never an
+        // option, so "add more provider keys" would be misleading advice.
+        error: isolated
+          ? `Your team's own provider keys are all rate-limited or unavailable, and fall-back to the shared pool is disabled for this team. Retry in ${retryAfter}s or add more keys to your team.`
+          : `All API keys are currently rate-limited. Retry in ${retryAfter}s or add more provider keys.`,
         retryAfter,
       });
   }
@@ -278,6 +292,8 @@ export async function handleProxy(
   tier = route.tier;
   metrics.providerRequest(route.providerSlug);
   if (route.sticky) metrics.cacheHit();
+  // Only a key-owning team can produce a BYOK outcome; pooled callers are not counted.
+  if (isByok(scope)) metrics.byokRequest(route.byok ? 'own' : 'fallback');
 
   const keyId = route.keyId;
   // Release the full token reservation for a request that did not (fully) run.
@@ -354,6 +370,7 @@ export async function handleProxy(
     'X-Nexus-Tier':           route.tier,
     ...(route.wasDowngrade ? { 'X-Nexus-Tier-Downgrade': 'true' } : {}),
     ...(route.sticky        ? { 'X-Nexus-Sticky': 'true' } : {}),
+    ...(route.byok          ? { 'X-Nexus-BYOK': 'true' } : {}),
     ...(cacheStoreKey       ? { 'X-Nexus-Cache': 'miss' } : {}),
     ...guardHeaders,
   };

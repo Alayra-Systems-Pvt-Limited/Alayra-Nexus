@@ -24,6 +24,7 @@ import {
   isCacheable, responseCacheKey, cacheRedisKey, toCompletionJson,
   buildFromCompletion, buildFromStream, extractStreamContent,
 } from './responseCache';
+import { SHARED_NAMESPACE } from './scope';
 
 const msg = (role: string, content: string) => ({ role, content });
 
@@ -63,6 +64,28 @@ describe('responseCacheKey', () => {
     const k = responseCacheKey(base);
     expect(k).toMatch(/^[0-9a-f]{64}$/);
     expect(cacheRedisKey(k)).toBe(`nexus:respcache:${k}`);
+  });
+
+  // Phase 5.5: without this partition, a response paid for by one team's private
+  // BYOK key would be replayed from Redis to another team, or to the shared pool.
+  describe('scope namespacing (BYOK isolation)', () => {
+    it('defaults to the shared namespace', () => {
+      expect(responseCacheKey(base)).toBe(responseCacheKey(base, SHARED_NAMESPACE));
+    });
+
+    it('never lets two teams share an entry for an identical request', () => {
+      const a = responseCacheKey(base, 'team:aaa');
+      const b = responseCacheKey(base, 'team:bbb');
+      expect(a).not.toBe(b);
+    });
+
+    it('never lets a team read or write the shared pool entry', () => {
+      expect(responseCacheKey(base, 'team:aaa')).not.toBe(responseCacheKey(base, SHARED_NAMESPACE));
+    });
+
+    it('still de-duplicates identical requests within one team', () => {
+      expect(responseCacheKey({ ...base }, 'team:aaa')).toBe(responseCacheKey({ ...base }, 'team:aaa'));
+    });
   });
 });
 

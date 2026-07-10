@@ -23,11 +23,12 @@ import 'fastify';
 declare module 'fastify' {
   interface FastifyRequest {
     teamKeyId?: string;
-    /** Present when the key belongs to a Team — carries what budget enforcement needs. */
+    /** Present when the key belongs to a Team — carries what budget enforcement and BYOK scoping need. */
     team?: {
       id:           string;
       budgetUsd:    number | null;
       budgetPeriod: string;
+      byokFallback: boolean;
     };
   }
 }

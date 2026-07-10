@@ -97,6 +97,14 @@ const responseCacheTotal = new Counter({
   registers: [registry],
 });
 
+const byokRequestsTotal = new Counter({
+  name: 'nexus_byok_requests_total',
+  help: 'Requests from teams that own provider keys, by how they were served ' +
+        '(own | fallback | isolated_block).',
+  labelNames: ['result'],
+  registers: [registry],
+});
+
 // ── Recording helpers (called from the request path) ──────────────────────────
 
 export type RequestOutcome =
@@ -121,6 +129,16 @@ export function providerError(provider: string, kind: 'rate_limit' | 'auth' | 's
 }
 export function cacheHit(): void { cacheHits.inc(); }
 export function responseCache(result: 'hit' | 'miss' | 'store'): void { responseCacheTotal.inc({ result }); }
+
+/**
+ * BYOK outcome for a team that owns keys. `own` = served by the team's own key,
+ * `fallback` = own keys exhausted and the shared pool served it, `isolated_block` =
+ * own keys exhausted with fall-back disabled (the request was refused). A sustained
+ * `fallback` rate means a team is under-provisioned on its own credentials.
+ */
+export function byokRequest(result: 'own' | 'fallback' | 'isolated_block'): void {
+  byokRequestsTotal.inc({ result });
+}
 
 // Refresh pool gauges from the DB. Called per scrape; a scrape is infrequent, so a
 // couple of lightweight queries here is fine, and it keeps utilization current.

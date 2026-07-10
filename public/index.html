@@ -629,12 +629,15 @@ async function loadKeysForProvider(providerId) {
       return;
     }
     el.innerHTML = `<div class="table-wrap"><table>
-      <thead><tr><th>Label / Key</th><th>Status</th><th>RPM</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Label / Key</th><th>Owner</th><th>Status</th><th>RPM</th><th>Actions</th></tr></thead>
       <tbody>${keys.map(k => `<tr id="krow-${k.id}">
         <td>
-          <div style="font-family:monospace;font-size:12px">${k.maskedKey}</div>
-          ${k.label?`<div style="font-size:11px;color:var(--muted)">${k.label}</div>`:''}
+          <div style="font-family:monospace;font-size:12px">${esc(k.maskedKey)}</div>
+          ${k.label?`<div style="font-size:11px;color:var(--muted)">${esc(k.label)}</div>`:''}
         </td>
+        <td>${k.ownerTeamName
+          ? `<span class="badge badge-blue" title="Private to this team (BYOK)">${esc(k.ownerTeamName)}</span>`
+          : `<span style="font-size:12px;color:var(--muted)">Shared pool</span>`}</td>
         <td>${keyStatusBadge(k)}</td>
         <td><div class="meter-row" id="meter-${k.id}">
           <div class="meter-bar"><div class="meter-fill meter-fill-green" style="width:0%" id="meter-fill-${k.id}"></div></div>
@@ -853,10 +856,14 @@ async function submitAddProvider() {
 }
 
 // ── Add key modal ───────────────────────────────────────────────────
-function showAddKey(providerId, providerName) {
+async function showAddKey(providerId, providerName) {
+  // BYOK: an owned key serves only its team's traffic. Teams are optional — if none
+  // exist, the picker still renders and every key lands in the shared pool.
+  let teams = [];
+  try { teams = (await GET('/admin/teams')).teams || []; } catch { /* shared pool only */ }
   document.getElementById('modal-box').innerHTML = `
     <button class="modal-close" onclick="closeModal()">×</button>
-    <div class="modal-title">Add key — ${providerName}</div>
+    <div class="modal-title">Add key — ${esc(providerName)}</div>
     <div class="form-row">
       <label class="form-label">API key</label>
       <input id="new-key-val" type="password" placeholder="sk-ant-... or AIza..."/>
@@ -864,6 +871,13 @@ function showAddKey(providerId, providerName) {
     <div class="form-row">
       <label class="form-label">Label (optional)</label>
       <input id="new-key-label" placeholder="e.g. Key 2, Backup, Work account"/>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Owner</label>
+      <select id="new-key-owner">
+        <option value="">Shared pool — any caller may route through it</option>
+        ${teams.map(t => `<option value="${esc(t.id)}">${esc(t.name)} — private (BYOK)</option>`).join('')}
+      </select>
     </div>
     <div class="form-grid">
       <div class="form-row">
@@ -886,11 +900,12 @@ function showAddKey(providerId, providerName) {
 async function submitAddKey(providerId) {
   const apiKey = document.getElementById('new-key-val').value.trim();
   const label  = document.getElementById('new-key-label').value.trim();
+  const owner  = document.getElementById('new-key-owner').value;
   const rpm    = parseInt(document.getElementById('new-key-rpm').value) || 60;
   const tpm    = parseInt(document.getElementById('new-key-tpm').value) || 100000;
   if (!apiKey) { toast('API key is required', true); return; }
   try {
-    await POST(`/admin/providers/${providerId}/keys`, { apiKey, label: label||undefined, rpmLimit: rpm, tpmLimit: tpm });
+    await POST(`/admin/providers/${providerId}/keys`, { apiKey, label: label||undefined, rpmLimit: rpm, tpmLimit: tpm, ownerTeamId: owner || null });
     toast('Key added'); closeModal(); loadKeysForProvider(providerId);
   } catch(e) { toast(e.message, true); }
 }

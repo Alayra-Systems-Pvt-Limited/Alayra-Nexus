@@ -219,8 +219,14 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     const keys = await prisma.nexusKey.findMany({
       where:   { providerId },
       orderBy: { createdAt: 'asc' },
+      include: { ownerTeam: { select: { name: true } } },
     });
-    return reply.send({ keys: keys.map(k => ({ ...k, encryptedKey: undefined })) });
+    // ownerTeamName is flattened for the dashboard's Owner column; null = shared pool.
+    return reply.send({
+      keys: keys.map(({ encryptedKey: _drop, ownerTeam, ...k }) => ({
+        ...k, ownerTeamName: ownerTeam?.name ?? null,
+      })),
+    });
   });
 
   const keySchema = z.object({
@@ -228,11 +234,19 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     label:    z.string().optional(),
     rpmLimit: z.number().int().min(1).default(60),
     tpmLimit: z.number().int().min(1).default(100000),
+    // BYOK: null/omitted = shared pool. Set to make the key private to one team.
+    ownerTeamId: z.string().uuid().nullish(),
   });
 
   fastify.post('/admin/providers/:providerId/keys', adminGuard, async (request, reply) => {
     const { providerId } = request.params as { providerId: string };
     const body = keySchema.parse(request.body);
+    // Reject an unknown owner up front: the FK would throw a 500, and silently
+    // dropping the owner would publish a private credential to the shared pool.
+    if (body.ownerTeamId) {
+      const owner = await prisma.team.findUnique({ where: { id: body.ownerTeamId }, select: { id: true } });
+      if (!owner) return reply.code(400).send({ error: 'ownerTeamId does not match any team' });
+    }
     const key = await prisma.nexusKey.create({
       data: {
         id:           randomUUID(),
@@ -242,6 +256,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         maskedKey:    maskKey(body.apiKey),
         rpmLimit:     body.rpmLimit,
         tpmLimit:     body.tpmLimit,
+        ownerTeamId:  body.ownerTeamId ?? null,
       },
     });
     return reply.code(201).send({ key: { ...key, encryptedKey: undefined } });
@@ -373,6 +388,9 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     assignedTier: z.enum(['premium', 'standard', 'fast']).nullish(),
     budgetUsd:    z.number().positive().nullish(),
     budgetPeriod: z.enum(['daily', 'weekly', 'monthly']).default('monthly'),
+    // BYOK: may this team's traffic fall back to the shared pool once its own
+    // provider keys are exhausted? Ignored for teams that own no keys.
+    byokFallback: z.boolean().default(true),
   });
 
   fastify.get('/admin/teams', adminGuard, async (_req, reply) => {
@@ -411,9 +429,13 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
   fastify.delete('/admin/teams/:id', adminGuard, async (request, reply) => {
     const { id } = request.params as { id: string };
-    // Keys survive their team (teamId → NULL via FK), they just lose the budget cap.
+    // Access keys survive their team (NexusTeamKey.teamId → NULL), losing only the
+    // budget cap. The team's *owned provider keys* (BYOK) are deleted with it — a
+    // private credential must never be released into the shared pool. The dashboard
+    // warns before this runs; the count is returned so a caller can too.
+    const ownedKeys = await prisma.nexusKey.count({ where: { ownerTeamId: id } });
     await prisma.team.delete({ where: { id } });
-    return reply.send({ success: true });
+    return reply.send({ success: true, deletedOwnedKeys: ownedKeys });
   });
 
   // ── Team keys ─────────────────────────────────────────────────────

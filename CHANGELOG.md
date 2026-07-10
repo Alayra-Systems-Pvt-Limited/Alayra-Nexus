@@ -10,6 +10,42 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 ## [Unreleased]
 
 ### Added
+- **BYOK — bring your own key (Phase 5.5):** a provider key can now be owned by a
+  team (`ownerTeamId`) instead of living in the shared pool. An owned key serves only
+  that team's traffic. Routing tries the team's own keys first, then — if the team's
+  new `byokFallback` flag allows it — the shared pool; with fall-back disabled the
+  team is hard-isolated and gets `503` rather than a credential it did not bring.
+  Owned keys are a *scoped pool*, not a parallel proxy: they reuse the same admission
+  control, circuit breaker, guardrails, SSRF checks, and analytics pipeline. A caller
+  with no team can never be routed through an owned key. Responses carry
+  `X-Nexus-BYOK: true`, and `nexus_byok_requests_total{result}` tracks
+  own / fallback / isolated_block. Configure via **Pools → + Key → Owner**, or
+  `POST /admin/providers/:providerId/keys`.
+
+### Changed
+- **The response cache is now partitioned by routing scope.** A response produced by
+  a team's private key is never replayed to another team or to the shared pool. This
+  changes the cache key, so entries written by an earlier version are ignored and the
+  cache repopulates naturally over one TTL after upgrade.
+- **Deleting a team now also deletes the provider keys it owns.** Its *access* keys
+  still survive, unassigned, losing only their budget cap. Releasing a private
+  credential into the shared pool — where every other caller could route through it —
+  is not an acceptable outcome of a delete. `DELETE /admin/teams/:id` returns
+  `deletedOwnedKeys` so a caller can report what went with it.
+- BYOK spend is costed, attributed, and counted against the team's budget cap. Set
+  `budgetUsd: null` for a team that funds its own keys and should not be capped.
+
+### Fixed
+- **Dashboard:** provider base URLs, team-key names, key labels, and error text are
+  escaped before reaching `innerHTML`, and copy-button values moved out of inline
+  `onclick` strings into `data-` attributes read by a delegated listener. A value
+  containing a quote could previously break out of the attribute it sat in.
+- **Dashboard:** a failed model-registry save no longer leaves the local registry
+  holding the rejected change, which the next save would have persisted.
+- **Dashboard:** the key "Test" button no longer stays stuck reading `err` when the
+  request itself throws. The analytics charts now index their series once instead of
+  rescanning the full result set for every plotted point.
+
 - **Response caching (Phase 4.5):** optional exact-match response cache. When enabled,
   an identical request (same model + messages + generation params) is served from
   Redis, skipping the provider entirely — a real $0 call. The cache key excludes

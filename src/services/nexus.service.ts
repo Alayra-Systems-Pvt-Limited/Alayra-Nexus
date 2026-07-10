@@ -24,8 +24,14 @@ import { getCostWeight }     from './routing.service';
 import { getModelRegistry }  from './model.service';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
 import { getSsrfPolicy }     from './ssrf.service';
+import { SHARED_NAMESPACE, type RoutingScope } from '../lib/scope';
 
 export { maskKey };
+
+/** The scope every caller gets when no team owns keys — the shared pool. */
+export const SHARED_SCOPE: RoutingScope = {
+  ownerTeamId: null, fallbackToShared: true, namespace: SHARED_NAMESPACE,
+};
 
 export type Tier = 'premium' | 'standard' | 'fast';
 
@@ -46,6 +52,9 @@ export interface NexusRoute {
   isProbe:      boolean;
   // True when the key was chosen by cache-aware sticky routing rather than LRU.
   sticky:       boolean;
+  // True when the key is privately owned by the calling team (BYOK) rather than
+  // drawn from the shared pool.
+  byok:         boolean;
 }
 
 // Provider fields the router needs to build a route from a picked key.
@@ -55,7 +64,7 @@ type ProviderRow = {
 };
 
 function buildRoute(
-  key: { id: string; encryptedKey: string },
+  key: { id: string; encryptedKey: string; ownerTeamId: string | null },
   provider: ProviderRow,
   gate: breaker.BreakerGate,
 ): Omit<NexusRoute, 'wasDowngrade' | 'sticky'> {
@@ -69,6 +78,7 @@ function buildRoute(
     authHeader:   provider.authHeader,
     authPrefix:   provider.authPrefix,
     isProbe:      gate === 'probe',
+    byok:         key.ownerTeamId !== null,
   };
 }
 
@@ -86,14 +96,19 @@ export function providerDefaultUrl(provider: string): string {
 async function tryPickKey(
   providerRow: ProviderRow,
   reserveTokens: number,
+  ownerTeamId: string | null,
 ): Promise<Omit<NexusRoute, 'wasDowngrade' | 'sticky'> | null> {
   if (!providerRow.preferredModel) return null;
 
   const now  = new Date();
   // Cooling keys are included so the circuit breaker can decide (open vs. probe)
   // — the live gate is breaker.acquire(), not the DB column. Banned keys stay out.
+  //
+  // `ownerTeamId` scopes the candidate set: null selects the shared pool (keys with
+  // no owner), a team id selects only that team's private keys. It is an equality
+  // filter, never a superset — a shared-pool caller can never see a BYOK key.
   const keys = await prisma.nexusKey.findMany({
-    where:   { providerId: providerRow.id, status: { in: ['active', 'cooling'] } },
+    where:   { providerId: providerRow.id, status: { in: ['active', 'cooling'] }, ownerTeamId },
     orderBy: { lastUsedAt: 'asc' },
   });
 
@@ -119,9 +134,18 @@ async function tryPickKey(
  * Returns null when there is no sticky key, or when it is banned, breaker-open, or
  * out of headroom — the caller then falls back to normal tier/LRU discovery.
  */
-async function tryStickyKey(keyId: string, reserveTokens: number): Promise<NexusRoute | null> {
+async function tryStickyKey(keyId: string, reserveTokens: number, scope: RoutingScope): Promise<NexusRoute | null> {
   const key = await prisma.nexusKey.findUnique({ where: { id: keyId }, include: { provider: true } });
   if (!key || key.status === 'banned' || !key.provider.isActive || !key.provider.preferredModel) return null;
+
+  // A sticky pin is a Redis session→key mapping that outlives any single request,
+  // so it must be re-authorized against this caller's scope. Without this check a
+  // session pinned while on the shared pool could resurface that key for an
+  // isolated BYOK team (and vice versa). An unusable pin just falls through to
+  // normal discovery.
+  const eligible = key.ownerTeamId === scope.ownerTeamId
+    || (key.ownerTeamId === null && scope.fallbackToShared);
+  if (!eligible) return null;
 
   const gate = await breaker.acquire(key.id);
   if (gate === 'open') return null;
@@ -133,43 +157,21 @@ async function tryStickyKey(keyId: string, reserveTokens: number): Promise<Nexus
   return { ...buildRoute(key, key.provider, gate), wasDowngrade: false, sticky: true };
 }
 
+/** Price lookup for cost-aware ordering. Built once per discovery, reused per pass. */
+type PriceOf = (p: { preferredModel: string | null }) => number | null;
+
 /**
- * Find the best available key, atomically reserving `reserveTokens` (estimated
- * input + max output) against the chosen key's TPM budget. When `sessionKey` is
- * given, a continuing conversation is pinned to the key that last served it so the
- * provider's prompt cache is reused; otherwise, and on any sticky miss, selection
- * falls back to tier order with LRU within a tier. Returns null only when every
- * eligible key is out of RPM or TPM headroom.
+ * One full sweep of tier order (premium → standard → fast), LRU within a tier,
+ * restricted to keys owned by `ownerTeamId` (null = shared pool). Both the BYOK
+ * pass and the shared-pool pass go through this same function, so breaker gating,
+ * atomic admission and cost ordering behave identically for owned and pooled keys.
  */
-export async function discoverBestPool(reserveTokens: number, sessionKey?: string | null): Promise<NexusRoute | null> {
-  // Sticky cache-affinity is resolved first and always wins over the cost
-  // tiebreaker: a cache hit on a slightly pricier provider usually beats a cache
-  // miss on the cheapest one.
-  if (sessionKey) {
-    const stickyKeyId = await getStickyKeyId(sessionKey);
-    if (stickyKeyId) {
-      const stickyRoute = await tryStickyKey(stickyKeyId, reserveTokens);
-      if (stickyRoute) return stickyRoute;
-    }
-  }
-
-  // Cost-aware routing (opt-in). When enabled, build a model→price lookup so
-  // providers can be reordered cheapest-first within a tier. Cost only reorders
-  // *attempts*; eligibility (breaker + admission) is still enforced per provider,
-  // so the returned provider is always the cheapest one that is actually usable.
-  const costWeight = await getCostWeight();
-  let priceOf: (p: { preferredModel: string | null }) => number | null = () => null;
-  if (costWeight > 0) {
-    const registry = await getModelRegistry();
-    const prices = new Map<string, number | null>();
-    for (const m of registry as unknown as Record<string, unknown>[]) {
-      const price = effectivePrice(m);
-      if (typeof m.modelString === 'string') prices.set(m.modelString, price);
-      if (typeof m.id === 'string')          prices.set(m.id, price);
-    }
-    priceOf = (p) => (p.preferredModel ? prices.get(p.preferredModel) ?? null : null);
-  }
-
+async function sweepTiers(
+  reserveTokens: number,
+  ownerTeamId: string | null,
+  costWeight: number,
+  priceOf: PriceOf,
+): Promise<NexusRoute | null> {
   let preferredTierFound = false;
 
   for (const tier of TIER_ORDER) {
@@ -182,7 +184,7 @@ export async function discoverBestPool(reserveTokens: number, sessionKey?: strin
 
     for (const provider of ordered) {
       if (!preferredTierFound) preferredTierFound = true;
-      const route = await tryPickKey(provider, reserveTokens);
+      const route = await tryPickKey(provider, reserveTokens, ownerTeamId);
       if (route) {
         const wasDowngrade = TIER_ORDER.indexOf(tier) > 0 && preferredTierFound;
         return { ...route, wasDowngrade, sticky: false };
@@ -190,6 +192,65 @@ export async function discoverBestPool(reserveTokens: number, sessionKey?: strin
     }
   }
   return null;
+}
+
+/**
+ * Find the best available key, atomically reserving `reserveTokens` (estimated
+ * input + max output) against the chosen key's TPM budget. When `sessionKey` is
+ * given, a continuing conversation is pinned to the key that last served it so the
+ * provider's prompt cache is reused; otherwise, and on any sticky miss, selection
+ * falls back to tier order with LRU within a tier.
+ *
+ * `scope` (Phase 5.5) decides which keys are eligible. A BYOK team sweeps its own
+ * keys first and only then — if it permits fall-back — the shared pool. A team with
+ * fall-back disabled is hard-isolated: null is returned rather than a pooled key.
+ *
+ * Returns null when every eligible key is out of RPM or TPM headroom.
+ */
+export async function discoverBestPool(
+  reserveTokens: number,
+  sessionKey?: string | null,
+  scope: RoutingScope = SHARED_SCOPE,
+): Promise<NexusRoute | null> {
+  // Sticky cache-affinity is resolved first and always wins over the cost
+  // tiebreaker: a cache hit on a slightly pricier provider usually beats a cache
+  // miss on the cheapest one. The pin is still re-checked against `scope`.
+  if (sessionKey) {
+    const stickyKeyId = await getStickyKeyId(sessionKey);
+    if (stickyKeyId) {
+      const stickyRoute = await tryStickyKey(stickyKeyId, reserveTokens, scope);
+      if (stickyRoute) return stickyRoute;
+    }
+  }
+
+  // Cost-aware routing (opt-in). When enabled, build a model→price lookup so
+  // providers can be reordered cheapest-first within a tier. Cost only reorders
+  // *attempts*; eligibility (breaker + admission) is still enforced per provider,
+  // so the returned provider is always the cheapest one that is actually usable.
+  const costWeight = await getCostWeight();
+  let priceOf: PriceOf = () => null;
+  if (costWeight > 0) {
+    const registry = await getModelRegistry();
+    const prices = new Map<string, number | null>();
+    for (const m of registry as unknown as Record<string, unknown>[]) {
+      const price = effectivePrice(m);
+      if (typeof m.modelString === 'string') prices.set(m.modelString, price);
+      if (typeof m.id === 'string')          prices.set(m.id, price);
+    }
+    priceOf = (p) => (p.preferredModel ? prices.get(p.preferredModel) ?? null : null);
+  }
+
+  // Pass 1 — the team's own keys, when it has any.
+  if (scope.ownerTeamId) {
+    const owned = await sweepTiers(reserveTokens, scope.ownerTeamId, costWeight, priceOf);
+    if (owned) return owned;
+    // Hard isolation: exhausting your own keys is a 503, not a silent hand-off to
+    // credentials you did not bring.
+    if (!scope.fallbackToShared) return null;
+  }
+
+  // Pass 2 — the shared pool.
+  return sweepTiers(reserveTokens, null, costWeight, priceOf);
 }
 
 export async function getNextCooldownSeconds(): Promise<number> {
