@@ -45,6 +45,13 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   `budgetUsd: null` for a team that funds its own keys and should not be capped.
 
 ### Fixed
+- **Opening the dashboard from the filesystem now explains itself.** Its JavaScript is
+  ES modules, which a browser refuses to load from a `file://` origin — so
+  double-clicking `index.html` rendered the login screen with every button inert and
+  no visible error. A small classic script now detects this and points at
+  `npm run dev` (or `npx serve frontend` to preview without a database).
+- **Demo mode** now shows the BYOK **Owner** column in its provider key tables, so the
+  preview matches the real dashboard.
 - **The admin dashboard is now present in the container image.** The runtime stage
   never copied the dashboard's static files, and `@fastify/static` only logs a
   warning for a missing root — so published images started cleanly, served the API

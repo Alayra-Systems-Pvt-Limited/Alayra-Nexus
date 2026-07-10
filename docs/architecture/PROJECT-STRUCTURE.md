@@ -84,6 +84,13 @@ handler functions onto `window` so the inline `onclick` attributes still in
 `index.html` keep working. That bridge is temporary and is removed when the dashboard
 is redesigned around delegated listeners.
 
+> [!IMPORTANT]
+> The dashboard **must be served over HTTP**. A browser refuses to load an ES module
+> from a `file://` origin, so opening `index.html` by double-clicking it leaves every
+> button inert. `js/boot-check.js` is a classic (non-module) script that detects this
+> and explains it, because it still runs when `main.js` cannot. Use `npm run dev`, or
+> `npx serve frontend` to preview without a database.
+
 ```
 main.js
 ├── state.js      shared mutable state (an object, so writes cross module boundaries)

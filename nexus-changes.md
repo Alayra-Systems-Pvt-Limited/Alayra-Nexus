@@ -11,6 +11,41 @@
 
 ---
 
+**Date:** 2026-07-10 · Session 24  
+**Author:** Abbas  
+**Title:** Dashboard — Verifying the Preview, and a Regression the Move Introduced  
+
+**Summary:**  
+Every section of the dashboard's server-less preview was exercised in a real browser
+rather than reasoned about: the endpoint panel, the provider pools with their key
+tables and utilisation meters, the model registry, the team keys, all four analytics
+charts, and the settings cards. All render, and no script error is raised anywhere in
+the walk. The preview needs neither a database nor a running gateway, which makes it
+the fastest honest check that the dashboard still works after any change to it.
+
+The exercise was prompted by a genuine defect, and it found one. Splitting the
+dashboard into ES modules made it lintable and reviewable, but it also made it
+unopenable: a browser refuses to load a module from a filesystem origin, so
+double-clicking the page now renders the login screen with every button silently
+inert. Nothing is logged, nothing is thrown, and the natural conclusion is that the
+dashboard is broken. The previous single-file page had no such constraint. A classic
+script — one that a browser *will* load from the filesystem, and which therefore still
+runs when the module graph cannot — now detects that origin and replaces the login box
+with the command needed to serve the page properly. A silent failure has been turned
+into an instruction.
+
+The preview's provider tables were also a version behind: they still showed the four
+columns that existed before keys could be owned by a team. They now carry the owner
+column, with one key attributed to a team and the rest to the shared pool, so the
+preview shows the product as it actually is rather than as it was.
+
+Finally, the local preview configuration had been pointing at a directory that ceased
+to exist when the project was renamed, which is why the dashboard could not be served
+during earlier sessions and why its behaviour had been argued about rather than
+observed. It points at the right place now.
+
+---
+
 **Date:** 2026-07-10 · Session 23  
 **Author:** Abbas  
 **Title:** Brand — Generated Banners for README, X, and the Social Card  
