@@ -34,7 +34,14 @@ services:
       retries: 10
 
   nexus:
-    build: .
+    # Runs the published image. `docker compose up -d` downloads it — nothing is
+    # compiled, and no source checkout is needed beyond this file.
+    #
+    # Pin a version in production: NEXUS_VERSION=1.2.0 in your .env.
+    #
+    # Building from source instead (contributors):
+    #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+    image: ghcr.io/alayra-systems-pvt-limited/alayra-nexus:${NEXUS_VERSION:-latest}
     restart: unless-stopped
     ports:
       - "3000:3000"

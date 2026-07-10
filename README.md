@@ -139,17 +139,42 @@ Pin a version for production (e.g. `:1.2.0`) rather than `:latest`.
 
 ### Option B — Docker Compose (brings its own Postgres + Redis)
 
-```bash
-git clone https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus.git
-cd alayra-nexus
+Nothing to clone and nothing to compile: Compose downloads the published image and
+starts Postgres and Redis alongside it.
 
-cp .env.example .env
-# Edit .env — set MASTER_ENCRYPTION_KEY, ADMIN_PASSWORD, and DB/Redis URLs
+```bash
+curl -O https://raw.githubusercontent.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/main/docker-compose.yml
+
+# Two secrets. Keep MASTER_ENCRYPTION_KEY safe — without it your stored
+# provider keys can never be decrypted again.
+cat > .env <<EOF
+MASTER_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+ADMIN_PASSWORD=change-me
+NEXUS_VERSION=1.2.0
+EOF
 
 docker compose up -d
 ```
 
-Dashboard is live at `http://localhost:3000`
+Dashboard is live at `http://localhost:3000`. The container applies its own database
+migrations on startup, and prints your generated Nexus API key on first run —
+`docker compose logs nexus` to see it.
+
+`DATABASE_URL` and `REDIS_URL` are set by Compose; you do not need to supply them.
+Omit `NEXUS_VERSION` to track `latest`, but pin it in production.
+
+<details>
+<summary>Building from source instead (contributors)</summary>
+
+```bash
+git clone https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus.git
+cd alayra-nexus
+cp .env.example .env   # set MASTER_ENCRYPTION_KEY and ADMIN_PASSWORD
+
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+</details>
 
 ---
 

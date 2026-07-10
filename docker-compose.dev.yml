@@ -1,0 +1,13 @@
+# Developer override: build the gateway from this checkout instead of pulling the
+# published image. Compose merges this on top of docker-compose.yml.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# Without this file, `docker compose up -d` downloads the published image — which is
+# what a user wants, and what the Quick Start in the README promises.
+
+services:
+  nexus:
+    build: .
+    # Name the locally-built image so it cannot be confused with a pulled one.
+    image: alayra-nexus:dev
