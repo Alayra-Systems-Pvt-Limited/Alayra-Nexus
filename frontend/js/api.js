@@ -3,7 +3,7 @@
 import { state, logout } from './state.js';
 
 async function api(method, path, body) {
-  const opts = { method, headers: { Authorization: `Bearer ${state.pwd}`, 'Content-Type': 'application/json' } };
+  const opts = { method, headers: { Authorization: `Bearer ${state.token}`, 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
   if (res.status === 401) { logout(); return null; }

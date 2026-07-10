@@ -17,6 +17,9 @@ for the layering rule and the request path.
 | `tokenizer.ts` | `js-tiktoken` token counting and the pre-admission reserve estimate |
 | `url.ts` | SSRF: `assertSafeUrl`, `isPrivateHost` |
 | `encryption.ts` | AES-256-GCM encrypt/decrypt and key masking |
+| `timingSafe.ts` | `safeEqual` — constant-time secret comparison, length-safe |
+| `totp.ts` | RFC 6238 TOTP over RFC 4226 HOTP, base32, `otpauth://` URI. No dependencies |
+| `startup.ts` | Startup-failure formatting; redacts credentials out of connection URLs |
 | `metrics.ts` | Prometheus registry and every recording helper |
 | `tracing.ts` | OpenTelemetry span for the upstream call; a no-op without an SDK |
 | `rateLimitKey.ts` | Per-credential key for the abuse guard |
@@ -29,6 +32,8 @@ for the layering rule and the request path.
 | `completionsProxy.service.ts` | **The request path.** Budget → guardrails → scope → cache → route → upstream → outcome → usage |
 | `nexus.service.ts` | Key selection: `discoverBestPool`, tier sweeps, sticky resolution, breaker outcome reporters, provider probes |
 | `byok.service.ts` | Resolves a request's routing scope from its team |
+| `adminAuth.service.ts` | Sessions, login lockout, TOTP enrolment, recovery codes, admin API tokens |
+| `preflight.service.ts` | Verifies Postgres and Redis are reachable before the server starts |
 | `budget.service.ts` | Per-team period spend, Redis-tracked and seeded from usage history |
 | `token.service.ts` | Costs a request and emits a usage event; analytics queries |
 | `usagePipeline.ts` | Buffers usage events and writes them in batches off the request path |
@@ -43,6 +48,7 @@ for the layering rule and the request path.
 | `proxy.ts` | `/v1/chat/completions`, `/v1/models` |
 | `admin/index.ts` | Registers the sub-routers below |
 | `admin/guard.ts` | `adminGuard` — the single place admin auth is applied |
+| `admin/auth.routes.ts` | `/admin/login` (the one unguarded admin route), TOTP, recovery codes, API tokens |
 | `admin/system.routes.ts` | Dashboard config, health, API-key management, routing status, cache bust |
 | `admin/settings.routes.ts` | SSRF, guardrails, cost routing, response cache, raw settings |
 | `admin/providers.routes.ts` | Provider pools; credential and model validation probes |

@@ -11,6 +11,73 @@
 
 ---
 
+**Date:** 2026-07-10 · Session 26  
+**Author:** Abbas  
+**Title:** Phase 6 — Security & Auth Hardening  
+
+**Summary:**  
+The admin password, the gateway's API key, and the metrics token were each compared
+with a plain equality check. String equality abandons the comparison at the first
+byte that differs, so the time taken to reject a wrong guess reveals how many leading
+characters were right, and a patient caller can recover a secret one character at a
+time. All three now go through a constant-time comparison over fixed-width digests,
+which also sidesteps the trap that the underlying primitive rejects operands of
+unequal length — a naive guard against that would itself have disclosed the length of
+the secret. Team keys were never affected; they have always been hashed lookups.
+
+The larger problem was structural, and the phase could not be honestly delivered
+without confronting it. The dashboard held the administrator's password in browser
+storage and presented it as the bearer token on every request. A second factor cannot
+be attached to an arrangement like that. A second factor exists to make a login
+produce a credential that proves the factor was satisfied; if the credential is the
+password itself, then anyone who has the password never encounters the factor at all.
+Adding a code prompt to the sign-in screen while leaving password-bearer authentication
+in place would have looked like two-factor authentication and protected nothing.
+
+Signing in therefore now exchanges the password, and an authenticator code once one is
+enrolled, for a short-lived session token. Only that token is stored by the browser,
+which also removes the administrator's password from the reach of any cross-site
+scripting on the page — a category of flaw this project has had to fix twice in the
+last week. Once a second factor is confirmed, the password stops being accepted as a
+bearer token on the administrative API, because leaving it accepted would restore the
+bypass the factor exists to close. Scripts and continuous integration, which cannot
+present a code, authenticate instead with named administrative tokens that are stored
+hashed, listed in the dashboard, and revocable. Before anyone enrols a factor,
+everything behaves exactly as it did, so upgrading changes nothing.
+
+The time-based algorithm itself is implemented against node's cryptography rather than
+taken from a package. It is a keyed hash, a truncation, and a modulo, and both governing
+specifications publish test vectors — so its correctness is demonstrated by those
+vectors rather than assumed, and the most security-sensitive path in the project takes
+on no third-party code. Verification accepts one time step of clock drift in either
+direction, compares every candidate in constant time, and deliberately does not stop at
+the first match, because an early exit would make a correct-but-skewed code faster to
+check than a wrong one and thereby disclose the device's clock offset.
+
+Enrolment is deliberately two-staged. A secret is minted and stored encrypted but
+inert; nothing about authentication changes until a code proves the operator actually
+holds it. An enrolment abandoned halfway therefore cannot lock anybody out of their own
+gateway. Confirmation issues ten single-use recovery codes, shown once and retained
+only as hashes, any one of which substitutes for the authenticator when a phone is
+lost.
+
+Repeated sign-in failures now lock the originating address out for a fixed window and
+return the wait time. A correct password offers no escape from an active lockout, and a
+wrong password is reported identically to a wrong code, so the form cannot be used to
+learn whether a password was right before the second factor was reached. Sign-in
+outcomes are counted by result, because a rising rate of rejections is how an operator
+learns someone is guessing.
+
+Finally the schema gained a table for custom domains, each with its own verification
+state and challenge token, ahead of the interface that will drive it — a table rather
+than a column, because a team may map more than one hostname and each has to be proven
+separately, and because discovering that halfway through a user-interface phase would
+mean migrating the database in the middle of it.
+
+**Green gate:** lint 0 · typecheck 0 · 220 tests pass (+62) · build 0 · npm audit 0 vulnerabilities.
+
+---
+
 **Date:** 2026-07-10 · Session 25  
 **Author:** Abbas  
 **Title:** Startup Diagnostics — Saying What Is Missing  

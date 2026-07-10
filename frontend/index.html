@@ -16,6 +16,12 @@
     <div class="login-sub">by Alayra Systems</div>
     <label>Admin password</label>
     <input type="password" id="login-pwd" placeholder="Enter your ADMIN_PASSWORD" autofocus/>
+    <!-- Revealed only when the server reports that a second factor is enrolled. -->
+    <div id="login-totp-row" style="display:none;margin-top:12px">
+      <label>Authenticator code</label>
+      <input type="text" id="login-totp" placeholder="6-digit code, or a recovery code"
+             inputmode="numeric" autocomplete="one-time-code"/>
+    </div>
     <div class="login-err" id="login-err"></div>
     <button class="btn-primary" style="width:100%;margin-top:14px" onclick="doLogin()">Sign in →</button>
     <div style="text-align:center;margin-top:12px">

@@ -105,6 +105,13 @@ const byokRequestsTotal = new Counter({
   registers: [registry],
 });
 
+const adminLoginTotal = new Counter({
+  name: 'nexus_admin_login_total',
+  help: 'Admin sign-in attempts by outcome (success | invalid | totp_required | locked_out).',
+  labelNames: ['result'],
+  registers: [registry],
+});
+
 // ── Recording helpers (called from the request path) ──────────────────────────
 
 export type RequestOutcome =
@@ -138,6 +145,14 @@ export function responseCache(result: 'hit' | 'miss' | 'store'): void { response
  */
 export function byokRequest(result: 'own' | 'fallback' | 'isolated_block'): void {
   byokRequestsTotal.inc({ result });
+}
+
+/**
+ * Admin sign-in outcome. A rising `invalid` or `locked_out` rate is the signal that
+ * someone is guessing the admin password.
+ */
+export function adminLogin(result: 'success' | 'invalid' | 'totp_required' | 'locked_out'): void {
+  adminLoginTotal.inc({ result });
 }
 
 // Refresh pool gauges from the DB. Called per scrape; a scrape is infrequent, so a

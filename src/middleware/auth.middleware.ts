@@ -18,6 +18,8 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { createHash }   from 'crypto';
 import { getSetting }   from '../services/settings.service';
 import { prisma }       from '../lib/prisma';
+import { safeEqual }    from '../lib/timingSafe';
+import { isValidSession, verifyAdminApiToken, isTwoFactorEnabled } from '../services/adminAuth.service';
 
 export async function verifyApiKey(request: FastifyRequest, reply: FastifyReply) {
   const auth = request.headers.authorization;
@@ -26,9 +28,10 @@ export async function verifyApiKey(request: FastifyRequest, reply: FastifyReply)
   }
   const token = auth.slice(7);
 
-  // 1. Check main Nexus API key
+  // 1. Check main Nexus API key. Constant-time: `===` short-circuits at the first
+  // differing byte, so rejection latency reveals how many leading bytes were right.
   const nexusKey = await getSetting('NEXUS_API_KEY');
-  if (nexusKey && token === nexusKey) return;
+  if (safeEqual(token, nexusKey)) return;
 
   // 2. Check team keys via SHA-256 hash (O(1) DB lookup, no decryption needed).
   // The team relation rides the same query so budget/status enforcement costs no
@@ -54,14 +57,35 @@ export async function verifyApiKey(request: FastifyRequest, reply: FastifyReply)
   return reply.code(401).send({ error: 'Invalid API key' });
 }
 
+/**
+ * Guard for every /admin route. A caller may present, in order of preference:
+ *
+ *   1. a dashboard session token from POST /admin/login,
+ *   2. an admin API token (for scripts and CI, which cannot present a second factor),
+ *   3. the raw ADMIN_PASSWORD — but ONLY while no second factor is confirmed.
+ *
+ * Rule 3 is the whole point of the phase. If the password kept working as a bearer
+ * token after 2FA was enabled, anyone holding it would bypass the second factor and
+ * the feature would be decorative. It stays accepted before enrolment so that
+ * upgrading the gateway changes nothing for existing operators.
+ */
 export async function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply) {
   const auth = request.headers.authorization;
   if (!auth?.startsWith('Bearer ')) {
     return reply.code(401).send({ error: 'Unauthorized' });
   }
-  const token    = auth.slice(7);
-  const adminPwd = process.env.ADMIN_PASSWORD;
-  if (!adminPwd || token !== adminPwd) {
+  const token = auth.slice(7);
+
+  if (await isValidSession(token)) return;
+  if (await verifyAdminApiToken(token)) return;
+
+  if (await isTwoFactorEnabled()) {
+    return reply.code(401).send({
+      error: 'Two-factor authentication is enabled. Sign in at /admin/login for a session token, or use an admin API token.',
+    });
+  }
+
+  if (!safeEqual(token, process.env.ADMIN_PASSWORD)) {
     return reply.code(401).send({ error: 'Unauthorized' });
   }
 }
@@ -78,7 +102,7 @@ export async function verifyMetricsToken(request: FastifyRequest, reply: Fastify
   }
   const token    = auth.slice(7);
   const expected = process.env.METRICS_TOKEN || process.env.ADMIN_PASSWORD;
-  if (!expected || token !== expected) {
+  if (!safeEqual(token, expected)) {
     return reply.code(401).send({ error: 'Unauthorized' });
   }
 }

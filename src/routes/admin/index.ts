@@ -16,6 +16,7 @@
 
 import { FastifyInstance } from 'fastify';
 
+import adminAuthRoutes      from './auth.routes';
 import adminSystemRoutes    from './system.routes';
 import adminSettingsRoutes  from './settings.routes';
 import adminProvidersRoutes from './providers.routes';
@@ -30,6 +31,8 @@ import adminTeamsRoutes     from './teams.routes';
  * irrelevant and no prefix is inherited.
  */
 export default async function adminRoutes(fastify: FastifyInstance) {
+  // Auth first: /admin/login is the one route here that is not behind adminGuard.
+  await fastify.register(adminAuthRoutes);
   await fastify.register(adminSystemRoutes);
   await fastify.register(adminSettingsRoutes);
   await fastify.register(adminProvidersRoutes);

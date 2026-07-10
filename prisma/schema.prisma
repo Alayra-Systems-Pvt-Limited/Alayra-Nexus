@@ -97,6 +97,7 @@ model Team {
   updatedAt    DateTime       @updatedAt
   teamKeys     NexusTeamKey[]
   ownedKeys    NexusKey[]
+  domains      DomainAlias[]
 }
 
 model NexusTeamKey {
@@ -118,4 +119,58 @@ model AppSettings {
   key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// ── Admin authentication (Phase 6) ────────────────────────────────────────────
+
+// Single-row table holding the admin's second factor. `totpSecret` is stored with the
+// same AES-256-GCM envelope as provider credentials, never in plaintext.
+// `confirmedAt` is null between enrolment and the first verified code, so an
+// abandoned enrolment never locks anyone out.
+model AdminAuth {
+  id          String    @id @default("singleton")
+  totpSecret  String?
+  confirmedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// Single-use codes that substitute for a TOTP code when the authenticator is lost.
+// Only the hash is stored — a stolen database cannot yield a usable code.
+model AdminRecoveryCode {
+  id        String    @id @default(uuid())
+  codeHash  String    @unique
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// Long-lived credentials for scripts and CI, which cannot present a second factor.
+// Hashed like team keys, so verification is an indexed lookup rather than a compare.
+// Revocation is a timestamp, not a delete, so an audit trail survives.
+model AdminApiToken {
+  id         String    @id @default(uuid())
+  name       String
+  tokenHash  String    @unique
+  maskedKey  String
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+// ── Custom domains (schema now; UI in Phase 7) ────────────────────────────────
+// A team may map several hostnames, and each carries its own verification state, so
+// this is a table rather than a column on Team. `verificationToken` is the value the
+// operator publishes as a DNS TXT record to prove control of the domain.
+model DomainAlias {
+  id                String    @id @default(uuid())
+  domain            String    @unique
+  teamId            String?
+  team              Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  status            String    @default("pending") // pending | verified | failed
+  verificationToken String
+  verifiedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([teamId])
 }

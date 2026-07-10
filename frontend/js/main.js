@@ -65,10 +65,12 @@ Object.assign(window, {
 });
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
-document.getElementById('login-pwd')
-  .addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+for (const id of ['login-pwd', 'login-totp']) {
+  document.getElementById(id)
+    .addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+}
 
-if (state.pwd === 'demo') {
+if (state.token === 'demo') {
   document.getElementById('login-screen').style.display = 'none';
   enterDemoMode();
 } else {

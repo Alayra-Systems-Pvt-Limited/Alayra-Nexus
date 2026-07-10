@@ -65,7 +65,8 @@ Alayra Nexus is the infrastructure layer that sits between your application and 
 | **CSV Export** | One-click export of all analytics data for finance or reporting |
 | **Model Registry** | Manage which models are available, their tier, capabilities, and per-1M token pricing |
 | **Web Admin Dashboard** | Full browser UI — no CLI required for day-to-day operations |
-| **Security Hardened** | Fastify Helmet, CORS, bcrypt admin auth, AES-256-GCM key encryption, zero plaintext secrets at rest |
+| **Two-Factor Admin Auth** | Optional TOTP second factor with single-use recovery codes, session tokens, per-source login lockout, and revocable API tokens for scripts |
+| **Security Hardened** | Fastify Helmet, CORS, constant-time secret comparison, AES-256-GCM key encryption, zero plaintext secrets at rest |
 
 ---
 
@@ -581,12 +582,58 @@ node --require @opentelemetry/auto-instrumentations-node/register dist/server.js
 | Layer | Implementation |
 |---|---|
 | **Key encryption** | AES-256-GCM with a per-deployment `MASTER_ENCRYPTION_KEY`; plaintext keys never touch the database |
-| **Admin authentication** | bcrypt-hashed admin password on every protected route |
+| **Admin authentication** | Password exchanged at `/admin/login` for a short-lived session token; optional TOTP second factor; per-source lockout after repeated failures (see below) |
+| **Constant-time secrets** | The admin password, the Nexus API key, and the metrics token are compared with `crypto.timingSafeEqual` over fixed-width digests, so rejection latency reveals nothing about the secret |
 | **Team key hashing** | SHA-256; plaintext shown once at creation, never stored |
 | **HTTP hardening** | Fastify Helmet — `X-Frame-Options`, `X-Content-Type-Options`, HSTS, CSP headers |
 | **CORS** | Configurable origin allowlist |
 | **SSRF protection** | Outbound provider requests are restricted to http(s) **and** blocked from private/loopback/internal hosts by default (see below) |
 | **No telemetry** | Zero outbound calls to Alayra Systems or any third party. All data stays in your infrastructure |
+
+### Admin authentication
+
+Signing in `POST`s your password (and, once enrolled, an authenticator code) to
+`/admin/login` and receives a **session token**. The dashboard stores only that token;
+your admin password is never written to browser storage.
+
+**Two-factor authentication (TOTP)** is optional and off by default. Enable it from
+**Settings**, or via the API:
+
+```bash
+# 1. Enrol — returns a secret and an otpauth:// URI for your authenticator app
+curl -X POST -H "Authorization: Bearer $TOKEN" http://localhost:3000/admin/auth/totp/enrol
+
+# 2. Confirm with a code from the app — returns 10 single-use recovery codes
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"code":"123456"}' http://localhost:3000/admin/auth/totp/confirm
+```
+
+Enrolment does not take effect until a code confirms it, so an abandoned enrolment
+can never lock you out. Recovery codes are shown once and stored only as hashes; any
+one of them may be used in place of an authenticator code.
+
+> [!IMPORTANT]
+> **Once 2FA is enabled, `ADMIN_PASSWORD` stops working as a bearer token on
+> `/admin/*`.** It has to: if the password still authenticated API calls, anyone
+> holding it would bypass the second factor entirely. Use a session token, or an
+> **admin API token** for scripts and CI:
+>
+> ```bash
+> curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+>   -d '{"name":"ci"}' http://localhost:3000/admin/tokens
+> ```
+>
+> Admin API tokens are hashed, listed, and revocable, and are not subject to the
+> second factor — treat them as the credential they are. Before 2FA is enabled, the
+> password keeps working as a bearer token exactly as before, so upgrading changes
+> nothing.
+
+**Lockout.** After `ADMIN_MAX_LOGIN_ATTEMPTS` (default 5) failed sign-ins, the source
+address is locked out for `ADMIN_LOCKOUT_SECONDS` (default 900) and receives `429`
+with `Retry-After` — including for a correct password. A wrong password and a wrong
+authenticator code are indistinguishable in the response, so the login form cannot be
+used as a password oracle. `nexus_admin_login_total{result}` tracks
+success / invalid / totp_required / locked_out.
 
 ### SSRF protection
 
@@ -668,7 +715,7 @@ Named presets you can copy as starting points: `email`, `us-phone`, `credit-card
 - [x] Optional exact-match response caching
 - [x] Prometheus `/metrics` endpoint and optional OpenTelemetry tracing
 - [x] BYOK — team-owned provider keys with optional hard isolation
-- [ ] Admin auth hardening — constant-time compare, login lockout, TOTP 2FA
+- [x] Admin auth hardening — constant-time compare, login lockout, TOTP 2FA
 - [ ] Webhook and email alerts on key failure or budget threshold
 - [ ] Custom domain / CNAME support
 - [ ] Integration test suite

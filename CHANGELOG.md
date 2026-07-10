@@ -10,6 +10,21 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 ## [Unreleased]
 
 ### Added
+- **Admin authentication hardening (Phase 6).** Signing in now exchanges the password
+  for a short-lived **session token** at `POST /admin/login`; the dashboard no longer
+  keeps `ADMIN_PASSWORD` in browser storage. Optional **TOTP two-factor
+  authentication** (RFC 6238, implemented on node's crypto with no new dependency and
+  verified against the RFC's published test vectors) with ten single-use **recovery
+  codes**, both enrolled from Settings or `/admin/auth/totp/*`. Enrolment takes effect
+  only once a code confirms it, so an abandoned enrolment cannot lock you out.
+  **Per-source lockout** after `ADMIN_MAX_LOGIN_ATTEMPTS` failures (default 5) for
+  `ADMIN_LOCKOUT_SECONDS` (default 900), returning `429` + `Retry-After`. A wrong
+  password and a wrong code are indistinguishable in the response, so the login form
+  cannot be used as a password oracle. **Admin API tokens** (`/admin/tokens`, hashed
+  and revocable) let scripts and CI authenticate without a second factor.
+  `nexus_admin_login_total{result}` tracks sign-in outcomes.
+- **Custom-domain storage** — a `DomainAlias` model with per-domain verification state
+  and a TXT challenge token. Schema only; the UI arrives in Phase 7.
 - **Architecture docs** (`docs/architecture/`): `PROJECT-STRUCTURE.md` covers the
   layering rule and the full request path; `FILE-OVERVIEW.md` is a where-to-look
   index and a checklist for adding a feature.
@@ -25,7 +40,23 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   own / fallback / isolated_block. Configure via **Pools → + Key → Owner**, or
   `POST /admin/providers/:providerId/keys`.
 
+### Security
+- The admin password, the Nexus API key, and the metrics token are now compared with
+  `crypto.timingSafeEqual` over fixed-width digests. `===` on strings short-circuits at
+  the first differing byte, so rejection latency leaked how many leading bytes of a
+  guess were correct. Team keys were already safe (hashed lookups).
+- Provider names and ids no longer reach inline `onclick` handlers. HTML escaping does
+  not protect a JavaScript string context — a browser decodes an attribute before
+  parsing its contents as code — so a provider named `O'Reilly'); …` could break out.
+  Values now travel in `data-` attributes read by a delegated listener. The edit-pool
+  modal's `value=` attributes and several tabs' upstream error text are escaped too.
+
 ### Changed
+- **`GET /admin/routing/status` reports per-provider key counts.** `totalKeys` and
+  `activeKeys` were summed across a whole tier and then stamped onto every provider in
+  it, so any tier with more than one provider showed each of them the tier's combined
+  total — which the dashboard renders per provider.
+- **README:** admin authentication was described as "bcrypt-hashed"; it never was.
 - **Repository layout.** The admin dashboard moved from `public/` to `frontend/`,
   where its CSS and JavaScript are now separate files rather than one inline
   `<script>`; `frontend/js/` is a set of ES modules and is linted like the rest of

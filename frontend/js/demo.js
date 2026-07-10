@@ -3,7 +3,7 @@
 import { state } from './state.js';
 
 function enterDemoMode() {
-  state.pwd = 'demo'; sessionStorage.setItem('nx_pwd','demo');
+  state.token = 'demo'; sessionStorage.setItem('nx_token','demo');
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('status-label').textContent = '3 keys active';
