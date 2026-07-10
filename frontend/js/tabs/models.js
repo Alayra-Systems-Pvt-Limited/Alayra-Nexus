@@ -4,10 +4,24 @@ import { esc, toast, fmtNum, openModal, closeModal } from '../utils.js';
 import { PROVIDER_LABELS } from '../providers.js';
 import { state } from '../state.js';
 
-const MODEL_CAPS = ['isPrimary','isFallback','hasVision','hasFIM','hasToolCalling'];
-const CAP_LABELS = { isPrimary:'Primary', isFallback:'Fallback', hasVision:'Vision', hasFIM:'FIM', hasToolCalling:'Tools' };
+// Capabilities are modalities — which endpoint a model may serve. They drive routing
+// (Phase 6.1): an embedding request only considers models with 'embedding'. Every
+// model gets 'chat' by default.
+const CAPABILITIES = ['chat','completion','embedding','image','speech','transcription'];
+const CAP_LABELS = {
+  chat:'Chat', completion:'Completion (FIM)', embedding:'Embedding',
+  image:'Image', speech:'Speech', transcription:'Transcription',
+};
+// Feature flags describe a chat model, they are not endpoints.
+const FEATURES = ['hasVision','hasToolCalling'];
+const FEATURE_LABELS = { hasVision:'Vision', hasToolCalling:'Tools' };
 const TIER_MAP = { premium:'badge-yellow', standard:'badge-purple', fast:'badge-green' };
 const STATUS_COLORS = { active:'var(--green)', paused:'var(--yellow)', retired:'var(--muted)' };
+
+function modelCapabilities(m) {
+  const caps = Array.isArray(m.capabilities) && m.capabilities.length ? m.capabilities : ['chat'];
+  return caps.filter(c => CAPABILITIES.includes(c));
+}
 
 async function loadModels() {
   if (window._demoMode) return;
@@ -44,7 +58,8 @@ function renderModelCard(m) {
       <div class="model-string">${esc(m.modelString)}</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <div class="model-caps">
-          ${MODEL_CAPS.map(c=>`<span class="cap-badge ${m[c]?'active':''}">${CAP_LABELS[c]}</span>`).join('')}
+          ${modelCapabilities(m).map(c=>`<span class="cap-badge active">${CAP_LABELS[c]}</span>`).join('')}
+          ${FEATURES.filter(f=>m[f]).map(f=>`<span class="cap-badge" style="opacity:.7">${FEATURE_LABELS[f]}</span>`).join('')}
         </div>
         ${cost}
         ${m.contextWindow?`<span style="font-size:11px;color:var(--muted)">${fmtNum(m.contextWindow)} ctx</span>`:''}
@@ -76,9 +91,16 @@ async function showEditModel(id) {
 
 function buildModelForm(m) {
   const isNew = !m;
-  const caps = MODEL_CAPS.map(c =>
-    `<label class="cap-toggle ${m&&m[c]?'on':''}" onclick="this.classList.toggle('on')">
-      <input type="checkbox" id="cap-${c}" ${m&&m[c]?'checked':''}/>${CAP_LABELS[c]}
+  const selectedCaps = m ? modelCapabilities(m) : ['chat'];
+  const caps = CAPABILITIES.map(c => {
+    const on = selectedCaps.includes(c);
+    return `<label class="cap-toggle ${on?'on':''}" onclick="this.classList.toggle('on')">
+      <input type="checkbox" id="cap-${c}" ${on?'checked':''}/>${CAP_LABELS[c]}
+    </label>`;
+  }).join('');
+  const features = FEATURES.map(f =>
+    `<label class="cap-toggle ${m&&m[f]?'on':''}" onclick="this.classList.toggle('on')">
+      <input type="checkbox" id="feat-${f}" ${m&&m[f]?'checked':''}/>${FEATURE_LABELS[f]}
     </label>`
   ).join('');
   return `
@@ -123,8 +145,12 @@ function buildModelForm(m) {
       </div>
     </div>
     <div class="form-row">
-      <label class="form-label">Capabilities</label>
+      <label class="form-label">Capabilities — which endpoints this model serves</label>
       <div class="cap-toggle-row">${caps}</div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Features (chat)</label>
+      <div class="cap-toggle-row">${features}</div>
     </div>
     <div class="form-grid">
       <div class="form-row">
@@ -162,17 +188,17 @@ async function submitModel(existingId) {
     tier:            document.getElementById('m-tier').value,
     status:          document.getElementById('m-status').value,
     priority:        parseInt(document.getElementById('m-priority').value) || 1,
-    isPrimary:       document.getElementById('cap-isPrimary').checked,
-    isFallback:      document.getElementById('cap-isFallback').checked,
-    hasVision:       document.getElementById('cap-hasVision').checked,
-    hasFIM:          document.getElementById('cap-hasFIM').checked,
-    hasToolCalling:  document.getElementById('cap-hasToolCalling').checked,
+    capabilities:    CAPABILITIES.filter(c => document.getElementById('cap-'+c).checked),
+    hasVision:       document.getElementById('feat-hasVision').checked,
+    hasToolCalling:  document.getElementById('feat-hasToolCalling').checked,
+    hasFIM:          false, // superseded by the 'completion' capability
     inputCostPer1M:  parseFloat(document.getElementById('m-input-cost').value) || 0,
     outputCostPer1M: parseFloat(document.getElementById('m-output-cost').value) || 0,
     contextWindow:   parseInt(document.getElementById('m-ctx').value) || 0,
     maxTokens:       parseInt(document.getElementById('m-max-tokens').value) || 0,
   };
   if (!model.modelString) { toast('Model string is required', true); return; }
+  if (!model.capabilities.length) model.capabilities = ['chat']; // never save a model that serves nothing
   if (existingId) {
     state.modelRegistry = state.modelRegistry.map(m => m.id === existingId ? model : m);
   } else {

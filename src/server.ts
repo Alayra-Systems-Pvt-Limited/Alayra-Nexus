@@ -27,6 +27,7 @@ import { prisma }         from './lib/prisma';
 import { redis }          from './lib/redis';
 import { deriveRateLimitKey } from './lib/rateLimitKey';
 import { getSetting, setSetting } from './services/settings.service';
+import { reconcilePoolsToRegistry } from './services/model.service';
 import { drainUsage }     from './services/usagePipeline';
 import { metricsText, metricsContentType } from './lib/metrics';
 import { verifyMetricsToken } from './middleware/auth.middleware';
@@ -48,6 +49,16 @@ const ABUSE_RATE_LIMIT_WINDOW = process.env.ABUSE_RATE_LIMIT_WINDOW ?? '1 minute
 async function bootstrap() {
   // Fail with an instruction, not a retry storm, when Postgres or Redis is missing.
   await assertDependencies();
+
+  // Phase 6.1 transition: seed the model registry from any pool that still carries a
+  // preferred model, so routing behaves exactly as before the model-first switch.
+  // Non-fatal — a registry hiccup must never stop the gateway starting.
+  try {
+    const seeded = await reconcilePoolsToRegistry();
+    if (seeded > 0) console.log(`  Seeded ${seeded} model(s) into the registry from existing pools.`);
+  } catch (err) {
+    console.warn('  Model registry reconcile skipped:', err instanceof Error ? err.message : err);
+  }
 
   // ── Generate API key on first run ────────────────────────────────
   const existing = await getSetting('NEXUS_API_KEY');

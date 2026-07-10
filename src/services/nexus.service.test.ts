@@ -36,7 +36,8 @@ const provider = (id: string, tier: string): Provider => ({
 // `vi.mock` factories are hoisted above the module body, so the shared fixture
 // state has to be hoisted with them.
 const { state, prismaMock } = vi.hoisted(() => {
-  const state: { keys: Record<string, unknown>[]; providers: Record<string, unknown>[] } = { keys: [], providers: [] };
+  const state: { keys: Record<string, unknown>[]; providers: Record<string, unknown>[]; registry: Record<string, unknown>[] } =
+    { keys: [], providers: [], registry: [] };
   // findMany honours the `ownerTeamId` equality filter exactly as Postgres would
   // (null matches only null) — that equality *is* the isolation guarantee.
   const prismaMock = {
@@ -54,7 +55,12 @@ const { state, prismaMock } = vi.hoisted(() => {
       update: vi.fn(async () => ({})),
     },
     nexusProvider: {
-      findMany: vi.fn(async ({ where }: { where: { tier: string } }) => state.providers.filter(p => p.tier === where.tier)),
+      // Handles both query shapes: the legacy tier walk (`where.tier`) and the
+      // model-first per-provider lookup (`where.provider`).
+      findMany: vi.fn(async ({ where }: { where: { tier?: string; provider?: string; isActive?: boolean } }) =>
+        state.providers.filter(p =>
+          (where.tier === undefined || p.tier === where.tier) &&
+          (where.provider === undefined || p.provider === where.provider))),
     },
   };
   return { state, prismaMock };
@@ -66,7 +72,10 @@ vi.mock('../lib/admission',  () => ({ admitKey: vi.fn(async () => true) }));
 vi.mock('../lib/breaker',    () => ({ acquire: vi.fn(async () => 'closed'), RATE_LIMIT_COOLDOWN_SECONDS: 60 }));
 vi.mock('../lib/sticky',     () => ({ getStickyKeyId: vi.fn(async () => null) }));
 vi.mock('./routing.service', () => ({ getCostWeight: vi.fn(async () => 0) }));
-vi.mock('./model.service',   () => ({ getModelRegistry: vi.fn(async () => []) }));
+vi.mock('./model.service',   () => ({
+  getModelRegistry:    vi.fn(async () => state.registry),
+  activeProviderSlugs: vi.fn(async () => new Set(state.providers.map(p => p.provider as string))),
+}));
 vi.mock('./ssrf.service',    () => ({ getSsrfPolicy: vi.fn(async () => ({})) }));
 
 import { discoverBestPool, SHARED_SCOPE } from './nexus.service';
@@ -83,6 +92,10 @@ beforeEach(() => {
   vi.mocked(getStickyKeyId).mockResolvedValue(null);
   state.providers = [provider('p1', 'premium')];
   state.keys = [key('shared-1', null), key('shared-2', null), key('a-1', 'team-a'), key('a-2', 'team-a')];
+  // Default: empty registry, so the existing BYOK/sticky/downgrade suites exercise the
+  // legacy pool-tier fallback (pools carry preferredModel). Model-first tests below
+  // populate state.registry explicitly.
+  state.registry = [];
 });
 
 describe('discoverBestPool — BYOK scoping', () => {
@@ -212,5 +225,102 @@ describe('discoverBestPool — sticky pins are re-authorized against scope', () 
     const route = await discoverBestPool(10, 'sess', scopeFor('team-a', true));
     expect(route?.keyId).toBe('shared-2');
     expect(route?.sticky).toBe(true);
+  });
+});
+
+// ── Phase 6.1: model-first selection ──────────────────────────────────────────
+const rmodel = (over: Record<string, unknown>) => ({
+  id: over.id, modelString: over.modelString ?? over.id, provider: over.provider ?? 'openai',
+  tier: over.tier ?? 'standard', priority: over.priority ?? 1, status: over.status ?? 'active',
+  capabilities: over.capabilities ?? ['chat'],
+});
+
+describe('discoverBestPool — model-first (registry drives the model)', () => {
+  it('serves the registry model, not the pool preferredModel, and stamps modelId', async () => {
+    state.providers = [provider('p1', 'premium')]; // pool.preferredModel = "model-p1"
+    state.keys = [key('k', null, 'p1')];
+    state.registry = [rmodel({ id: 'sonnet', modelString: 'claude-sonnet', provider: 'openai', tier: 'premium' })];
+
+    const route = await discoverBestPool(10, null, SHARED_SCOPE);
+    expect(route?.keyId).toBe('k');
+    expect(route?.modelString).toBe('claude-sonnet'); // from the registry, not "model-p1"
+    expect(route?.modelId).toBe('sonnet');
+  });
+
+  it('serves two models from one provider by tier — premium before fast', async () => {
+    state.providers = [provider('p1', 'standard')]; // pool tier is now irrelevant to selection
+    state.keys = [key('k', null, 'p1')];
+    state.registry = [
+      rmodel({ id: 'haiku',  modelString: 'claude-haiku',  tier: 'fast',    priority: 1 }),
+      rmodel({ id: 'sonnet', modelString: 'claude-sonnet', tier: 'premium', priority: 1 }),
+    ];
+    const route = await discoverBestPool(10, null, SHARED_SCOPE);
+    expect(route?.modelId).toBe('sonnet');
+    expect(route?.tier).toBe('premium');
+  });
+
+  it('skips a registry model whose provider has no pool', async () => {
+    state.providers = [provider('p1', 'standard')]; // only openai
+    state.keys = [key('k', null, 'p1')];
+    state.registry = [
+      rmodel({ id: 'no-pool', provider: 'anthropic', tier: 'premium' }),
+      rmodel({ id: 'has-pool', provider: 'openai',   tier: 'standard' }),
+    ];
+    const route = await discoverBestPool(10, null, SHARED_SCOPE);
+    expect(route?.modelId).toBe('has-pool');
+  });
+
+  it('skips a paused model', async () => {
+    state.providers = [provider('p1', 'standard')];
+    state.keys = [key('k', null, 'p1')];
+    state.registry = [
+      rmodel({ id: 'paused', tier: 'premium', status: 'paused' }),
+      rmodel({ id: 'active', tier: 'standard', status: 'active' }),
+    ];
+    const route = await discoverBestPool(10, null, SHARED_SCOPE);
+    expect(route?.modelId).toBe('active');
+  });
+
+  it('returns null when no model has the requested capability', async () => {
+    state.providers = [provider('p1', 'standard')];
+    state.keys = [key('k', null, 'p1')];
+    state.registry = [rmodel({ id: 'chat-only', capabilities: ['chat'] })];
+    // embedding has no legacy fallback, so an unserved capability is a clean miss
+    const route = await discoverBestPool(10, null, SHARED_SCOPE, 'embedding');
+    expect(route).toBeNull();
+  });
+
+  it('routes an embedding request to the embedding-capable model', async () => {
+    state.providers = [provider('p1', 'standard')];
+    state.keys = [key('k', null, 'p1')];
+    state.registry = [
+      rmodel({ id: 'chat',  capabilities: ['chat'] }),
+      rmodel({ id: 'embed', modelString: 'text-embed-3', capabilities: ['embedding'] }),
+    ];
+    const route = await discoverBestPool(10, null, SHARED_SCOPE, 'embedding');
+    expect(route?.modelId).toBe('embed');
+    expect(route?.modelString).toBe('text-embed-3');
+  });
+
+  it('still enforces BYOK scope in model-first mode', async () => {
+    state.providers = [provider('p1', 'standard')];
+    state.keys = [key('shared', null, 'p1'), key('owned', 'team-a', 'p1')];
+    state.registry = [rmodel({ id: 'm', provider: 'openai' })];
+    const route = await discoverBestPool(10, null, scopeFor('team-a', true));
+    expect(route?.keyId).toBe('owned');
+    expect(route?.byok).toBe(true);
+    expect(route?.modelId).toBe('m');
+  });
+
+  it('honours a sticky pin in model-first mode, serving the registry model', async () => {
+    state.providers = [provider('p1', 'standard')];
+    state.keys = [key('k1', null, 'p1'), key('k2', null, 'p1')];
+    state.registry = [rmodel({ id: 'm', modelString: 'the-model', provider: 'openai' })];
+    vi.mocked(getStickyKeyId).mockResolvedValue('k2');
+    const route = await discoverBestPool(10, 'sess', SHARED_SCOPE);
+    expect(route?.keyId).toBe('k2');
+    expect(route?.sticky).toBe(true);
+    expect(route?.modelString).toBe('the-model');
+    expect(route?.modelId).toBe('m');
   });
 });

@@ -9,7 +9,8 @@ for the layering rule and the request path.
 |---|---|
 | `admission.ts` | Atomic per-key RPM/TPM admission via a Redis Lua script; TPM reservation and post-response reconciliation |
 | `breaker.ts` | Per-key circuit breaker: escalating cooldown, single half-open probe, flat 429 handling, auto-ban on repeated auth failure |
-| `routing.ts` | Cost-aware ordering of providers within a tier (a tiebreaker, never an override) |
+| `routing.ts` | Cost-aware ordering within a tier (a tiebreaker, never an override) |
+| `modelSelect.ts` | Model-first selection: capabilities, tier order, and the ordered candidate list routing attempts |
 | `sticky.ts` | Session fingerprinting and the session→key pin that preserves a provider's prompt cache |
 | `scope.ts` | BYOK routing scope. One value drives both key selection and the response-cache namespace |
 | `responseCache.ts` | Exact-match cache key, entry shape, and SSE↔JSON replay conversion |

@@ -11,6 +11,58 @@
 
 ---
 
+**Date:** 2026-07-10 · Session 27  
+**Author:** Abbas  
+**Title:** Phase 6.1 — Model-First Routing  
+
+**Summary:**  
+Until now the gateway decided which model to run from a field on the pool. A pool is a
+provider's credentials — a base URL, an authentication scheme, and one or more keys —
+and hanging a single model off it meant one key could serve exactly one model, while
+the Models registry that operators actually edit did not influence routing at all.
+Worse, the two disagreed silently: a request recorded its cost by matching the pool's
+model string against the registry, and when the two did not line up the request was
+booked at zero. Selecting a model in the Models tab did nothing; the pool always won.
+
+Routing now walks models rather than pools. The registry is the source of truth for
+which model runs, its tier, and its priority. Selection considers every active model
+that declares the requested capability and whose provider has a configured pool, orders
+them by tier, then by priority, then — when cost-aware routing is enabled — by price
+within a tier, and for the best model finds a healthy key belonging to its provider.
+The consequence operators asked for falls straight out of this: a single Anthropic key
+can now serve a premium model and a fast model at the same time, because the tier lives
+on the model, not on the credential. The mechanics that make routing safe — the circuit
+breaker, atomic admission, the bring-your-own-key ownership filter, and sticky
+cache-affinity — are untouched; only the outer choice of what to attempt changed, and
+each selected key still passes through exactly the same gates.
+
+Every model now carries a set of capabilities — chat, completion, embedding, image,
+speech, transcription — which is the foundation the coming protocol work stands on. An
+endpoint asks for a capability and only models that declare it are eligible, so the
+Anthropic Messages endpoint and the embedding, image, and audio endpoints that follow
+will each select from the same registry without a second routing path. A model with no
+declared capability is treated as a chat model, and a legacy tool-completion flag is
+read as the completion capability, so nothing an operator configured before is lost.
+
+The transition was built to be invisible. The registry begins empty rather than
+shipping phantom default models that would route to providers nobody configured, and on
+startup any active pool that still carries a model contributes a registry entry with its
+tier and the chat capability, so an upgraded deployment routes exactly as it did the day
+before. Should the registry ever be empty when a chat request arrives, the old
+pool-tier walk still answers it, so there is no version in which upgrading takes the
+gateway offline. The pool's model field remains, now optional and labelled as legacy.
+
+Two long-standing defects were closed along the way. A request whose model was missing
+from the registry is no longer booked at zero cost, because usage is now attributed to
+the real model the router chose. And the endpoint that saves the registry, which
+previously stored whatever it received, now validates every entry and refuses duplicate
+identifiers or duplicate provider-and-model pairs, either of which would have made
+selection non-deterministic.
+
+**Green gate:** lint 0 · typecheck 0 · 257 tests pass (+28) · build 0 · npm audit 0 vulnerabilities.
+
+---
+
 **Date:** 2026-07-10 · Session 26  
 **Author:** Abbas  
 **Title:** Phase 6 — Security & Auth Hardening  

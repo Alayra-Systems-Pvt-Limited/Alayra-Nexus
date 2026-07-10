@@ -61,8 +61,8 @@ function renderProviderCard(p) {
           <span class="badge badge-gray" style="font-size:10px">${esc(lbl || '')}</span>
           ${tierBadge(p.tier)}
         </div>
-        <div style="font-family:monospace;font-size:12px;color:${p.preferredModel?'var(--muted)':'var(--red)'}">
-          ${p.preferredModel ? esc(p.preferredModel) : '⚠ No preferred model set'}
+        <div style="font-family:monospace;font-size:12px;color:var(--muted)">
+          ${p.preferredModel ? esc(p.preferredModel) : 'Models managed in the Models tab'}
         </div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
@@ -229,9 +229,9 @@ function showAddProvider() {
       </div>
     </div>
     <div class="form-row">
-      <label class="form-label">Preferred model</label>
+      <label class="form-label">Default model <span style="color:var(--subtle)">(optional)</span></label>
       <input id="prov-model" placeholder="e.g. claude-3-5-sonnet-20241022"/>
-      <div class="form-hint">The actual model ID sent to the provider API</div>
+      <div class="form-hint">Optional. Models are now managed in the Models tab; this seeds one on first run and is otherwise unused.</div>
     </div>
     <div class="form-row">
       <label class="form-label">Base URL</label>
@@ -400,7 +400,7 @@ async function showEditProvider(id) {
       <input id="edit-name" value="${esc(p.name || '')}"/>
     </div>
     <div class="form-row">
-      <label class="form-label">Preferred model</label>
+      <label class="form-label">Default model <span style="color:var(--subtle)">(optional — models live in the Models tab)</span></label>
       <input id="edit-model" value="${esc(p.preferredModel || '')}" placeholder="e.g. claude-3-5-sonnet-20241022"/>
     </div>
     <div class="form-row">

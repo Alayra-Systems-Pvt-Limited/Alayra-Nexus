@@ -7,6 +7,30 @@ All notable changes to Alayra Nexus™ are documented here. The format is based 
 The `model: "alayra-nexus-1"` routing contract is the public API surface covered by
 semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
+## [Unreleased]
+
+### Changed
+- **Routing is model-first (Phase 6.1).** The Models tab registry is now the source of
+  truth for which model runs, its tier, and its priority — not each pool's single
+  `preferredModel`. Selection walks models (tier → priority → cost) and finds a healthy
+  key for the chosen model's provider, so one Anthropic key can now serve, say, Sonnet
+  at the premium tier and Haiku at the fast tier. Models gain a **capabilities** set
+  (`chat`, `completion`, `embedding`, `image`, `speech`, `transcription`) — the
+  foundation the upcoming protocol endpoints filter on. A pool is now purely
+  credentials; its model field is optional and labelled legacy. Existing deployments
+  are seeded automatically on startup (each active pool's model becomes a registry
+  entry with its tier and `chat`), so routing behaves exactly as before until you add
+  more models. A legacy pool-tier fallback covers chat if the registry is somehow
+  empty.
+
+### Fixed
+- **Per-request cost is no longer silently $0** when a pool's model was absent from the
+  registry. Usage is now attributed to the real registry model id chosen by routing, so
+  spend and budget accounting are correct.
+- **`PUT /admin/models` now validates the registry.** It previously stored whatever it
+  was sent; a malformed save could corrupt routing for every request. Entries are
+  schema-checked and rejected for duplicate ids or duplicate provider+model pairs.
+
 ## [1.2.0] - 2026-07-10
 
 ### Added
