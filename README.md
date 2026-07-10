@@ -135,7 +135,7 @@ docker run -d --name alayra-nexus -p 3000:3000 \
   ghcr.io/alayra-systems-pvt-limited/alayra-nexus:latest
 ```
 
-Pin a version for production (e.g. `:1.0.0`) rather than `:latest`.
+Pin a version for production (e.g. `:1.2.0`) rather than `:latest`.
 
 ### Option B — Docker Compose (brings its own Postgres + Redis)
 
