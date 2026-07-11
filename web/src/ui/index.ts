@@ -9,3 +9,4 @@ export { Spinner } from './Spinner';
 export { EmptyState } from './EmptyState';
 export { CopyField } from './CopyField';
 export { LineChart } from './LineChart';
+export { Table, type Column } from './Table';

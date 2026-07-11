@@ -87,6 +87,19 @@
 .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Table ── */
+.tableWrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table thead th {
+  text-align: left; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); font-weight: 600; padding: 0 12px 9px; white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); white-space: nowrap; }
+.table tbody tr:last-child td { border-bottom: none; }
+.table tbody tr:hover td { background: var(--surface-2); }
+.tRight { text-align: right; font-variant-numeric: tabular-nums; }
+
 /* ── Line chart ── */
 .chart { width: 100%; display: block; overflow: visible; }
 /* The area fill comes from an inline per-instance gradient (see LineChart.tsx) that fades to

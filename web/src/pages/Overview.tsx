@@ -1,42 +1,78 @@
 import { Activity, ArrowDownUp, KeyRound, Cpu, Users, DollarSign } from 'lucide-preact';
-import { PageHeader, StatCard, Card, LineChart, Badge } from '../ui';
+import { PageHeader, StatCard, Badge, Spinner, Button } from '../ui';
+import { useApi } from '../hooks/useApi';
+import { compactNumber, currency } from '../lib/format';
+import type { Overview as OverviewData } from '../api';
+import { ChartCard } from './overview/ChartCard';
+import { TopModels } from './overview/TopModels';
+import { TopKeys } from './overview/TopKeys';
+import { RecentActivity } from './overview/RecentActivity';
 import s from './pages.module.css';
 
-// P7.1 scaffold: the Overview layout and the clickable, deep-linking stat cards from the brief,
-// rendered with placeholder zeros against the real design system. P7.2 wires these to the
-// /admin/overview aggregate and the four live 7-day charts. Its job here is to prove the
-// foundation — tokens, glass, kit, charts, theming — end to end.
+// P7.2: the Overview is now live. One aggregate read (`/admin/overview`) feeds the headline stat
+// cards, four 7-day trend charts, the model/key leaderboards, and the recent-activity trail. The
+// page only composes — each block is its own small component under ./overview.
 export function Overview() {
-  const spark = [4, 6, 5, 8, 7, 11, 9];
+  const { data, loading, error, reload } = useApi<OverviewData>('/admin/overview');
+
+  if (loading && !data) {
+    return (
+      <>
+        <PageHeader title="Overview" subtitle="Real-time gateway telemetry" />
+        <div class={s.centered}><Spinner /> <span>Loading telemetry…</span></div>
+      </>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <>
+        <PageHeader title="Overview" subtitle="Real-time gateway telemetry" />
+        <div class={s.errBody}>
+          <Activity size={22} class={s.errIcon} />
+          <p>Couldn’t reach the gateway{error ? ` — ${error}` : ''}.</p>
+          <Button size="sm" onClick={reload}>Retry</Button>
+        </div>
+      </>
+    );
+  }
+
+  const { stats, series7d, topModels, topKeys, recentLogs } = data;
+  const sum = (pick: (d: OverviewData['series7d'][number]) => number) => series7d.reduce((a, d) => a + pick(d), 0);
 
   return (
     <>
       <PageHeader
         title="Overview"
         subtitle="Real-time gateway telemetry"
-        actions={<Badge tone="violet" dot>P7.1 · foundation</Badge>}
+        actions={<Badge tone="green" dot>Live</Badge>}
       />
 
       <div class={`${s.grid} ${s.cols4}`}>
-        <StatCard label="Total usage"   value="0"    icon={<Activity size={14} />}    sub="requests to date" href="/analytics" />
-        <StatCard label="Input tokens"  value="0"    icon={<ArrowDownUp size={14} />} sub="last 7 days"       href="/analytics" />
-        <StatCard label="Output tokens" value="0"    icon={<ArrowDownUp size={14} />} sub="last 7 days"       href="/analytics" />
-        <StatCard label="Total cost"    value="$0"   icon={<DollarSign size={14} />}  sub="to date"           href="/analytics" />
-        <StatCard label="Active keys"   value="0"    icon={<KeyRound size={14} />}    sub="across pools"      href="/nexus" />
-        <StatCard label="Active models" value="0"    icon={<Cpu size={14} />}         sub="in the registry"  href="/models" />
-        <StatCard label="Active teams"  value="0"    icon={<Users size={14} />}       sub="with access keys" href="/teams" />
-        <StatCard label="Status"        value="Live" icon={<Activity size={14} />}    sub="all systems"      href="/security" />
+        <StatCard label="Total usage"   value={compactNumber(stats.totalRequests)} icon={<Activity size={14} />}    sub="requests to date"  href="/analytics" />
+        <StatCard label="Input tokens"  value={compactNumber(stats.inputTokens7d)} icon={<ArrowDownUp size={14} />} sub="last 7 days"        href="/analytics" />
+        <StatCard label="Output tokens" value={compactNumber(stats.outputTokens7d)} icon={<ArrowDownUp size={14} />} sub="last 7 days"       href="/analytics" />
+        <StatCard label="Total cost"    value={currency(stats.totalCostUsd)}       icon={<DollarSign size={14} />}  sub="to date"           href="/analytics" />
+        <StatCard label="Active keys"   value={compactNumber(stats.activeKeys)}    icon={<KeyRound size={14} />}    sub="across pools"      href="/nexus" />
+        <StatCard label="Active models" value={compactNumber(stats.activeModels)}  icon={<Cpu size={14} />}         sub="in the registry"  href="/models" />
+        <StatCard label="Active teams"  value={compactNumber(stats.activeTeams)}   icon={<Users size={14} />}       sub="with access keys" href="/teams" />
+        <StatCard label="Status"        value="Live"                               icon={<Activity size={14} />}    sub="all systems"      href="/security" />
       </div>
 
       <div class={`${s.grid} ${s.cols2} ${s.section}`}>
-        <Card heading="Tokens · last 7 days" class={s.chartCard}>
-          <div class={s.chartHead}><span class={s.chartBig}>0</span></div>
-          <LineChart data={spark} height={130} ariaLabel="Tokens over the last 7 days" />
-        </Card>
-        <Card heading="Cost · last 7 days" class={s.chartCard}>
-          <div class={s.chartHead}><span class={s.chartBig}>$0</span></div>
-          <LineChart data={spark} height={130} ariaLabel="Cost over the last 7 days" />
-        </Card>
+        <ChartCard title="Input tokens · last 7 days"  big={compactNumber(sum((d) => d.inputTokens))}  data={series7d.map((d) => d.inputTokens)}  ariaLabel="Input tokens over the last 7 days" />
+        <ChartCard title="Output tokens · last 7 days" big={compactNumber(sum((d) => d.outputTokens))} data={series7d.map((d) => d.outputTokens)} ariaLabel="Output tokens over the last 7 days" />
+        <ChartCard title="Requests · last 7 days"      big={compactNumber(sum((d) => d.requests))}     data={series7d.map((d) => d.requests)}     ariaLabel="Requests over the last 7 days" />
+        <ChartCard title="Cost · last 7 days"          big={currency(sum((d) => d.usd))}               data={series7d.map((d) => d.usd)}          ariaLabel="Cost over the last 7 days" />
+      </div>
+
+      <div class={`${s.grid} ${s.cols2} ${s.section}`}>
+        <TopModels items={topModels} />
+        <TopKeys items={topKeys} />
+      </div>
+
+      <div class={s.section}>
+        <RecentActivity items={recentLogs} />
       </div>
     </>
   );

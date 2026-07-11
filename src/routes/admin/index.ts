@@ -19,6 +19,7 @@ import { FastifyInstance } from 'fastify';
 import adminAuthRoutes      from './auth.routes';
 import adminSsoRoutes       from './sso.routes';
 import adminSystemRoutes    from './system.routes';
+import adminOverviewRoutes  from './overview.routes';
 import adminSettingsRoutes  from './settings.routes';
 import adminProvidersRoutes from './providers.routes';
 import adminKeysRoutes      from './keys.routes';
@@ -62,6 +63,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   await fastify.register(adminAuthRoutes);
   await fastify.register(adminSsoRoutes);
   await fastify.register(adminSystemRoutes);
+  await fastify.register(adminOverviewRoutes);
   await fastify.register(adminSettingsRoutes);
   await fastify.register(adminProvidersRoutes);
   await fastify.register(adminKeysRoutes);

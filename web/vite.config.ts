@@ -7,6 +7,14 @@ import preact from '@preact/preset-vite';
 export default defineConfig({
   base: './',
   plugins: [preact()],
+  // Dev only: the built app is served by the gateway itself, so /admin is same-origin in
+  // production. During `vite dev` it runs on its own port, so proxy the admin API to the local
+  // gateway (PORT 3000). Never used in the static build.
+  server: {
+    proxy: {
+      '/admin': { target: 'http://localhost:3000', changeOrigin: true },
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

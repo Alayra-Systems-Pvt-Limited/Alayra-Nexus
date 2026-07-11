@@ -51,7 +51,7 @@ describe('getUsageSummary — aggregated in the database', () => {
     prismaMock.tokenUsage.groupBy
       .mockResolvedValueOnce([{ modelName: 'gpt', _count: { _all: 2 }, _sum: { inputTokens: 8, outputTokens: 4, totalTokens: 12, estimatedUsd: 0.4 } }])
       .mockResolvedValueOnce([{ provider: 'openai', _count: { _all: 3 }, _sum: { totalTokens: 15, estimatedUsd: 0.5 } }]);
-    prismaMock.$queryRaw.mockResolvedValue([{ day: new Date('2026-07-09T00:00:00Z'), tokens: 15, requests: 3, usd: 0.5 }]);
+    prismaMock.$queryRaw.mockResolvedValue([{ day: new Date('2026-07-09T00:00:00Z'), tokens: 15, inputTokens: 10, outputTokens: 5, requests: 3, usd: 0.5 }]);
 
     const out = await getUsageSummary('7d');
 
@@ -60,7 +60,7 @@ describe('getUsageSummary — aggregated in the database', () => {
     expect(out.totals).toMatchObject({ requests: 3, totalTokens: 15, estimatedUsd: 0.5 });
     expect(out.byModel.gpt).toMatchObject({ tokens: 12, requests: 2 });
     expect(out.byProvider.openai).toMatchObject({ tokens: 15, requests: 3 });
-    expect(out.byDay).toEqual([{ date: '2026-07-09', tokens: 15, requests: 3, usd: 0.5 }]);
+    expect(out.byDay).toEqual([{ date: '2026-07-09', tokens: 15, inputTokens: 10, outputTokens: 5, requests: 3, usd: 0.5 }]);
   });
 
   it('treats an empty window as zeroes without throwing', async () => {

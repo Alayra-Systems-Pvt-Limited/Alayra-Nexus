@@ -192,9 +192,11 @@ export async function getUsageSummary(period: Period = '30d', customSince?: Date
     // Day buckets can't be expressed with the typed groupBy (createdAt is a full timestamp),
     // so date_trunc is pushed down in raw SQL; sums are cast to float8 so the driver yields
     // plain numbers rather than BigInt/Decimal.
-    prisma.$queryRaw<{ day: Date; tokens: number; requests: number; usd: number }[]>`
+    prisma.$queryRaw<{ day: Date; tokens: number; inputTokens: number; outputTokens: number; requests: number; usd: number }[]>`
       SELECT date_trunc('day', "createdAt") AS day,
              SUM("totalTokens")::float8    AS tokens,
+             SUM("inputTokens")::float8    AS "inputTokens",
+             SUM("outputTokens")::float8   AS "outputTokens",
              COUNT(*)::int                 AS requests,
              SUM("estimatedUsd")::float8   AS usd
       FROM "TokenUsage"
@@ -231,10 +233,12 @@ export async function getUsageSummary(period: Period = '30d', customSince?: Date
   }
 
   const byDay = byDayRows.map((r) => ({
-    date:     new Date(r.day).toISOString().slice(0, 10),
-    tokens:   r.tokens   ?? 0,
-    requests: r.requests ?? 0,
-    usd:      r.usd      ?? 0,
+    date:         new Date(r.day).toISOString().slice(0, 10),
+    tokens:       r.tokens       ?? 0,
+    inputTokens:  r.inputTokens  ?? 0,
+    outputTokens: r.outputTokens ?? 0,
+    requests:     r.requests     ?? 0,
+    usd:          r.usd          ?? 0,
   }));
 
   return { period, since: since.toISOString(), until: until.toISOString(), totals, byModel, byProvider, byDay };

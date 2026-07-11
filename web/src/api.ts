@@ -29,6 +29,30 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
   return res.json() as Promise<T>;
 }
 
+// ── Endpoint contracts ────────────────────────────────────────────────────────
+// Typed shapes returned by the gateway, kept next to the client so a page and the server agree in
+// one place. Mirrors GET /admin/overview (overview.service.ts).
+
+export interface OverviewDay {
+  date: string; inputTokens: number; outputTokens: number; tokens: number; usd: number; requests: number;
+}
+
+export interface Overview {
+  stats: {
+    totalRequests:  number;
+    totalCostUsd:   number;
+    inputTokens7d:  number;
+    outputTokens7d: number;
+    activeKeys:     number;
+    activeModels:   number;
+    activeTeams:    number;
+  };
+  series7d:   OverviewDay[];
+  topModels:  { model: string; tokens: number; usd: number }[];
+  topKeys:    { id: string; name: string; totalTokens: number; requests: number; estimatedUsd: number }[];
+  recentLogs: { id: string; action: string; method: string; actorRole: string; status: number; target: string | null; createdAt: string }[];
+}
+
 export const GET  = <T = unknown>(p: string) => api<T>('GET', p);
 export const POST = <T = unknown>(p: string, b?: unknown) => api<T>('POST', p, b);
 export const PUT  = <T = unknown>(p: string, b?: unknown) => api<T>('PUT', p, b);

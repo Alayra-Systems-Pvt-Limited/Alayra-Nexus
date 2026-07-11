@@ -10,6 +10,19 @@
 .scaffold { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
 .scaffold code { font-family: var(--font-mono); color: var(--accent); background: var(--accent-bg); padding: 1px 6px; border-radius: 5px; }
 
+/* Ranked bar list (leaderboards, e.g. top models). */
+.rank { list-style: none; display: flex; flex-direction: column; gap: 11px; }
+.rankRow { display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; align-items: center; gap: 12px; }
+.rankName { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rankBarWrap { height: 7px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.rankBar { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.rankVal { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Loading / error states for data-backed pages. */
+.centered { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 13px; padding: 60px 0; }
+.errBody { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; padding: 56px 16px; text-align: center; }
+.errIcon { color: var(--subtle); }
+
 @media (max-width: 980px) {
   .cols4 { grid-template-columns: 1fr 1fr; }
   .cols2 { grid-template-columns: 1fr; }
