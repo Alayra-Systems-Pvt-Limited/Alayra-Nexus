@@ -43,7 +43,16 @@ function firstValue(v: string | string[] | undefined): string | undefined {
  * `http://localhost/v1` — a base URL that connects to nothing.
  */
 export function buildBaseUrl(src: BaseUrlSource): string {
+  return `${buildOrigin(src)}/v1`;
+}
+
+/**
+ * The public origin (`scheme://host[:port]`) for this deployment, using the same
+ * reverse-proxy rules as buildBaseUrl. Used to construct absolute callback URLs — an
+ * OIDC `redirect_uri` must be the externally-reachable address, not the internal host.
+ */
+export function buildOrigin(src: BaseUrlSource): string {
   const proto = firstValue(src.forwardedProto) ?? 'http';
   const host  = firstValue(src.forwardedHost)  ?? src.host;
-  return `${proto}://${host}/v1`;
+  return `${proto}://${host}`;
 }

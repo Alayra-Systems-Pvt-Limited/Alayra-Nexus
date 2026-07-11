@@ -166,6 +166,31 @@ model AdminApiToken {
   createdAt  DateTime  @default(now())
 }
 
+// ── Enterprise SSO (Phase 6.6) ────────────────────────────────────────────────
+// A single active identity-provider configuration. A table (single "singleton" row),
+// not columns on AppSettings, so a second IdP or a SAML adapter is an additive change
+// later — never a restructuring migration. `protocol` is stored now and only "oidc" is
+// wired; a "saml" adapter slots in behind the same row without a schema change.
+// `clientSecret` uses the same AES-256-GCM envelope as every other credential, never
+// plaintext. Role mapping is deliberately least-privilege: a user is granted "owner"
+// only when the configured claim carries the configured value; everyone else who
+// authenticates is a read-only "viewer". The master password remains the owner
+// break-glass, so a misconfigured mapping can never lock the operator out.
+model SsoProvider {
+  id           String   @id @default("singleton")
+  protocol     String   @default("oidc") // oidc (wired) | saml (reserved)
+  enabled      Boolean  @default(false)
+  displayName  String   @default("Single Sign-On")
+  issuer       String   @default("")
+  clientId     String   @default("")
+  clientSecret String   @default("") // AES-256-GCM encrypted; "" when unset
+  scopes       String   @default("openid email profile")
+  roleClaim    String   @default("") // claim carrying groups/role, e.g. "groups"
+  ownerValue   String   @default("") // claim value that maps to owner; else viewer
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 // ── Custom domains (schema now; UI in Phase 7) ────────────────────────────────
 // A team may map several hostnames, and each carries its own verification state, so
 // this is a table rather than a column on Team. `verificationToken` is the value the

@@ -15,7 +15,17 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildBaseUrl } from './baseUrl';
+import { buildBaseUrl, buildOrigin } from './baseUrl';
+
+describe('buildOrigin', () => {
+  it('is the scheme+host with no /v1 suffix', () => {
+    expect(buildOrigin({ host: 'localhost:3000' })).toBe('http://localhost:3000');
+  });
+  it('honours forwarded proto and host behind a proxy — the externally-reachable origin', () => {
+    expect(buildOrigin({ host: 'nexus:3000', forwardedProto: 'https', forwardedHost: 'gateway.acme.com' }))
+      .toBe('https://gateway.acme.com');
+  });
+});
 
 describe('buildBaseUrl', () => {
   // The regression: Fastify v5's `request.hostname` strips the port, so the dashboard

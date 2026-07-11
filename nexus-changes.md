@@ -11,6 +11,47 @@
 
 ---
 
+**Date:** 2026-07-11 · Session 37  
+**Author:** Abbas  
+**Title:** Phase 6.6 — Enterprise Single Sign-On (OpenID Connect)  
+
+**Summary:**  
+Until now, signing in to the gateway's control panel meant one shared admin password (with an
+optional authenticator code on top). That works for a solo operator, but it is not how a
+company runs access. Larger organisations already have a single front door for every internal
+tool — Okta, Microsoft Entra, Google Workspace, and the like — where joining, leaving, and
+group membership are managed once, centrally. This session lets Alayra Nexus stand behind that
+same front door. An operator can now point the gateway at their identity provider, and staff
+sign in with the corporate account they already use, rather than a separate password kept just
+for this tool.
+
+The sign-in follows the modern, widely-supported OpenID Connect standard. When someone chooses
+to sign in this way, the gateway hands them off to the company's login page; once the provider
+confirms who they are, it sends them back and the gateway checks that confirmation against the
+provider's own published credentials before trusting it. The heavy cryptographic verification
+is delegated to a well-established, audited library rather than written by hand — the
+responsible choice for something this security-sensitive, and consistent with the project's aim
+of a small, trustworthy codebase.
+
+Crucially, single sign-on is joined to the access levels introduced last session. An operator
+names the group (or attribute) that should be treated as an administrator; anyone in it signs
+in with full **owner** control, and everyone else who authenticates is admitted as a read-only
+**viewer**. The default leans deliberately toward the cautious side — an unmapped or
+misconfigured account is a viewer, never an accidental owner — and the master password stays as
+a guaranteed way back in, so a configuration mistake can never lock the operator out of their
+own gateway. The connection secret the provider issues is stored with the same strong
+encryption as every other credential in the system, and the gateway's existing protection
+against being pointed at internal addresses covers every request it makes to the provider.
+
+This is off until switched on, so upgrading changes nothing for existing deployments: the
+"Sign in with Single Sign-On" option only appears once an identity provider has been
+configured. The design also leaves room for the one enterprise login standard not covered here,
+SAML, to be added later as a second option without reworking what was built now. Shipped green
+across the board — code style, type safety, the full automated test suite (twenty-eight new
+tests), the production build, and a zero-vulnerability dependency audit.
+
+---
+
 **Date:** 2026-07-11 · Session 36  
 **Author:** Abbas  
 **Title:** Phase 6.5 — Role-Based Access Control  

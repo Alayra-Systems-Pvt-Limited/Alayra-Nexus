@@ -24,6 +24,14 @@
     </div>
     <div class="login-err" id="login-err"></div>
     <button class="btn-primary" style="width:100%;margin-top:14px" onclick="doLogin()">Sign in →</button>
+    <!-- Enterprise SSO (Phase 6.6): revealed only when the server reports an enabled IdP.
+         A plain link to the redirect handshake — no credential is handled in the browser. -->
+    <div id="sso-block" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--subtle);font-size:12px">
+        <span style="flex:1;height:1px;background:var(--border,rgba(255,255,255,0.12))"></span>or<span style="flex:1;height:1px;background:var(--border,rgba(255,255,255,0.12))"></span>
+      </div>
+      <button class="btn-secondary" style="width:100%" onclick="location.href='/admin/sso/login'" id="sso-btn">Sign in with Single Sign-On</button>
+    </div>
     <div style="text-align:center;margin-top:12px">
       <span style="font-size:12px;color:var(--subtle)">No server? </span>
       <span style="font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline" onclick="enterDemoMode()">Preview demo</span>

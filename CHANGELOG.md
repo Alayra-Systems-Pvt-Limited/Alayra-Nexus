@@ -10,6 +10,20 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 ## [Unreleased]
 
 ### Added
+- **Enterprise single sign-on for the admin panel (Phase 6.6).** The gateway can now delegate
+  admin sign-in to a corporate identity provider over **OpenID Connect** (Okta, Microsoft
+  Entra, Google Workspace, Auth0, Keycloak, and any OIDC-compliant IdP), using the
+  Authorization-Code flow with PKCE, a `state` CSRF token, and a `nonce` replay guard. The
+  IdP's endpoints are discovered from its published metadata, the returned identity token is
+  verified against the provider's live signing keys, and its issuer, audience, and expiry are
+  enforced. An SSO login is mapped onto the Phase 6.5 roles: a configured group/claim value
+  grants **owner**, and every other authenticated user is a read-only **viewer** — least
+  privilege by default, with the master password retained as the owner break-glass. The client
+  secret is stored with the same AES-256-GCM envelope as every other credential, and every
+  outbound URL passes the gateway's SSRF guard. A "Sign in with SSO" button appears on the
+  login screen only when an identity provider is enabled. Additive migration; SSO is off until
+  an operator configures it, so upgrading changes nothing. The configuration is protocol-aware
+  so a SAML adapter can be added later without a restructuring migration.
 - **Role-based access control for the admin panel (Phase 6.5).** Admin credentials now carry
   a role — **owner** (full control) or **viewer** (read-only: every page and figure is
   visible, but any action that changes state is refused). Enforced server-side in one shared
