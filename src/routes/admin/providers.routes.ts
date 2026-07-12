@@ -46,7 +46,17 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
     authHeader:     z.string().default('Authorization'),
     authPrefix:     z.string().optional(),
     modelIdPath:    z.string().default('data[].id'),
+    // Extra request headers as an object; persisted as a JSON string. An empty object clears them.
+    extraHeaders:   z.record(z.string()).optional(),
   });
+
+  // Turn a validated provider body into a Prisma-ready row: the object-form extraHeaders is
+  // serialized to the JSON string the column stores (empty object → null, i.e. "clear them").
+  function toProviderData<T extends { extraHeaders?: Record<string, string> }>(body: T): Omit<T, 'extraHeaders'> & { extraHeaders?: string | null } {
+    const { extraHeaders, ...rest } = body;
+    if (extraHeaders === undefined) return rest;
+    return { ...rest, extraHeaders: Object.keys(extraHeaders).length ? JSON.stringify(extraHeaders) : null };
+  }
 
   // Reject provider base/fetch URLs that resolve to a blocked internal host, so a
   // malicious URL is stopped at the door rather than persisted (SSRF defense).
@@ -66,7 +76,7 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
     if (urlErr) return reply.code(400).send({ error: urlErr });
     const existing = await prisma.nexusProvider.findUnique({ where: { slug: body.slug } });
     if (existing) return reply.code(409).send({ error: 'Slug already exists' });
-    const provider = await prisma.nexusProvider.create({ data: { id: randomUUID(), ...body } });
+    const provider = await prisma.nexusProvider.create({ data: { id: randomUUID(), ...toProviderData(body) } });
     return reply.code(201).send({ provider });
   });
 
@@ -75,7 +85,7 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
     const body   = providerSchema.partial().parse(request.body);
     const urlErr = await assertProviderUrlsSafe(body);
     if (urlErr) return reply.code(400).send({ error: urlErr });
-    const provider = await prisma.nexusProvider.update({ where: { id }, data: body });
+    const provider = await prisma.nexusProvider.update({ where: { id }, data: toProviderData(body) });
     return reply.send({ provider });
   });
 
@@ -88,10 +98,11 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
   // ── Validation ────────────────────────────────────────────────────
 
   fastify.post('/admin/validate/provider', adminOwnerGuard, async (request, reply) => {
-    const { provider, baseUrl, apiKey, authHeader = 'Authorization', authPrefix } =
-      request.body as { provider: string; baseUrl?: string; apiKey: string; authHeader?: string; authPrefix?: string };
+    const { provider, baseUrl, apiKey, authHeader = 'Authorization', authPrefix, extraHeaders } =
+      request.body as { provider: string; baseUrl?: string; apiKey: string; authHeader?: string; authPrefix?: string; extraHeaders?: Record<string, string> };
     if (!apiKey) return reply.code(400).send({ error: 'apiKey is required' });
-    const result = await validateProviderCredentials(provider, baseUrl ?? null, apiKey, authHeader, authPrefix ?? null);
+    const extra = extraHeaders && Object.keys(extraHeaders).length ? JSON.stringify(extraHeaders) : null;
+    const result = await validateProviderCredentials(provider, baseUrl ?? null, apiKey, authHeader, authPrefix ?? null, extra);
     return reply.send(result);
   });
 

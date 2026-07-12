@@ -19,6 +19,7 @@ export function EditProviderDialog({ pool, onClose, onSaved }: { pool: NexusPool
     authHeader:     pool.authHeader ?? 'Authorization',
     authPrefix:     pool.authPrefix ?? '',
     modelIdPath:    pool.modelIdPath ?? 'data[].id',
+    extraHeaders:   { ...(pool.extraHeaders ?? {}) },
   });
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +43,8 @@ export function EditProviderDialog({ pool, onClose, onSaved }: { pool: NexusPool
         authHeader:     conn.authHeader.trim() || undefined,
         authPrefix:     conn.authPrefix.trim(),
         modelIdPath:    conn.modelIdPath.trim() || undefined,
+        // Always sent (object form); an empty object clears any previously-set headers.
+        extraHeaders:   conn.extraHeaders,
       });
       onSaved();
       onClose();

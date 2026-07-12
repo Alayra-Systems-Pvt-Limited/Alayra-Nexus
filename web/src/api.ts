@@ -64,6 +64,7 @@ export interface NexusPool {
   preferredModel: string | null;
   baseUrl: string | null; modelFetchUrl: string | null;
   authHeader: string; authPrefix: string | null; modelIdPath: string;
+  extraHeaders: Record<string, string>;
   keys: NexusKeyHealth[];
 }
 export interface NexusOverview {

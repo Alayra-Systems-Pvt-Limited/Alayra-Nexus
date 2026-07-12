@@ -9,14 +9,15 @@ import { ProviderFields, type ProviderConn } from './ProviderFields';
 const PROVIDERS = ['openai', 'anthropic', 'google', 'groq', 'openrouter', 'custom'] as const;
 const TIERS     = ['premium', 'standard', 'fast'] as const;
 
-// Sensible starting points per provider; the operator can still override any of them.
-const DEFAULTS: Record<string, { baseUrl: string; authHeader: string; authPrefix: string; modelIdPath: string }> = {
-  openai:     { baseUrl: 'https://api.openai.com/v1',                              authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id' },
-  anthropic:  { baseUrl: 'https://api.anthropic.com/v1',                           authHeader: 'x-api-key',     authPrefix: '',       modelIdPath: 'data[].id' },
-  google:     { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id' },
-  groq:       { baseUrl: 'https://api.groq.com/openai/v1',                         authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id' },
-  openrouter: { baseUrl: 'https://openrouter.ai/api/v1',                           authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id' },
-  custom:     { baseUrl: '',                                                        authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id' },
+// Sensible starting points per provider; the operator can still override any of them. Anthropic's
+// /models list requires the `anthropic-version` header, so that pool is seeded with it out of the box.
+const DEFAULTS: Record<string, { baseUrl: string; authHeader: string; authPrefix: string; modelIdPath: string; extraHeaders: Record<string, string> }> = {
+  openai:     { baseUrl: 'https://api.openai.com/v1',                              authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {} },
+  anthropic:  { baseUrl: 'https://api.anthropic.com/v1',                           authHeader: 'x-api-key',     authPrefix: '',       modelIdPath: 'data[].id', extraHeaders: { 'anthropic-version': '2023-06-01' } },
+  google:     { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {} },
+  groq:       { baseUrl: 'https://api.groq.com/openai/v1',                         authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {} },
+  openrouter: { baseUrl: 'https://openrouter.ai/api/v1',                           authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {} },
+  custom:     { baseUrl: '',                                                        authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {} },
 };
 
 const slugify = (v: string) => v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -25,7 +26,7 @@ const slugify = (v: string) => v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-'
 // falls back to base + /models).
 const connFromDefaults = (p: string): ProviderConn => {
   const d = DEFAULTS[p] ?? DEFAULTS.custom;
-  return { preferredModel: '', baseUrl: d.baseUrl, modelFetchUrl: '', authHeader: d.authHeader, authPrefix: d.authPrefix, modelIdPath: d.modelIdPath };
+  return { preferredModel: '', baseUrl: d.baseUrl, modelFetchUrl: '', authHeader: d.authHeader, authPrefix: d.authPrefix, modelIdPath: d.modelIdPath, extraHeaders: { ...d.extraHeaders } };
 };
 
 export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
@@ -65,6 +66,7 @@ export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void;
         ...(conn.authHeader.trim() ? { authHeader: conn.authHeader.trim() } : {}),
         ...(conn.authPrefix.trim() ? { authPrefix: conn.authPrefix.trim() } : {}),
         ...(conn.modelIdPath.trim() ? { modelIdPath: conn.modelIdPath.trim() } : {}),
+        ...(Object.keys(conn.extraHeaders).length ? { extraHeaders: conn.extraHeaders } : {}),
       });
       onCreated();
       onClose();

@@ -21,6 +21,7 @@
 
 import { prisma } from '../lib/prisma';
 import { getRoutingConfigForUI } from './routing.service';
+import { parseExtraHeaders } from '../lib/providerHeaders';
 
 // The order routing actually walks pools in (best first). Mirrors TIER_ORDER in nexus.service so
 // the Nexus view presents tiers in the same sequence the router tries them.
@@ -52,6 +53,8 @@ export interface NexusPool {
   authHeader:     string;
   authPrefix:     string | null;
   modelIdPath:    string;
+  // Extra request headers, parsed back to an object for the edit form. {} when none are set.
+  extraHeaders:   Record<string, string>;
   keys:           NexusKeyHealth[];
 }
 
@@ -89,6 +92,7 @@ export async function getNexusOverview(now = new Date()): Promise<NexusOverview>
     authHeader:     p.authHeader,
     authPrefix:     p.authPrefix,
     modelIdPath:    p.modelIdPath,
+    extraHeaders:   parseExtraHeaders(p.extraHeaders),
     keys: p.keys.map((k) => {
       totalKeys++;
       if (k.status === 'banned') bannedKeys++;

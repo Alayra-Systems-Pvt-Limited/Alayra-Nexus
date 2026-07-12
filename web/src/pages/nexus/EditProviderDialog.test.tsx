@@ -13,7 +13,7 @@ import { EditProviderDialog } from './EditProviderDialog';
 const pool: NexusPool = {
   id: 'p-1', name: 'OpenAI Prod', slug: 'openai-prod', provider: 'openai', tier: 'standard',
   preferredModel: 'gpt-4o', baseUrl: 'https://api.openai.com/v1', modelFetchUrl: null,
-  authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', keys: [],
+  authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {}, keys: [],
 };
 
 beforeEach(() => { patch.mockReset(); patch.mockResolvedValue({ provider: pool }); });
@@ -35,5 +35,15 @@ describe('EditProviderDialog', () => {
     expect(body).toMatchObject({ name: 'OpenAI Main', tier: 'standard', preferredModel: 'gpt-4o' });
     expect(body).not.toHaveProperty('provider');
     expect(body).not.toHaveProperty('slug');
+  });
+
+  it('prefills existing extra headers and sends them back', async () => {
+    const withHeaders: NexusPool = { ...pool, extraHeaders: { 'anthropic-version': '2023-06-01' } };
+    render(<EditProviderDialog pool={withHeaders} onClose={vi.fn()} onSaved={vi.fn()} />);
+    expect(screen.getByDisplayValue('anthropic-version')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /save pool/i }));
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    expect((patch.mock.calls[0][1] as Record<string, unknown>).extraHeaders).toEqual({ 'anthropic-version': '2023-06-01' });
   });
 });

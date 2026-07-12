@@ -25,6 +25,7 @@ import { getModelRegistry, activeProviderSlugs }  from './model.service';
 import { selectModels, type SelectableModel, type Capability } from '../lib/modelSelect';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
 import { extractModelIds }   from '../lib/modelPath';
+import { withExtraHeaders }  from '../lib/providerHeaders';
 import { getSsrfPolicy }     from './ssrf.service';
 import { SHARED_NAMESPACE, type RoutingScope } from '../lib/scope';
 import { notificationsArmed, notify } from './notifications.service';
@@ -54,6 +55,9 @@ export interface NexusRoute {
   tier:         Tier;
   authHeader:   string;
   authPrefix:   string | null;
+  // The provider's optional extra request headers (JSON object string), applied by the proxy
+  // path under the system headers. null when the provider has none.
+  extraHeaders: string | null;
   wasDowngrade: boolean;
   // True when this request is the single half-open probe for a recovering key —
   // its outcome must be reported so the breaker closes or re-escalates.
@@ -69,6 +73,7 @@ export interface NexusRoute {
 type ProviderRow = {
   id: string; baseUrl: string | null; provider: string;
   authHeader: string; authPrefix: string | null; tier: string; preferredModel: string | null;
+  extraHeaders: string | null;
 };
 
 // The model a route will serve. On the model-first path it comes from the registry; on
@@ -91,6 +96,7 @@ function buildRoute(
     tier:         (model.tier as Tier),
     authHeader:   provider.authHeader,
     authPrefix:   provider.authPrefix,
+    extraHeaders: provider.extraHeaders,
     isProbe:      gate === 'probe',
     byok:         key.ownerTeamId !== null,
   };
@@ -462,7 +468,7 @@ export async function testKey(keyId: string): Promise<{ success: boolean; latenc
   try {
     assertSafeUrl(baseUrl, await getSsrfPolicy());
     const res = await fetch(`${baseUrl}/models`, {
-      headers: { [key.provider.authHeader]: `${key.provider.authPrefix ?? 'Bearer'} ${apiKey}` },
+      headers: withExtraHeaders(key.provider.extraHeaders, { [key.provider.authHeader]: `${key.provider.authPrefix ?? 'Bearer'} ${apiKey}` }),
       signal:  AbortSignal.timeout(5000),
     });
     return { success: res.ok, latencyMs: Date.now() - start, error: res.ok ? undefined : `HTTP ${res.status}` };
@@ -477,6 +483,7 @@ export async function validateProviderCredentials(
   apiKey: string,
   authHeader: string,
   authPrefix: string | null,
+  extraHeaders: string | null = null,
 ): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
   const base  = stripTrailingSlash(baseUrl ?? providerDefaultUrl(provider));
   const url   = `${base}/models`;
@@ -484,7 +491,7 @@ export async function validateProviderCredentials(
   try {
     assertSafeUrl(base, await getSsrfPolicy());
     const res = await fetch(url, {
-      headers: { [authHeader]: `${authPrefix ?? 'Bearer'} ${apiKey}` },
+      headers: withExtraHeaders(extraHeaders, { [authHeader]: `${authPrefix ?? 'Bearer'} ${apiKey}` }),
       signal:  AbortSignal.timeout(8000),
     });
     return { ok: res.ok, latencyMs: Date.now() - start, error: res.ok ? undefined : `HTTP ${res.status}` };
@@ -512,10 +519,10 @@ export async function validateModel(
     assertSafeUrl(baseUrl, await getSsrfPolicy());
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method:  'POST',
-      headers: {
+      headers: withExtraHeaders(provider.extraHeaders, {
         'Content-Type': 'application/json',
         [provider.authHeader]: `${provider.authPrefix ?? 'Bearer'} ${apiKey}`,
-      },
+      }),
       body:   JSON.stringify({ model: modelName, messages: [{ role: 'user', content: 'Hi' }], max_tokens: 1 }),
       signal: AbortSignal.timeout(15000),
     });
@@ -562,7 +569,7 @@ export async function fetchProviderModels(
   try {
     assertSafeUrl(url, await getSsrfPolicy());
     const res = await fetch(url, {
-      headers: { [provider.authHeader]: `${provider.authPrefix ?? 'Bearer'} ${apiKey}` },
+      headers: withExtraHeaders(provider.extraHeaders, { [provider.authHeader]: `${provider.authPrefix ?? 'Bearer'} ${apiKey}` }),
       signal:  AbortSignal.timeout(8000),
     });
     if (!res.ok) return { ok: false, models: [], error: `HTTP ${res.status}` };

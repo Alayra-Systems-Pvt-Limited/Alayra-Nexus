@@ -20,6 +20,11 @@ model NexusProvider {
   authHeader     String     @default("Authorization")
   authPrefix     String?
   modelIdPath    String     @default("data[].id")
+  // Extra request headers merged into every outbound call to this provider (model-fetch,
+  // validation probes, and the proxy path). Stored as a JSON object string, e.g.
+  // {"anthropic-version":"2023-06-01"}. System headers (auth, content-type) always win over
+  // these, so an operator can add a required header without being able to spoof credentials.
+  extraHeaders   String?
   tier           String     @default("standard")
   preferredModel String?
   isActive       Boolean    @default(true)

@@ -21,6 +21,7 @@ import { computeReserve, countMessageTokens, countTokens } from '../lib/tokenize
 import { reconcileTpm }              from '../lib/admission';
 import { sessionHash, setStickyKeyId } from '../lib/sticky';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
+import { withExtraHeaders }           from '../lib/providerHeaders';
 import { getSsrfPolicy }              from './ssrf.service';
 import { getGuardrailConfig }         from './guardrails.service';
 import { evaluateMessages, evaluateText, type CompiledRule } from '../lib/guardrails';
@@ -318,10 +319,10 @@ export async function handleProxy(
   // non-streamed response from upstream so we can inspect it before replaying it.
   const upstreamBody = { ...body, messages: effectiveMessages, model: route.modelString, ...(bufferStream ? { stream: false } : {}) };
   const authValue    = `${route.authPrefix ?? 'Bearer'} ${route.decryptedKey}`;
-  const headers: Record<string, string> = {
+  const headers: Record<string, string> = withExtraHeaders(route.extraHeaders, {
     'Content-Type': 'application/json',
     [route.authHeader]: authValue,
-  };
+  });
   const sessionId = `proxy-${Date.now()}`;
 
   // A single controller governs the whole upstream call. A time-to-first-byte

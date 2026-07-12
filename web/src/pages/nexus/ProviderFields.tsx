@@ -1,4 +1,5 @@
 import { Field, Input, FieldRow } from '../../ui';
+import { HeaderRows } from './HeaderRows';
 
 // The connection block shared by Add- and Edit-provider dialogs: how to reach the provider and how
 // to read its model list. Kept as one component so the two dialogs can never drift apart (no dup).
@@ -12,6 +13,7 @@ export interface ProviderConn {
   authHeader:     string;
   authPrefix:     string;
   modelIdPath:    string;
+  extraHeaders:   Record<string, string>;
 }
 
 export function ProviderFields({ conn, onChange }: { conn: ProviderConn; onChange: (patch: Partial<ProviderConn>) => void }) {
@@ -41,6 +43,10 @@ export function ProviderFields({ conn, onChange }: { conn: ProviderConn; onChang
 
       <Field label="Model ID path" hint="where model ids live in the list response">
         <Input value={conn.modelIdPath} placeholder="data[].id" onInput={set('modelIdPath')} />
+      </Field>
+
+      <Field label="Extra headers" hint="optional — sent on every call to this provider">
+        <HeaderRows value={conn.extraHeaders} onChange={(extraHeaders) => onChange({ extraHeaders })} />
       </Field>
     </>
   );
