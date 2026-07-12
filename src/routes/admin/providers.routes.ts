@@ -20,7 +20,7 @@ import { assertSafeUrl }         from '../../lib/url';
 import { getSsrfPolicy } from '../../services/ssrf.service';
 import { prisma }              from '../../lib/prisma';
 import { randomUUID } from 'crypto';
-import { validateProviderCredentials, validateModel } from '../../services/nexus.service';
+import { validateProviderCredentials, validateModel, fetchProviderModels } from '../../services/nexus.service';
 import { z }                   from 'zod';
 import { adminGuard, adminOwnerGuard } from './guard';
 
@@ -100,5 +100,17 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
     if (!providerId || !modelName) return reply.code(400).send({ error: 'providerId and modelName are required' });
     const result = await validateModel(providerId, modelName);
     return reply.send(result);
+  });
+
+  // ── Live model discovery ──────────────────────────────────────────
+  // Fetch the provider's current model list (used by the add-key "Fetch Models" flow). A
+  // plaintext key may be supplied to probe before the key is saved; otherwise an existing
+  // active key for the pool is used.
+  fastify.post('/admin/providers/:id/fetch-models', adminOwnerGuard, async (request, reply) => {
+    const { id }       = request.params as { id: string };
+    const { plainKey } = (request.body ?? {}) as { plainKey?: string };
+    const result = await fetchProviderModels(id, plainKey);
+    if (!result.ok) return reply.code(400).send({ error: result.error ?? 'Fetch failed', models: [] });
+    return reply.send({ models: result.models });
   });
 }

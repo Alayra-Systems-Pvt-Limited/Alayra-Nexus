@@ -56,11 +56,15 @@ export interface Overview {
 // Mirrors GET /admin/nexus/overview (nexusOverview.service.ts).
 export interface NexusKeyHealth {
   id: string; maskedKey: string; label: string | null; status: string;
-  coolingUntil: string | null; rpmLimit: number; ownerTeamName: string | null; lastUsedAt: string | null;
+  coolingUntil: string | null; rpmLimit: number; tpmLimit: number; maxUsers: number;
+  ownerTeamName: string | null; lastUsedAt: string | null;
 }
 export interface NexusPool {
   id: string; name: string; slug: string; provider: string; tier: string;
-  preferredModel: string | null; keys: NexusKeyHealth[];
+  preferredModel: string | null;
+  baseUrl: string | null; modelFetchUrl: string | null;
+  authHeader: string; authPrefix: string | null; modelIdPath: string;
+  keys: NexusKeyHealth[];
 }
 export interface NexusOverview {
   summary: { providers: number; activeKeys: number; coolingKeys: number; bannedKeys: number; totalKeys: number };
@@ -85,3 +89,7 @@ export const GET  = <T = unknown>(p: string) => api<T>('GET', p);
 export const POST = <T = unknown>(p: string, b?: unknown) => api<T>('POST', p, b);
 export const PUT  = <T = unknown>(p: string, b?: unknown) => api<T>('PUT', p, b);
 export const DEL  = <T = unknown>(p: string) => api<T>('DELETE', p);
+
+/** Fetch a provider's live model list (P7.4b). `plainKey` probes before a key is saved. */
+export const fetchProviderModels = (providerId: string, plainKey?: string) =>
+  POST<{ models: string[] }>(`/admin/providers/${providerId}/fetch-models`, plainKey ? { plainKey } : {});

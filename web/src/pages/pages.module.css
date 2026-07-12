@@ -55,6 +55,22 @@
 .keyProbe { font-size: 11.5px; color: var(--accent); }
 .keyActions { display: flex; gap: 6px; margin-left: auto; }
 
+/* ── Add-key dialog: key input + fetch + model chips ── */
+.keyInputRow { display: flex; gap: 8px; align-items: stretch; }
+.keyInputWrap { position: relative; flex: 1; min-width: 0; }
+.keyEye { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--muted); cursor: pointer; display: inline-flex; padding: 2px; }
+.keyEye:hover { color: var(--text); }
+.modelChips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 132px; overflow-y: auto; padding: 2px; }
+.modelChip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 9px; border-radius: 20px; background: var(--surface-2); border: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; color: var(--text); }
+.modelChip button { display: inline-flex; background: none; border: none; color: var(--muted); cursor: pointer; padding: 1px; border-radius: 50%; }
+.modelChip button:hover { color: var(--red); }
+
+/* ── Nexus: pool models ── */
+.poolModels { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.poolModelsHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.poolModelsLabel { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.poolModelsEmpty { font-size: 12px; color: var(--subtle); }
+
 /* ── Models ── */
 .modelCell { display: flex; flex-direction: column; gap: 2px; }
 .modelName { font-weight: 550; }

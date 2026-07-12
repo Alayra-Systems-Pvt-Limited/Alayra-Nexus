@@ -24,6 +24,7 @@ import { getCostWeight }     from './routing.service';
 import { getModelRegistry, activeProviderSlugs }  from './model.service';
 import { selectModels, type SelectableModel, type Capability } from '../lib/modelSelect';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
+import { extractModelIds }   from '../lib/modelPath';
 import { getSsrfPolicy }     from './ssrf.service';
 import { SHARED_NAMESPACE, type RoutingScope } from '../lib/scope';
 import { notificationsArmed, notify } from './notifications.service';
@@ -524,5 +525,52 @@ export async function validateModel(
     return { ok: false, latencyMs, error: `HTTP ${res.status}: ${errText.slice(0, 120)}` };
   } catch (err) {
     return { ok: false, latencyMs: Date.now() - start, error: err instanceof Error ? err.message : 'Request failed' };
+  }
+}
+
+// The upper bound on models returned from a fetch — a defensive cap so a misconfigured path
+// pointed at a huge array can't flood the dashboard.
+const MAX_FETCHED_MODELS = 500;
+
+/**
+ * Fetch a provider's live model list (Phase 7.4b). Calls the pool's `modelFetchUrl` (or the
+ * conventional `<baseUrl>/models`) with a key, and reads the ids using the pool's `modelIdPath`.
+ * This is how "Fetch Models" stays future-proof: a provider releasing a new model surfaces it here
+ * with no code change. `plainKey` lets the add-key form fetch before its key is saved; otherwise an
+ * existing active key for the pool is used. SSRF-guarded like every other outbound admin call.
+ */
+export async function fetchProviderModels(
+  providerId: string,
+  plainKey?: string,
+): Promise<{ ok: boolean; models: string[]; error?: string }> {
+  const provider = await prisma.nexusProvider.findUnique({
+    where:   { id: providerId },
+    include: { keys: { where: { status: 'active' }, take: 1, orderBy: { lastUsedAt: 'asc' } } },
+  });
+  if (!provider) return { ok: false, models: [], error: 'Provider not found' };
+
+  let apiKey = plainKey?.trim();
+  if (!apiKey) {
+    if (!provider.keys.length) return { ok: false, models: [], error: 'Enter an API key, or add an active key to this pool first' };
+    apiKey = decrypt(provider.keys[0].encryptedKey);
+  }
+
+  const base = stripTrailingSlash(provider.baseUrl ?? providerDefaultUrl(provider.provider));
+  const url  = provider.modelFetchUrl ?? (base ? `${base}/models` : '');
+  if (!url) return { ok: false, models: [], error: 'No base URL or model-fetch URL configured for this pool' };
+
+  try {
+    assertSafeUrl(url, await getSsrfPolicy());
+    const res = await fetch(url, {
+      headers: { [provider.authHeader]: `${provider.authPrefix ?? 'Bearer'} ${apiKey}` },
+      signal:  AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return { ok: false, models: [], error: `HTTP ${res.status}` };
+    const json   = await res.json().catch(() => null);
+    const models = extractModelIds(json, provider.modelIdPath).slice(0, MAX_FETCHED_MODELS);
+    if (!models.length) return { ok: false, models: [], error: 'No models found at the configured model-id path' };
+    return { ok: true, models };
+  } catch (err) {
+    return { ok: false, models: [], error: err instanceof Error ? err.message : 'Fetch failed' };
   }
 }

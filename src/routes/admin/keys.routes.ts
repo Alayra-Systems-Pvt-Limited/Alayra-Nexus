@@ -48,6 +48,7 @@ export default async function adminKeysRoutes(fastify: FastifyInstance) {
     label:    z.string().optional(),
     rpmLimit: z.number().int().min(1).default(60),
     tpmLimit: z.number().int().min(1).default(100000),
+    maxUsers: z.number().int().min(1).default(1000),
     // BYOK: null/omitted = shared pool. Set to make the key private to one team.
     ownerTeamId: z.string().uuid().nullish(),
   });
@@ -70,6 +71,7 @@ export default async function adminKeysRoutes(fastify: FastifyInstance) {
         maskedKey:    maskKey(body.apiKey),
         rpmLimit:     body.rpmLimit,
         tpmLimit:     body.tpmLimit,
+        maxUsers:     body.maxUsers,
         ownerTeamId:  body.ownerTeamId ?? null,
       },
     });

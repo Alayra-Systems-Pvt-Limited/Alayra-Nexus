@@ -3,7 +3,7 @@ import { Boxes, KeyRound, Snowflake, Ban, Plus } from 'lucide-preact';
 import { PageHeader, StatCard, Spinner, Button, EmptyState } from '../ui';
 import { useApi } from '../hooks/useApi';
 import { compactNumber } from '../lib/format';
-import type { NexusOverview } from '../api';
+import type { NexusOverview, ModelsResponse, AiModel } from '../api';
 import { RoutingRules } from './nexus/RoutingRules';
 import { PoolCard } from './nexus/PoolCard';
 import { AddProviderDialog } from './nexus/AddProviderDialog';
@@ -15,7 +15,11 @@ const TIER_LABEL: Record<string, string> = { premium: 'Premium tier', standard: 
 // each key's live health with operator actions, and an honest description of the routing rules.
 export function Nexus() {
   const { data, loading, error, reload } = useApi<NexusOverview>('/admin/nexus/overview');
+  const { data: modelData, reload: reloadModels } = useApi<ModelsResponse>('/admin/models');
   const [adding, setAdding] = useState(false);
+
+  // Reload both the pools and the registry so a model added/removed on a key shows immediately.
+  const reloadAll = () => { reload(); reloadModels(); };
 
   if (loading && !data) {
     return (
@@ -40,6 +44,8 @@ export function Nexus() {
   }
 
   const { summary, routing, tiers } = data;
+  const allModels: AiModel[] = modelData?.models ?? [];
+  const modelsFor = (providerSlug: string) => allModels.filter((m) => m.provider === providerSlug);
 
   return (
     <>
@@ -68,13 +74,13 @@ export function Nexus() {
           <div key={group.tier} class={s.section}>
             <h3 class={s.tierHeading}>{TIER_LABEL[group.tier] ?? group.tier}</h3>
             <div class={s.poolGrid}>
-              {group.providers.map((pool) => <PoolCard key={pool.id} pool={pool} onChanged={reload} />)}
+              {group.providers.map((pool) => <PoolCard key={pool.id} pool={pool} models={modelsFor(pool.provider)} onChanged={reloadAll} />)}
             </div>
           </div>
         ))
       )}
 
-      {adding && <AddProviderDialog onClose={() => setAdding(false)} onCreated={reload} />}
+      {adding && <AddProviderDialog onClose={() => setAdding(false)} onCreated={reloadAll} />}
     </>
   );
 }

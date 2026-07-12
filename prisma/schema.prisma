@@ -38,6 +38,9 @@ model NexusKey {
   status          String        @default("active")
   rpmLimit        Int           @default(60)
   tpmLimit        Int           @default(100000)
+  // Max distinct end-users this key may serve (P7.4b). Stored and shown now; per-user
+  // admission enforcement lands once requests carry a user identity signal.
+  maxUsers        Int           @default(1000)
   lastUsedAt      DateTime?
   coolingUntil    DateTime?
   // BYOK (Phase 5.5): null = shared pool, set = private to that team. Ownership sits

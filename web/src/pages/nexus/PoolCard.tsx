@@ -1,15 +1,16 @@
 import { useState } from 'preact/hooks';
 import { Plus, Trash2 } from 'lucide-preact';
 import { Card, Badge, Button, EmptyState } from '../../ui';
-import { DEL, type NexusPool } from '../../api';
+import { DEL, type NexusPool, type AiModel } from '../../api';
 import { KeyRow } from './KeyRow';
+import { PoolModels } from './PoolModels';
 import { AddKeyDialog } from './AddKeyDialog';
 import s from '../pages.module.css';
 
-// One provider pool: its identity (name, upstream provider, preferred model), the keys that serve
-// it, and the operator actions to add a key or remove the whole pool. Each key's own actions are
-// delegated to KeyRow.
-export function PoolCard({ pool, onChanged }: { pool: NexusPool; onChanged: () => void }) {
+// One provider pool: its identity, the keys that serve it, the models it exposes (folded in from the
+// old Models tab), and the operator actions to add a key or remove the whole pool. Each key's own
+// actions are delegated to KeyRow; model chips to PoolModels.
+export function PoolCard({ pool, models, onChanged }: { pool: NexusPool; models: AiModel[]; onChanged: () => void }) {
   const [addingKey, setAddingKey] = useState(false);
   const [removing, setRemoving]   = useState(false);
 
@@ -36,12 +37,22 @@ export function PoolCard({ pool, onChanged }: { pool: NexusPool; onChanged: () =
           <Button size="sm" variant="ghost" icon onClick={removePool} disabled={removing} aria-label="Remove pool"><Trash2 size={14} /></Button>
         </div>
       </div>
+
       {pool.keys.length === 0
         ? <EmptyState>No keys in this pool yet</EmptyState>
         : <div class={s.keyList}>{pool.keys.map((k) => <KeyRow key={k.id} k={k} onChanged={onChanged} />)}</div>}
 
+      <PoolModels models={models} onChanged={onChanged} />
+
       {addingKey && (
-        <AddKeyDialog providerId={pool.id} providerName={pool.name} onClose={() => setAddingKey(false)} onChanged={onChanged} />
+        <AddKeyDialog
+          providerId={pool.id}
+          providerName={pool.name}
+          provider={pool.provider}
+          tier={pool.tier}
+          onClose={() => setAddingKey(false)}
+          onChanged={onChanged}
+        />
       )}
     </Card>
   );

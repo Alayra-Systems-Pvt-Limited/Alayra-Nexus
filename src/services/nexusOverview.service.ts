@@ -33,6 +33,8 @@ export interface NexusKeyHealth {
   status:        string;        // active | cooling | banned
   coolingUntil:  string | null;
   rpmLimit:      number;
+  tpmLimit:      number;
+  maxUsers:      number;
   ownerTeamName: string | null; // null = shared pool
   lastUsedAt:    string | null;
 }
@@ -44,6 +46,12 @@ export interface NexusPool {
   provider:       string;
   tier:           string;
   preferredModel: string | null;
+  // Pool config the edit form and the model-fetch flow need.
+  baseUrl:        string | null;
+  modelFetchUrl:  string | null;
+  authHeader:     string;
+  authPrefix:     string | null;
+  modelIdPath:    string;
   keys:           NexusKeyHealth[];
 }
 
@@ -76,6 +84,11 @@ export async function getNexusOverview(now = new Date()): Promise<NexusOverview>
     provider:       p.provider,
     tier:           p.tier,
     preferredModel: p.preferredModel,
+    baseUrl:        p.baseUrl,
+    modelFetchUrl:  p.modelFetchUrl,
+    authHeader:     p.authHeader,
+    authPrefix:     p.authPrefix,
+    modelIdPath:    p.modelIdPath,
     keys: p.keys.map((k) => {
       totalKeys++;
       if (k.status === 'banned') bannedKeys++;
@@ -88,6 +101,8 @@ export async function getNexusOverview(now = new Date()): Promise<NexusOverview>
         status:        k.status,
         coolingUntil:  k.coolingUntil?.toISOString() ?? null,
         rpmLimit:      k.rpmLimit,
+        tpmLimit:      k.tpmLimit,
+        maxUsers:      k.maxUsers,
         ownerTeamName: k.ownerTeam?.name ?? null,
         lastUsedAt:    k.lastUsedAt?.toISOString() ?? null,
       };

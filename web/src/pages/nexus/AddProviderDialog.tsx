@@ -2,30 +2,48 @@ import { useState } from 'preact/hooks';
 import { POST, ApiError } from '../../api';
 import { Modal, Field, Input, Select, FieldRow, Button, FormError } from '../../ui';
 
-// Create a provider pool. Mirrors POST /admin/providers (providers.routes.ts): the upstream provider
-// kind is a fixed set, and anything OpenAI-compatible that isn't listed goes through "custom" with an
-// explicit base URL. Keys (with their live test probe) are added to the pool afterwards.
+// Create a provider pool. Mirrors POST /admin/providers (providers.routes.ts). Every pool carries
+// how to reach the provider AND how to read its model list (Model Fetch URL + Model ID Path), so the
+// add-key "Fetch Models" step works for any provider — not just the built-in ones.
 const PROVIDERS = ['openai', 'anthropic', 'google', 'groq', 'openrouter', 'custom'] as const;
 const TIERS     = ['premium', 'standard', 'fast'] as const;
+
+// Sensible starting points per provider; the operator can still override any of them.
+const DEFAULTS: Record<string, { baseUrl: string; authHeader: string; authPrefix: string; modelIdPath: string }> = {
+  openai:     { baseUrl: 'https://api.openai.com/v1',                              authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id' },
+  anthropic:  { baseUrl: 'https://api.anthropic.com/v1',                           authHeader: 'x-api-key',     authPrefix: '',       modelIdPath: 'data[].id' },
+  google:     { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id' },
+  groq:       { baseUrl: 'https://api.groq.com/openai/v1',                         authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id' },
+  openrouter: { baseUrl: 'https://openrouter.ai/api/v1',                           authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id' },
+  custom:     { baseUrl: '',                                                        authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id' },
+};
 
 const slugify = (v: string) => v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
 export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [name, setName]         = useState('');
-  const [slug, setSlug]         = useState('');
-  const [slugEdited, setSlugEd] = useState(false);
-  const [provider, setProvider] = useState<string>('openai');
-  const [tier, setTier]         = useState<string>('standard');
-  const [preferredModel, setPM] = useState('');
-  const [baseUrl, setBaseUrl]   = useState('');
-  const [authHeader, setAuthH]  = useState('Authorization');
-  const [authPrefix, setAuthP]  = useState('Bearer');
-  const [modelIdPath, setMIP]   = useState('data[].id');
-  const [busy, setBusy]         = useState(false);
-  const [error, setError]       = useState<string | null>(null);
+  const [name, setName]           = useState('');
+  const [slug, setSlug]           = useState('');
+  const [slugEdited, setSlugEd]   = useState(false);
+  const [provider, setProvider]   = useState<string>('openai');
+  const [tier, setTier]           = useState<string>('standard');
+  const [preferredModel, setPM]   = useState('');
+  const [baseUrl, setBaseUrl]     = useState(DEFAULTS.openai.baseUrl);
+  const [modelFetchUrl, setMFU]   = useState('');
+  const [authHeader, setAuthH]    = useState(DEFAULTS.openai.authHeader);
+  const [authPrefix, setAuthP]    = useState(DEFAULTS.openai.authPrefix);
+  const [modelIdPath, setMIP]     = useState(DEFAULTS.openai.modelIdPath);
+  const [busy, setBusy]           = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+
+  // Switching provider re-seeds the connection fields to that provider's defaults — the operator
+  // picks the provider first, then tweaks.
+  const onProvider = (value: string) => {
+    setProvider(value);
+    const d = DEFAULTS[value] ?? DEFAULTS.custom;
+    setBaseUrl(d.baseUrl); setAuthH(d.authHeader); setAuthP(d.authPrefix); setMIP(d.modelIdPath);
+  };
 
   const effectiveSlug = slugEdited ? slug : slugify(name);
-  const isCustom = provider === 'custom';
   const canSubmit = name.trim().length > 0 && effectiveSlug.length > 0 && !busy;
 
   const submit = async (e: Event) => {
@@ -41,6 +59,7 @@ export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void;
         tier,
         ...(preferredModel.trim() ? { preferredModel: preferredModel.trim() } : {}),
         ...(baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
+        ...(modelFetchUrl.trim() ? { modelFetchUrl: modelFetchUrl.trim() } : {}),
         ...(authHeader.trim() ? { authHeader: authHeader.trim() } : {}),
         ...(authPrefix.trim() ? { authPrefix: authPrefix.trim() } : {}),
         ...(modelIdPath.trim() ? { modelIdPath: modelIdPath.trim() } : {}),
@@ -83,7 +102,7 @@ export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void;
 
         <FieldRow>
           <Field label="Upstream provider">
-            <Select value={provider} onChange={(e) => setProvider((e.target as HTMLSelectElement).value)}>
+            <Select value={provider} onChange={(e) => onProvider((e.target as HTMLSelectElement).value)}>
               {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
             </Select>
           </Field>
@@ -98,27 +117,27 @@ export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void;
           <Input value={preferredModel} placeholder="gpt-4o" onInput={(e) => setPM((e.target as HTMLInputElement).value)} />
         </Field>
 
-        <Field label="Base URL" hint={isCustom ? 'required for custom' : 'optional override'}>
+        <Field label="Base URL">
           <Input value={baseUrl} placeholder="https://api.openai.com/v1" onInput={(e) => setBaseUrl((e.target as HTMLInputElement).value)} />
         </Field>
 
-        {isCustom && (
-          <>
-            <FieldRow>
-              <Field label="Auth header">
-                <Input value={authHeader} onInput={(e) => setAuthH((e.target as HTMLInputElement).value)} />
-              </Field>
-              <Field label="Auth prefix" hint="optional">
-                <Input value={authPrefix} placeholder="Bearer" onInput={(e) => setAuthP((e.target as HTMLInputElement).value)} />
-              </Field>
-            </FieldRow>
-            <Field label="Model-id path" hint="where the model list lives">
-              <Input value={modelIdPath} placeholder="data[].id" onInput={(e) => setMIP((e.target as HTMLInputElement).value)} />
-            </Field>
-          </>
-        )}
+        <Field label="Model fetch URL" hint="optional — defaults to base + /models">
+          <Input value={modelFetchUrl} placeholder="https://api.example.com/v1/models" onInput={(e) => setMFU((e.target as HTMLInputElement).value)} />
+        </Field>
 
-        {/* Enter-to-submit without showing a duplicate button. */}
+        <FieldRow>
+          <Field label="Auth header">
+            <Input value={authHeader} onInput={(e) => setAuthH((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Field label="Auth prefix" hint="optional">
+            <Input value={authPrefix} placeholder="Bearer" onInput={(e) => setAuthP((e.target as HTMLInputElement).value)} />
+          </Field>
+        </FieldRow>
+
+        <Field label="Model ID path" hint="where model ids live in the list response">
+          <Input value={modelIdPath} placeholder="data[].id" onInput={(e) => setMIP((e.target as HTMLInputElement).value)} />
+        </Field>
+
         <button type="submit" style={{ display: 'none' }} aria-hidden="true" tabIndex={-1} />
       </form>
     </Modal>

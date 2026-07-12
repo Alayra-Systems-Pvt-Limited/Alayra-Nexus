@@ -14,7 +14,8 @@ const sample: NexusOverview = {
     tier: 'standard',
     providers: [{
       id: 'p1', name: 'OpenAI Prod', slug: 'openai-prod', provider: 'openai', tier: 'standard', preferredModel: 'gpt-4o',
-      keys: [{ id: 'k1', maskedKey: 'sk-…1', label: null, status: 'active', coolingUntil: null, rpmLimit: 60, ownerTeamName: null, lastUsedAt: null }],
+      baseUrl: 'https://api.openai.com/v1', modelFetchUrl: null, authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id',
+      keys: [{ id: 'k1', maskedKey: 'sk-…1', label: null, status: 'active', coolingUntil: null, rpmLimit: 60, tpmLimit: 100000, maxUsers: 1000, ownerTeamName: null, lastUsedAt: null }],
     }],
   }],
 };

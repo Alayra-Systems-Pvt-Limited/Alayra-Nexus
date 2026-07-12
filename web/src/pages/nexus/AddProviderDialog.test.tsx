@@ -27,10 +27,13 @@ describe('AddProviderDialog', () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
   });
 
-  it('reveals custom-provider fields only for the custom kind', () => {
+  it('always shows the model-fetch fields and re-seeds base URL per provider', () => {
     render(<AddProviderDialog onClose={vi.fn()} onCreated={vi.fn()} />);
-    expect(screen.queryByPlaceholderText('data[].id')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox', { name: /upstream provider/i }), { target: { value: 'custom' } });
+    // Model ID path is shown for every provider now (Fetch Models needs it), defaulting to data[].id.
     expect(screen.getByPlaceholderText('data[].id')).toBeInTheDocument();
+    expect((screen.getByPlaceholderText('https://api.openai.com/v1') as HTMLInputElement).value).toBe('https://api.openai.com/v1');
+    // Switching provider re-seeds the base URL to that provider's default.
+    fireEvent.change(screen.getByRole('combobox', { name: /upstream provider/i }), { target: { value: 'groq' } });
+    expect((screen.getByPlaceholderText('https://api.openai.com/v1') as HTMLInputElement).value).toBe('https://api.groq.com/openai/v1');
   });
 });

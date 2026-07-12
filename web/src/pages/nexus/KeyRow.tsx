@@ -51,7 +51,7 @@ export function KeyRow({ k, onChanged }: { k: NexusKeyHealth; onChanged: () => v
       </div>
       <div class={s.keyMeta}>
         <Badge tone={h.tone} dot>{h.label}</Badge>
-        <span class={s.keySub}>{k.rpmLimit}/min{k.lastUsedAt ? ` · used ${relativeTime(k.lastUsedAt)}` : ''}</span>
+        <span class={s.keySub}>{k.rpmLimit}/min · {k.tpmLimit.toLocaleString()} tpm · {k.maxUsers.toLocaleString()} users{k.lastUsedAt ? ` · used ${relativeTime(k.lastUsedAt)}` : ''}</span>
         {probe && <span class={s.keyProbe}>{probe}</span>}
       </div>
       <div class={s.keyActions}>

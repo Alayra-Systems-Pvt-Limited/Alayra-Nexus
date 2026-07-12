@@ -11,6 +11,44 @@
 
 ---
 
+**Date:** 2026-07-12 · Session 44  
+**Author:** Abbas  
+**Title:** Phase 7.4b — Nexus becomes the whole story: live model discovery, folded-in models, per-key limits  
+
+**Summary:**  
+This session closed the biggest gap in the redesign. Until now the console could *show* provider
+pools but not really *set them up*, and the models a provider serves lived in a separate section
+with no way to discover them. Both are now solved, and the separate Models section has been retired
+— **a provider pool is now the single place that holds everything about a provider.**
+
+The centrepiece is **live model discovery.** When you add a key to a pool, a **Fetch Models** button
+calls the provider directly with that key and pulls back its *current* list of models — so a
+provider releasing a new model shows up immediately, with nothing to update on our side. The fetched
+models appear as a tidy set of tags; drop any you don't want with a single click, and the ones you
+keep are saved to the provider. This is the same approach the major gateways use, and it means the
+product never has to ship a hardcoded model list that goes stale. Every provider pool now also
+records exactly how to reach its model list (a fetch address and where the model names sit in the
+response), so this works for any provider, not just the built-in ones.
+
+Alongside it, **each key now carries its real operating limits** — a per-minute request cap, a
+per-minute token cap, and a maximum number of users — all visible at a glance on the key and set
+when the key is added. And **the models a provider serves are shown right inside its pool**, as
+removable tags, so there's no longer a separate place to manage them.
+
+In plain terms: to stand up a provider now, you add the pool, add a key, press Fetch Models, keep
+the ones you want, and you're live — provider, address, key, models, and limits all in one place.
+
+One honest note carried forward: the user cap is stored and shown now; actually *enforcing* a
+per-key user limit needs a per-user signal on incoming requests, which is a small, separate change
+still to come. Nothing else is left half-done.
+
+The change included one small, safe database addition (the per-key user cap) and was checked
+end-to-end in a live browser: pools, keys with their limits, the folded-in models, the Fetch Models
+flow returning a live list, and the fuller provider setup form all render correctly with no errors.
+Both the gateway and the dashboard pass their full quality gates.
+
+---
+
 **Date:** 2026-07-12 · Session 43  
 **Author:** Abbas  
 **Title:** Phase 7.4a — Nexus key management restored, the brand mark, and charts made truly alive  
