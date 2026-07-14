@@ -7,7 +7,53 @@
 
 ---
 
-## 2026-07-12
+## 2026-07-14
+
+---
+
+**Date:** 2026-07-14 · Session 46  
+**Author:** Abbas  
+**Title:** Phase 7.4d — editing what you already created, a user cap that actually holds, and headers a provider demands  
+
+**Summary:**  
+This session closed the three gaps left open at the end of the last one. Each was built, checked and
+released on its own, so nothing was bundled together and nothing was left half-finished.
+
+**You can now edit a pool and a key, not just create or delete them.** Until now a provider pool or a
+credential was effectively final once saved — a wrong rate limit or a rotated key meant deleting and
+starting over. Both now open in an edit dialog. A pool's name, routing tier, address, and model-list
+settings can all be changed; a key's label and its request, token, and user limits can be adjusted,
+and the credential itself can be swapped for a new one without losing the key's history. Two things
+are deliberately fixed once a pool exists — which upstream provider it is, and its short name —
+because changing either would cut that pool loose from the models registered against it. Editing a
+key never touches whether it is paused or banned; those stay where they belong, on the key's own
+controls.
+
+**The per-key user limit is now enforced.** It was shown on every key but did nothing. A key now
+turns away a *new* end-user once it has served its quota for the day, and the request quietly moves
+to the next key that has room; a user the key is already serving is always let through. The limit is
+checked before the key's rate budget is touched, so a key that is full for new users is skipped
+without waste. Two points of honesty here: the count is of distinct people per day — a fairness
+measure, not a speed limit, since requests-per-minute and tokens-per-minute remain the hard limits —
+and it can only apply to requests that actually say who the end-user is. When a caller sends no user
+identity there is nothing to count, so the request is never refused on that basis. The dashboard now
+says exactly that where the limit is set, so no one is misled about what it does.
+
+**Providers that demand an extra header now work.** Some providers require an additional header on
+every call — Anthropic's model list is the clearest example — and without it the "fetch models" step
+simply fails. Any pool can now carry its own set of extra headers, entered as simple name-and-value
+rows, and they are applied on every call Nexus makes to that provider: discovering its models,
+testing the connection, and serving live traffic. A new Anthropic pool arrives with the header it
+needs already filled in. The headers a provider supplies can never override the ones Nexus attaches
+itself, so this stays a convenience and never becomes a way to interfere with credentials. This is
+the only part of the session that touched the database, and the change is additive — existing pools
+carry on unchanged until a header is set.
+
+Both the gateway and the dashboard pass their full quality gates at every step, with no known
+regressions.
+
+**Still to come (noted, not yet built):** reassigning a key's owning team from the key itself, and
+the analytics and cache-savings work planned next.
 
 ---
 
