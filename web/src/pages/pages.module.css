@@ -134,3 +134,72 @@
 .saveStatVal { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .saveStatLbl { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
 .saveEmpty { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); }
+
+/* ── Settings ── */
+.setTabs { margin-bottom: 16px; }
+.setPanel { max-width: 720px; }
+.setDesc { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin: 0 0 14px; }
+.setBody { display: flex; flex-direction: column; gap: 4px; }
+.setHint { font-size: 11.5px; color: var(--subtle); line-height: 1.55; margin: 4px 0 0; }
+.setGroup { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-top: 18px; padding-bottom: 6px; }
+.setSave { display: flex; align-items: center; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.setSaved { font-size: 12px; color: var(--green); font-weight: 550; }
+.setDirty { font-size: 12px; color: var(--subtle); }
+
+/* Routing weight slider */
+.sliderRow { display: flex; align-items: center; gap: 14px; }
+.slider { flex: 1; accent-color: var(--accent); }
+.sliderVal { font-family: var(--font-mono); font-size: 13px; color: var(--text); min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+.sliderHint { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+
+/* Notes that carry a consequence */
+.warnNote { margin-top: 14px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.warnNote b { color: var(--text); }
+.dangerNote { margin-top: 10px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--red-bg, var(--surface-2)); border: 1px solid var(--red); font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.dangerNote b { color: var(--red); }
+.fieldWarn { font-size: 11.5px; color: var(--red); margin: 5px 0 0; }
+.inputBad { border-color: var(--red) !important; }
+
+/* Cache TTL presets */
+.presetRow { display: flex; gap: 6px; margin-top: 8px; }
+.preset { font-size: 11.5px; padding: 4px 10px; border-radius: 20px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); cursor: pointer; }
+.preset:hover { color: var(--text); border-color: var(--border-strong); }
+
+/* Allow-list / recipient chips */
+.allowHead { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-top: 18px; margin-bottom: 8px; display: flex; gap: 8px; align-items: center; }
+.allowHeadHint { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--subtle); }
+.chipRow { display: flex; flex-wrap: wrap; gap: 6px; }
+.chipEmpty { font-size: 12px; color: var(--subtle); }
+.allowAdd { display: flex; gap: 8px; margin-top: 8px; }
+.allowAdd input { flex: 1; }
+
+/* Guardrail rules */
+.ruleList { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+.ruleItem { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); }
+.ruleGrid { display: grid; grid-template-columns: 1fr 1.4fr 110px 130px auto; gap: 6px; align-items: center; }
+
+/* Appearance */
+.themeGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.themeOpt { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 14px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); cursor: pointer; text-align: left; }
+.themeOpt:hover { border-color: var(--border-strong); }
+.themeOptOn { border-color: var(--accent); background: var(--accent-bg); }
+.themeIcon { color: var(--accent); display: inline-flex; }
+.themeName { font-size: 13px; font-weight: 600; color: var(--text); }
+.themeHint { font-size: 11.5px; color: var(--subtle); }
+
+/* ── Logs ── */
+.logFilters { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.logFilters input { flex: 1; min-width: 200px; }
+.logAction { display: flex; align-items: center; gap: 8px; }
+.logSlug { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+.logMethod { font-size: 10.5px; color: var(--subtle); }
+.logActor { display: flex; align-items: center; gap: 7px; }
+.logVia { font-size: 11px; color: var(--subtle); }
+.logTarget { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); word-break: break-all; }
+.logIp { font-family: var(--font-mono); font-size: 11.5px; color: var(--subtle); }
+.logWhen { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+@media (max-width: 860px) {
+  .ruleGrid { grid-template-columns: 1fr; }
+  .themeGrid { grid-template-columns: 1fr; }
+}

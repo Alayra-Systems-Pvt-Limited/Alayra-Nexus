@@ -118,6 +118,47 @@ export interface AnalyticsOverview {
   byOutcome:  { outcome: string; requests: number }[];
 }
 
+// ── Settings (settings.routes.ts / audit.routes.ts) ──────────────────────────
+// Each config is its own GET/PUT pair, so each sub-tab loads and saves only what it owns.
+
+export interface RoutingConfig { costWeight: number }
+
+export interface CacheConfig { enabled: boolean; ttlSeconds: number }
+
+export interface GuardrailRule {
+  name: string; pattern: string; flags?: string;
+  action: 'block' | 'redact';
+  appliesTo?: 'input' | 'output' | 'both';
+  replacement?: string;
+}
+export interface GuardrailConfig { enabled: boolean; bufferedSafe: boolean; rules: GuardrailRule[] }
+
+export type NotifyEvent = 'keyBanned' | 'breakerOpened' | 'adminLockout' | 'budgetThreshold' | 'tierExhausted';
+export interface NotificationConfig {
+  enabled: boolean; from: string; to: string[]; webhookUrl: string;
+  events: Record<NotifyEvent, boolean>; windowSeconds: number;
+  // The stored Resend key is never returned — only whether one is set, and its mask.
+  resendKeySet: boolean; resendKeyMasked: string;
+}
+
+export interface SsrfConfig {
+  allowPrivate: boolean;
+  allowList: string[];
+  // Supplied by the environment; shown read-only because the dashboard cannot change it.
+  envAllowList: string[];
+}
+
+export interface ComplianceConfig {
+  auditRetentionDays: number; usageRetentionDays: number; anonymizeUsage: boolean;
+}
+
+// Mirrors GET /admin/audit — the read-only audit trail.
+export interface AuditEntry {
+  id: string; action: string; method: string; actorRole: string;
+  actor: string | null; target: string | null; ip: string | null;
+  status: number; detail: string | null; createdAt: string;
+}
+
 // Mirrors GET /admin/config (system.routes.ts).
 export interface GatewayConfig { baseUrl: string; nexusApiKey: string | null; isFirstRun: boolean; }
 

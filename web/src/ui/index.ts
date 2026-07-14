@@ -14,3 +14,4 @@ export { ChartCard } from './ChartCard';
 export { Table, type Column } from './Table';
 export { Modal } from './Modal';
 export { Field, Input, Select, FieldRow, FormError, FormNote } from './Field';
+export { Toggle } from './Toggle';

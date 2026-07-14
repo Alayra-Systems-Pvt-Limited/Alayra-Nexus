@@ -6,6 +6,8 @@ import { Overview } from './pages/Overview';
 import { Nexus } from './pages/Nexus';
 import { Connect } from './pages/Connect';
 import { Analytics } from './pages/Analytics';
+import { Settings } from './pages/Settings';
+import { Logs } from './pages/Logs';
 import { Placeholder } from './pages/Placeholder';
 import { PageHeader, Card } from './ui';
 
@@ -15,6 +17,8 @@ const PAGES: Record<string, FunctionComponent> = {
   nexus:     Nexus,
   connect:   Connect,
   analytics: Analytics,
+  settings:  Settings,
+  logs:      Logs,
 };
 
 function NotFound() {
