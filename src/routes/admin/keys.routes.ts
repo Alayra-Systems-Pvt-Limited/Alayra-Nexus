@@ -24,6 +24,7 @@ import { redis }               from '../../lib/redis';
 import { testKey, banKey, coolKey } from '../../services/nexus.service';
 import { z }                   from 'zod';
 import { adminGuard, adminOwnerGuard } from './guard';
+import { ADMIN_READ_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
 
 export default async function adminKeysRoutes(fastify: FastifyInstance) {
   // ── Keys ──────────────────────────────────────────────────────────
@@ -150,7 +151,7 @@ export default async function adminKeysRoutes(fastify: FastifyInstance) {
 
   // ── Key RPM metrics ───────────────────────────────────────────────
 
-  fastify.get('/admin/keys/:id/metrics', adminGuard, async (request, reply) => {
+  fastify.get('/admin/keys/:id/metrics', withRateLimit(adminGuard, ADMIN_READ_RATE_LIMIT), async (request, reply) => {
     const { id } = request.params as { id: string };
     const key    = await prisma.nexusKey.findUnique({ where: { id }, select: { rpmLimit: true, tpmLimit: true, status: true } });
     if (!key) return reply.code(404).send({ error: 'Not found' });

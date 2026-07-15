@@ -21,6 +21,7 @@ import * as auth          from '../../services/adminAuth.service';
 import * as metrics       from '../../lib/metrics';
 import { recordAudit }    from '../../services/audit.service';
 import { adminGuard, adminOwnerGuard } from './guard';
+import { AUTH_RATE_LIMIT, rateLimited, withRateLimit } from '../../lib/routeRateLimits';
 
 const loginSchema = z.object({
   password: z.string().min(1),
@@ -43,9 +44,10 @@ function bearer(req: { headers: Record<string, unknown> }): string {
 
 export default async function adminAuthRoutes(fastify: FastifyInstance) {
   // ── Sign in ───────────────────────────────────────────────────────
-  // Deliberately unguarded — it is how a caller obtains a credential. The server's
-  // abuse guard covers it, and adminAuth adds a per-source lockout on top.
-  fastify.post('/admin/login', async (request, reply) => {
+  // Deliberately unguarded — it is how a caller obtains a credential. The global abuse guard covers
+  // it, adminAuth adds a per-source lockout, and this per-route limit caps sign-in attempts tightly
+  // (well above any human retry rate) so a distributed guessing attempt is throttled too.
+  fastify.post('/admin/login', rateLimited(AUTH_RATE_LIMIT), async (request, reply) => {
     const parsed = loginSchema.safeParse(request.body);
     if (!parsed.success) {
       metrics.adminLogin('invalid');
@@ -124,7 +126,7 @@ export default async function adminAuthRoutes(fastify: FastifyInstance) {
     return reply.send({ secret, otpauthUri });
   });
 
-  fastify.post('/admin/auth/totp/confirm', adminOwnerGuard, async (request, reply) => {
+  fastify.post('/admin/auth/totp/confirm', withRateLimit(adminOwnerGuard, AUTH_RATE_LIMIT), async (request, reply) => {
     const parsed = codeSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'code is required' });
 
@@ -135,7 +137,7 @@ export default async function adminAuthRoutes(fastify: FastifyInstance) {
     return reply.send({ success: true, recoveryCodes });
   });
 
-  fastify.post('/admin/auth/totp/disable', adminOwnerGuard, async (request, reply) => {
+  fastify.post('/admin/auth/totp/disable', withRateLimit(adminOwnerGuard, AUTH_RATE_LIMIT), async (request, reply) => {
     const parsed = codeSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'code is required' });
 
@@ -144,7 +146,7 @@ export default async function adminAuthRoutes(fastify: FastifyInstance) {
     return reply.send({ success: true });
   });
 
-  fastify.post('/admin/auth/recovery-codes', adminOwnerGuard, async (request, reply) => {
+  fastify.post('/admin/auth/recovery-codes', withRateLimit(adminOwnerGuard, AUTH_RATE_LIMIT), async (request, reply) => {
     const parsed = codeSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'code is required' });
     if (!await auth.isTwoFactorEnabled()) return reply.code(409).send({ error: 'Two-factor authentication is not enabled.' });

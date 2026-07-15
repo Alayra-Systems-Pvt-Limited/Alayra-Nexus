@@ -23,6 +23,7 @@ import { prisma }              from '../../lib/prisma';
 import { randomUUID } from 'crypto';
 import { redis }               from '../../lib/redis';
 import { adminGuard, adminOwnerGuard } from './guard';
+import { ADMIN_WRITE_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
 
 export default async function adminSystemRoutes(fastify: FastifyInstance) {
   // ── Dashboard config (auto-detects base URL from request) ────────
@@ -109,7 +110,7 @@ export default async function adminSystemRoutes(fastify: FastifyInstance) {
 
   // ── Cache bust ────────────────────────────────────────────────────
 
-  fastify.post('/admin/cache/flush', adminOwnerGuard, async (_req, reply) => {
+  fastify.post('/admin/cache/flush', withRateLimit(adminOwnerGuard, ADMIN_WRITE_RATE_LIMIT), async (_req, reply) => {
     await redis.del(REGISTRY_CACHE_KEY);
     return reply.send({ success: true });
   });

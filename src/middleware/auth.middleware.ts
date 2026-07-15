@@ -40,7 +40,9 @@ export async function verifyApiKey(request: FastifyRequest, reply: FastifyReply)
 
   // 2. Check team keys via SHA-256 hash (O(1) DB lookup, no decryption needed).
   // The team relation rides the same query so budget/status enforcement costs no
-  // extra round-trip.
+  // extra round-trip. sha256 (not a slow password hash) is correct here: the token is a
+  // high-entropy API key we issued, not a human password, so it is unguessable regardless,
+  // and a fast digest is what makes the indexed keyHash lookup O(1).
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const teamKey   = await prisma.nexusTeamKey.findUnique({ where: { keyHash: tokenHash }, include: { team: true } });
   if (teamKey) {

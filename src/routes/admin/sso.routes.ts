@@ -24,6 +24,7 @@ import * as sso            from '../../services/sso.service';
 import { buildOrigin }     from '../../lib/baseUrl';
 import { recordAudit }     from '../../services/audit.service';
 import { adminGuard, adminOwnerGuard } from './guard';
+import { AUTH_RATE_LIMIT, rateLimited } from '../../lib/routeRateLimits';
 
 const configSchema = z.object({
   enabled:      z.boolean().default(false),
@@ -63,7 +64,7 @@ export default async function adminSsoRoutes(fastify: FastifyInstance) {
   // ── Begin sign-in ─────────────────────────────────────────────────
   // Unguarded by design: it is how a caller authenticates. On any misconfiguration it
   // bounces to the login screen rather than erroring, so a disabled IdP is not a dead end.
-  fastify.get('/admin/sso/login', async (request, reply) => {
+  fastify.get('/admin/sso/login', rateLimited(AUTH_RATE_LIMIT), async (request, reply) => {
     try {
       const url = await sso.beginLogin(callbackUri(request));
       return reply.redirect(url);
@@ -77,7 +78,7 @@ export default async function adminSsoRoutes(fastify: FastifyInstance) {
   // ── IdP callback ──────────────────────────────────────────────────
   // Verifies the response and, on success, returns a tiny page that stores the freshly
   // minted session token in sessionStorage (never in the URL) and continues into the app.
-  fastify.get('/admin/sso/callback', async (request, reply) => {
+  fastify.get('/admin/sso/callback', rateLimited(AUTH_RATE_LIMIT), async (request, reply) => {
     const q = request.query as { code?: string; state?: string; error?: string };
     if (q.error) return bounce(reply, 'verification_failed');
 

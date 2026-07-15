@@ -23,6 +23,7 @@ import { randomUUID, createHash, randomBytes } from 'crypto';
 import { redis }               from '../../lib/redis';
 import { z }                   from 'zod';
 import { adminGuard, adminOwnerGuard } from './guard';
+import { ADMIN_WRITE_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
 
 export default async function adminTeamsRoutes(fastify: FastifyInstance) {
   // ── Teams ─────────────────────────────────────────────────────────
@@ -128,7 +129,7 @@ export default async function adminTeamsRoutes(fastify: FastifyInstance) {
     return reply.send({ key: decrypt(tk.encryptedKey) });
   });
 
-  fastify.delete('/admin/team-keys/:id', adminOwnerGuard, async (request, reply) => {
+  fastify.delete('/admin/team-keys/:id', withRateLimit(adminOwnerGuard, ADMIN_WRITE_RATE_LIMIT), async (request, reply) => {
     const { id } = request.params as { id: string };
     await prisma.nexusTeamKey.delete({ where: { id } });
     await redis.del(`nexus:teamkey:${id}`);

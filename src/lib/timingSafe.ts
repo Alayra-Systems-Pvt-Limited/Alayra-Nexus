@@ -28,6 +28,11 @@ import { createHash, timingSafeEqual } from 'crypto';
  * both sides first yields two fixed-width digests, so exactly one constant-time
  * comparison runs regardless of what the caller supplied.
  *
+ * The sha256 here is a length-equaliser for a constant-time compare, NOT password storage:
+ * nothing is persisted, so a slow hash (bcrypt/argon2) is the wrong tool — it would defeat the
+ * whole point (equal, fixed-width buffers) and add nothing, since the values are compared in
+ * memory and never written down. (CodeQL flags the digest call generically.)
+ *
  * A missing expected value never matches, including against an empty candidate.
  */
 export function safeEqual(candidate: string | undefined | null, expected: string | undefined | null): boolean {

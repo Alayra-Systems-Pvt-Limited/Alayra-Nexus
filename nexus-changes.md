@@ -7,6 +7,47 @@
 
 ---
 
+## 2026-07-15 (later still)
+
+---
+
+**Date:** 2026-07-15 · Session 51  
+**Title:** Phase 7.7c — acting on the automated security scan  
+
+**Summary:**  
+The repository's automated security scanner (GitHub CodeQL) raised twelve findings after the last
+push. Each was examined against the actual code. They sorted into three groups, and this session
+handled all three honestly — fixing what was a real gap, hardening one spot further as a bonus, and
+documenting the rest as the false alarms they are rather than papering over them.
+
+**Real improvement — tighter limits on sensitive endpoints.** The gateway already had a broad
+anti-abuse cap on all traffic, but it was intentionally loose (a blunt tool against overload, not
+against guessing). The scanner rightly noted that the most sensitive doors — signing in, confirming
+or turning off two-factor, reissuing recovery codes, and the single-sign-on handshake — deserve a
+tighter, dedicated limit so that a rapid guessing attempt is throttled long before it can get
+anywhere. Those limits are now in place, sized well above any normal human or dashboard use so
+nothing legitimate is ever affected, and a test confirms the limit actually engages. A few
+administrator-only maintenance actions received a modest limit in the same pass.
+
+**Bonus hardening — stronger recovery codes.** While in that area, the one-time recovery codes (the
+backup you use to get in if you lose your authenticator) were widened so that, even in the unlikely
+event the stored data were ever exposed, they could not be worked out by brute force. Existing setups
+simply get stronger codes the next time they are generated; nothing else changes.
+
+**Confirmed safe — the remaining findings.** The scanner also flagged the way the gateway compares
+secrets and looks up keys, suggesting a "slow hashing" technique meant for human-chosen passwords.
+That advice does not apply here: the values in question are long, randomly generated keys and tokens,
+not passwords, and the flagged approach is the correct and intended one for them — the suggested
+change would actually make the system slower and no safer. The outbound-request warning is likewise
+by design: the gateway must call the provider URLs an operator configures, and it already refuses any
+attempt to point those at private or internal addresses. These were reviewed, documented in the code
+with the reasoning, and recorded as accepted rather than changed.
+
+The full automated gate — code style, type safety, tests, production build, and a dependency
+security scan — passes cleanly on both the gateway and the dashboard, with no known vulnerabilities.
+
+---
+
 ## 2026-07-15 (later)
 
 ---

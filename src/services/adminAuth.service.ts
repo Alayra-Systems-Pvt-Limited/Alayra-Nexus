@@ -47,6 +47,12 @@ export const LOCKOUT_SECONDS     = parseInt(process.env.ADMIN_LOCKOUT_SECONDS ??
 
 const SINGLETON = 'singleton';
 
+// sha256 is the right tool here, not a slow password hash (bcrypt/argon2). Everything hashed through
+// this is a high-entropy random value we generated — session tokens (256-bit), admin API tokens
+// (192-bit), recovery codes (64-bit) — not a human-chosen password. A slow hash defends low-entropy
+// secrets against offline guessing; these are unguessable regardless, and a fast digest is what lets
+// a token be verified by an O(1) indexed lookup instead of a table scan. (CodeQL flags the call name
+// generically; the input, not the algorithm, is what makes a hash safe.)
 function sha256(v: string): string {
   return createHash('sha256').update(v).digest('hex');
 }
@@ -133,9 +139,11 @@ const RECOVERY_CODE_COUNT = 10;
 /** Ten fresh codes. Any previously-issued code stops working. Returned once. */
 export async function regenerateRecoveryCodes(): Promise<string[]> {
   const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () => {
-    // 5 bytes → a fixed 10-char hex string; split at the midpoint into xxxxx-xxxxx.
-    const hex = randomBytes(5).toString('hex');
-    return `${hex.slice(0, 5)}-${hex.slice(5)}`;
+    // 8 bytes = 64 bits of entropy, formatted xxxx-xxxx-xxxx-xxxx. Recovery codes are stored only as
+    // fast (sha256) hashes, so their strength has to come from length: 64 bits is infeasible to
+    // brute-force offline even if the hash table leaked, where the old 40-bit code was not.
+    const hex = randomBytes(8).toString('hex'); // 16 hex chars
+    return `${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}`;
   });
   await prisma.adminRecoveryCode.deleteMany({});
   await prisma.adminRecoveryCode.createMany({

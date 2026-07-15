@@ -107,6 +107,18 @@ inside the hashed key), plus `countKeys`/`deleteKeys` in a testable `lib/redisSc
 attempts is met with a plain "your session is read-only" message rather than being hidden — consistent
 with how the rest of the redesigned console behaves, and cleanly fixed once the accounts primitive lands.
 
+### ~~P7.7c — CodeQL security-scan remediation~~ ✅ **DONE**
+Twelve CodeQL alerts from the P7.7 push, triaged against the code into three groups.
+**Fixed (7):** per-route rate limits (`lib/routeRateLimits.ts` tiers AUTH/ADMIN_WRITE/ADMIN_READ)
+on the sensitive routes — login, TOTP confirm/disable, recovery-codes, SSO login/callback, key
+metrics, team-key delete, cache flush — on top of the existing global abuse guard; a test proves the
+limit engages (429). **Tightened (1):** the SSRF sink now fetches the validated `URL` object
+`assertSafeUrl` returns (the guard already blocked private/metadata/loopback and is tested).
+**Bonus:** recovery codes widened 40→64-bit. **Documented false positives (dismissed in GitHub UI):**
+sha256 on high-entropy tokens (session/API/team keys) and the constant-time-compare length-equaliser —
+bcrypt is the wrong tool there and would break the O(1) lookups; reasoning captured in code comments.
+No schema change, nothing on the proxy hot path.
+
 ### P7.8 — Teams  ← *the last parity blocker*
 Team keys (the old dashboard's "Team Keys" tab), budget cap + period, per-team cost, BYOK fallback,
 and **wire `assignedTier` into routing** — it is stored today and silently ignored, which makes the

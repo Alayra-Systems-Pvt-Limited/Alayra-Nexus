@@ -501,11 +501,14 @@ export async function validateProviderCredentials(
   extraHeaders: string | null = null,
 ): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
   const base  = stripTrailingSlash(baseUrl ?? providerDefaultUrl(provider));
-  const url   = `${base}/models`;
   const start = Date.now();
   try {
-    assertSafeUrl(base, await getSsrfPolicy());
-    const res = await fetch(url, {
+    // Validate against SSRF policy and fetch the *returned* URL object — not a separately
+    // concatenated string — so the value that reaches fetch() is the one the guard vetted (private
+    // hosts / metadata / loopback already rejected). Single source of truth, no unchecked side path.
+    const safeUrl = assertSafeUrl(base, await getSsrfPolicy());
+    safeUrl.pathname = `${stripTrailingSlash(safeUrl.pathname)}/models`;
+    const res = await fetch(safeUrl, {
       headers: withExtraHeaders(extraHeaders, { [authHeader]: `${authPrefix ?? 'Bearer'} ${apiKey}` }),
       signal:  AbortSignal.timeout(8000),
     });
