@@ -8,6 +8,7 @@ import s from '../pages.module.css';
 // Mirrors PATCH /admin/keys/:id. Leaving "Replace API key" blank keeps the stored key untouched;
 // the edit never changes the key's health (ban/cool state), which stays with the row actions.
 export function EditKeyDialog({ k, onClose, onSaved }: { k: NexusKeyHealth; onClose: () => void; onSaved: () => void }) {
+  const formId                  = `edit-key-form-${k.id}`;
   const [label, setLabel]       = useState(k.label ?? '');
   const [rpm, setRpm]           = useState(String(k.rpmLimit));
   const [tpm, setTpm]           = useState(String(k.tpmLimit));
@@ -22,12 +23,17 @@ export function EditKeyDialog({ k, onClose, onSaved }: { k: NexusKeyHealth; onCl
     if (busy) return;
     setBusy(true);
     setError(null);
+    // Fall back to the stored limit only when the field can't be parsed at all. Using `|| k.rpmLimit`
+    // would also reject a typed `0` (falsy) and silently keep the old value; clamp it to 1 instead.
+    const parsedRpm      = parseInt(rpm, 10);
+    const parsedTpm      = parseInt(tpm, 10);
+    const parsedMaxUsers = parseInt(maxUsers, 10);
     try {
       await PATCH(`/admin/keys/${k.id}`, {
         label:    label.trim(),
-        rpmLimit: Math.max(1, parseInt(rpm, 10) || k.rpmLimit),
-        tpmLimit: Math.max(1, parseInt(tpm, 10) || k.tpmLimit),
-        maxUsers: Math.max(1, parseInt(maxUsers, 10) || k.maxUsers),
+        rpmLimit: Math.max(1, Number.isNaN(parsedRpm) ? k.rpmLimit : parsedRpm),
+        tpmLimit: Math.max(1, Number.isNaN(parsedTpm) ? k.tpmLimit : parsedTpm),
+        maxUsers: Math.max(1, Number.isNaN(parsedMaxUsers) ? k.maxUsers : parsedMaxUsers),
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
       });
       onSaved();
@@ -46,11 +52,11 @@ export function EditKeyDialog({ k, onClose, onSaved }: { k: NexusKeyHealth; onCl
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={busy}>{busy ? 'Saving…' : 'Save key'}</Button>
+          <Button variant="primary" type="submit" form={formId} disabled={busy}>{busy ? 'Saving…' : 'Save key'}</Button>
         </>
       }
     >
-      <form onSubmit={submit}>
+      <form id={formId} onSubmit={submit}>
         {error && <FormError>{error}</FormError>}
 
         <Field label="Label" hint="optional">
@@ -86,8 +92,6 @@ export function EditKeyDialog({ k, onClose, onSaved }: { k: NexusKeyHealth; onCl
           A replaced key is re-encrypted and re-masked; the old value is discarded. Max users caps how many
           distinct end-users this key serves per day, and applies only to requests that identify their user.
         </FormNote>
-
-        <button type="submit" style={{ display: 'none' }} aria-hidden="true" tabIndex={-1} />
       </form>
     </Modal>
   );

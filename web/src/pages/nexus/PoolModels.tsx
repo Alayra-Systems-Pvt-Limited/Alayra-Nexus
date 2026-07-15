@@ -24,7 +24,8 @@ export function PoolModels({ models, onChanged }: { models: AiModel[]; onChanged
   const remove = async (id: string) => {
     setBusy(id);
     try { await removeModelFromRegistry(id); onChanged(); }
-    catch { setBusy(null); }
+    catch { /* leave the list as-is; the button re-enables in finally */ }
+    finally { setBusy(null); }
   };
 
   return (
@@ -43,7 +44,7 @@ export function PoolModels({ models, onChanged }: { models: AiModel[]; onChanged
                   <span class={s.modelItemMeta}>{m.capabilities.join(' · ')} · {priceSummary(m)}</span>
                 </div>
                 <div class={s.modelItemActions}>
-                  <button type="button" class={s.modelItemBtn} onClick={() => setEditing(m)} aria-label={`Edit ${m.modelString}`}><Pencil size={12} /></button>
+                  <button type="button" class={s.modelItemBtn} onClick={() => setEditing(m)} disabled={busy !== null} aria-label={`Edit ${m.modelString}`}><Pencil size={12} /></button>
                   <button type="button" class={s.modelItemBtn} onClick={() => remove(m.id)} disabled={busy !== null} aria-label={`Remove ${m.modelString}`}><X size={13} /></button>
                 </div>
               </div>

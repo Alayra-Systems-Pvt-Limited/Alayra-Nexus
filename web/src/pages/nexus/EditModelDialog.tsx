@@ -98,11 +98,11 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={busy}>{busy ? 'Saving…' : 'Save model'}</Button>
+          <Button variant="primary" type="submit" form="edit-model-form" disabled={busy}>{busy ? 'Saving…' : 'Save model'}</Button>
         </>
       }
     >
-      <form onSubmit={submit}>
+      <form id="edit-model-form" onSubmit={submit}>
         {error && <FormError>{error}</FormError>}
 
         <div class={s.editAutofill}>
@@ -162,8 +162,6 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
         {has('transcription') && (
           <Field label="Transcription price" hint="$ / file (or per minute)"><Input type="number" min={0} step="any" value={num.transcriptionPrice} onInput={(e) => setN('transcriptionPrice', (e.target as HTMLInputElement).value)} /></Field>
         )}
-
-        <button type="submit" style={{ display: 'none' }} aria-hidden="true" tabIndex={-1} />
       </form>
     </Modal>
   );

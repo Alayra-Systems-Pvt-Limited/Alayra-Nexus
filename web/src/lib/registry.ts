@@ -28,8 +28,12 @@ export async function addModelsToRegistry(provider: string, tier: string, modelS
     const modelString = raw.trim();
     if (!modelString || have.has(modelString)) continue;
     have.add(modelString);
-    let id = sanitizeId(provider, modelString);
-    while (existingIds.has(id)) id = `${id}-2`;
+    // Disambiguate an id collision with an incrementing suffix (-2, -3, …) rather than repeatedly
+    // appending "-2", which would only ever grow the string into "…-2-2-2".
+    const baseId = sanitizeId(provider, modelString);
+    let id = baseId;
+    let suffix = 2;
+    while (existingIds.has(id)) { id = `${baseId}-${suffix}`; suffix += 1; }
     existingIds.add(id);
     additions.push({ id, provider: provider as AiModel['provider'], modelString, displayName: modelString, tier, status: 'active', capabilities: ['chat'] });
   }

@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { useEffect } from 'preact/hooks';
+import { useEffect, useId } from 'preact/hooks';
 import { X } from 'lucide-preact';
 import s from './ui.module.css';
 
@@ -17,6 +17,7 @@ interface Props {
  * key, add provider, and the budgeting/settings dialogs to come) is poured into.
  */
 export function Modal({ title, onClose, children, footer }: Props) {
+  const titleId = useId();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -27,9 +28,9 @@ export function Modal({ title, onClose, children, footer }: Props) {
 
   return (
     <div class={s.modalOverlay} onClick={onClose}>
-      <div class={s.modal} role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div class={s.modal} role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => e.stopPropagation()}>
         <div class={s.modalHead}>
-          <h2 class={s.modalTitle}>{title}</h2>
+          <h2 id={titleId} class={s.modalTitle}>{title}</h2>
           <button type="button" class={s.modalClose} onClick={onClose} aria-label="Close"><X size={16} /></button>
         </div>
         <div class={s.modalBody}>{children}</div>

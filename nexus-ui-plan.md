@@ -79,6 +79,19 @@ existed. Fixed two bugs found while building: the Toggle was silently dead (a `<
 from a prop in an effect, which could clobber an in-progress edit and left "unsaved changes" stuck
 forever after a save.
 
+### ~~P7.6b — Dashboard polish + review fixes~~ ✅ **DONE**
+A finish pass over what P7.1–P7.6 shipped, no new features. Three visible defects fixed and verified
+live in both themes: (1) **charts** rendered blurred and ~2× too tall — the SVG used a fixed
+`320×120` viewBox with `preserveAspectRatio="none"`, so the browser stretched it ~1.9×; it now
+measures its container and renders 1:1 (a 120px-tall chart measures 120px, was 223px); (2) **table
+headers** on right-aligned columns drifted left of their cells — a CSS specificity bug where
+`.table thead th` beat `.tRight`, fixed with `.table thead th.tRight`; (3) **dark-theme `<select>`
+popups** rendered white with black hover text because the `<option>` had no styling — now themed from
+tokens. Plus a review round on the edit dialogs: `PoolModels` remove no longer leaves buttons disabled
+(moved to `finally`, edit disabled during removal); `EditKeyDialog` stops treating a typed `0` as
+"keep old"; edit dialog Save buttons tied to their form via `form=`; `Modal` uses `aria-labelledby`;
+registry id-collision suffix increments. Chart geometry locked by a regression test.
+
 ### P7.7 — Security + Caching  ← *next*
 **Security:** one home for 2FA/TOTP enrol + recovery codes, sessions & lockout, SSRF allowlist, and
 admin API tokens (mint/revoke, owner/viewer). *All backend exists — surfacing only.*

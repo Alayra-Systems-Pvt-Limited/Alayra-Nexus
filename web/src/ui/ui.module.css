@@ -111,6 +111,10 @@
 .input { width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px; font-size: 13px; color: var(--text); font-family: inherit; transition: border-color .13s var(--ease); }
 .input:focus { outline: none; border-color: var(--accent); }
 .input::placeholder { color: var(--subtle); }
+/* A <select> carries an author background, which makes Chrome abandon the native themed popup and
+   fall back to a light one (white list, black hover text) even under `color-scheme: dark`. Styling
+   the options explicitly from tokens restores a dropdown that matches the theme in both directions. */
+.input option { background: var(--surface-solid); color: var(--text); }
 .formRow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .formError { color: var(--red); font-size: 12.5px; margin-bottom: 12px; background: var(--red-bg); padding: 8px 11px; border-radius: var(--radius-sm); }
 .formNote { color: var(--muted); font-size: 12px; margin-bottom: 12px; line-height: 1.5; }
@@ -135,6 +139,10 @@
 .table tbody tr:last-child td { border-bottom: none; }
 .table tbody tr:hover td { background: var(--surface-2); }
 .tRight { text-align: right; font-variant-numeric: tabular-nums; }
+/* `.table thead th` sets `text-align:left` at higher specificity than `.tRight`, so a right-aligned
+   column's header drifted left of its numbers. Match the header selector's specificity to pull it
+   back over the cells. */
+.table thead th.tRight { text-align: right; }
 
 /* ── Line chart ── */
 .chartWrap { position: relative; width: 100%; touch-action: none; }

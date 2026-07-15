@@ -7,6 +7,56 @@
 
 ---
 
+## 2026-07-15
+
+---
+
+**Date:** 2026-07-15 · Session 49  
+**Title:** Phase 7.6b — dashboard polish: readable charts, aligned tables, themed menus, and a round of small reliability fixes  
+
+**Summary:**  
+This session was about finish, not features. Everything built over the last few phases now works;
+this pass made it *look* and *behave* like it works. Three things a person actually sees were wrong,
+and a short list of smaller issues had been flagged in a review. All of them are now fixed, and each
+fix was checked in a real browser, in both the dark and light themes, before being called done.
+
+**The charts are sharp again.** The trend lines on the Overview and Analytics pages were rendering
+soft and blurred, and each chart was drawing about twice as tall as it was meant to — which is what
+produced the odd "half a layer" sitting over the top of it. The cause was a single one: the chart was
+being drawn at a fixed internal size and then stretched by the browser to fill the width, and that
+stretch is what smeared the lines and doubled the height. The chart now measures the space it has been
+given and draws itself at exactly that size, one-to-one, so the lines are crisp and the height is the
+height that was asked for. Measured live in the browser: a chart asked to be 120 pixels tall now
+renders at 120 pixels, not 223.
+
+**Table headings now sit over their columns.** On every table — Analytics, Overview, the audit log —
+a right-aligned column such as a cost or a count had its heading drifting to the left, out of line
+with the numbers underneath it. The headings are now aligned with their figures.
+
+**The dropdown menus are readable in dark mode.** Opening a menu in the dark theme showed a glaring
+white list, and the highlighted item turned its text black — effectively unreadable. The menus now
+take the same dark surface and light text as the rest of the interface, and still invert correctly to
+a clean white menu in the light theme.
+
+**A short list of smaller reliability fixes**, all from a code review of the recent editing screens:
+
+- On the model list inside a pool, removing a model could leave every button on that panel disabled
+  until the page was reloaded. The buttons now re-enable as soon as the removal finishes, whether it
+  succeeded or failed, and the edit button is correctly held while a removal is in progress.
+- In the key editor, typing `0` into a limit field used to silently keep the old value instead of
+  applying the minimum. It now behaves as expected.
+- The Save buttons on the model and key editors are now properly tied to their forms, so pressing
+  Enter always saves and the button always submits — no hidden workaround holding it together.
+- Small accessibility and housekeeping touches on the dialog shell and internal naming, with no
+  change to behaviour.
+
+Nothing in the gateway itself changed this session — this was entirely the operator dashboard. The
+full automated check — code style, type safety, the test suite, the production build, and a
+dependency security scan — passes cleanly on both the gateway and the dashboard, with no known
+vulnerabilities.
+
+---
+
 ## 2026-07-14
 
 ---
