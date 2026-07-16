@@ -44,15 +44,23 @@ vi.mock('../lib/encryption', () => ({
   maskKey: (s: string) => '●●●●' + s.slice(-4),
 }));
 
+// The in-app feed is its own module with its own tests; here it is stubbed so these tests stay about
+// config and delivery. Recording is asserted, not exercised — what matters at this seam is that an
+// alert reaches the feed even when nothing is delivered.
+const recordNotification = vi.fn(async () => true);
+vi.mock('./notificationFeed.service', () => ({
+  recordNotification: (...a: unknown[]) => recordNotification(...(a as [])),
+}));
+
 import {
-  notify, setNotificationConfig, getNotificationConfigForUI, notificationsArmed,
+  notify, setNotificationConfig, getNotificationConfigForUI,
 } from './notifications.service';
 import { keyBannedMessage } from '../lib/notify';
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   store.clear(); claimed.clear();
-  redisSet.mockClear(); redisDel.mockClear();
+  redisSet.mockClear(); redisDel.mockClear(); recordNotification.mockClear();
   fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 });
@@ -82,12 +90,15 @@ describe('config storage', () => {
     expect(await getNotificationConfigForUI()).toMatchObject({ resendKeySet: false });
   });
 
-  it('reflects the master switch and per-event flags via notificationsArmed', async () => {
+  it('the master switch and per-event flags gate delivery: an event switched off sends nothing', async () => {
     await enable({ events: { keyBanned: false } });
-    expect(await notificationsArmed('keyBanned')).toBe(false);
-    expect(await notificationsArmed('breakerOpened')).toBe(true);
-    await setNotificationConfig({ enabled: false });
-    expect(await notificationsArmed('breakerOpened')).toBe(false); // master off wins
+    await notify(keyBannedMessage('openai', '●●●●1234'));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // …and the master switch wins over an event that is on.
+    await setNotificationConfig({ enabled: false, events: { keyBanned: true } });
+    await notify(keyBannedMessage('openai', '●●●●5678'));
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
@@ -113,7 +124,28 @@ describe('notify', () => {
     await enable({ enabled: false });
     await notify(keyBannedMessage('openai', '●●●●1234'));
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(redisSet).not.toHaveBeenCalled(); // bails before claiming a window
+    // No *send* window is claimed when delivery is off — only the feed's own claim is taken.
+    expect(redisSet).not.toHaveBeenCalledWith(
+      'nexus:notify:sent:keyBanned:openai:●●●●1234', expect.anything(), expect.anything(), expect.anything(), expect.anything(),
+    );
+  });
+
+  it('records to the in-app feed even when delivery is disabled (Phase 7.11)', async () => {
+    // The point of the phase: email is off until an operator configures it, which is the default —
+    // so a feed gated on delivery would leave the dashboard bell permanently empty. The alert is
+    // still raised, still recorded, and simply never leaves the building.
+    await enable({ enabled: false });
+    const msg = keyBannedMessage('openai', '●●●●1234');
+    await notify(msg);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(recordNotification).toHaveBeenCalledWith(msg, 3600);
+  });
+
+  it('records to the feed exactly once per notify, alongside a successful delivery', async () => {
+    await enable();
+    await notify(keyBannedMessage('openai', '●●●●1234'));
+    expect(recordNotification).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalled(); // both happen; neither depends on the other
   });
 
   it('never throws when a channel send fails', async () => {

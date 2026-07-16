@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { LogIn } from 'lucide-preact';
 import { login } from '../api';
+import { useBranding } from '../hooks/useBranding';
 import { Button, Field, Input, FormError } from '../ui';
 import s from './login.module.css';
 
@@ -11,6 +12,9 @@ import s from './login.module.css';
 // field appears on demand rather than always cluttering a first sign-in.
 
 export function Login({ onAuthed }: { onAuthed: () => void }) {
+  // Branding (P7.11) comes from the public `GET /branding`, so an operator's own name and mark greet
+  // their team before anyone signs in. Unset → the product's own, exactly as before.
+  const brand = useBranding();
   const [password, setPassword] = useState('');
   const [code, setCode]         = useState('');
   const [needCode, setNeedCode] = useState(false);
@@ -41,9 +45,9 @@ export function Login({ onAuthed }: { onAuthed: () => void }) {
     <div class={s.wrap}>
       <form class={s.card} onSubmit={submit}>
         <div class={s.brand}>
-          <img src="/logo.svg" width="34" height="34" alt="" />
+          <img src={brand.logoDataUri || '/logo.svg'} width="34" height="34" alt="" />
           <div>
-            <div class={s.title}>Alayra Nexus</div>
+            <div class={s.title}>{brand.companyName || 'Alayra Nexus'}</div>
             <div class={s.sub}>Gateway administration</div>
           </div>
         </div>

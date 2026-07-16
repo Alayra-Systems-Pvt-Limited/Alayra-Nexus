@@ -193,9 +193,52 @@ owners), a **true per-tier % split** of one budget (needs two caps per team), **
 recipients** (notification config is global), and **quarterly/annual** windows. Listed in the backlog
 rather than faked.
 
-### P7.11 — Notifications bell + Branding
-Live unread feed that deep-links to the section that raised it (needs a small notification store —
-operator alerts are email/webhook only today). Company name + logo on the dashboard and login.
+### ~~P7.11 — Notifications bell + Branding~~ ✅ **DONE**
+**The finding that shaped the phase:** all five alert types were gated *at their call sites* by
+`notificationsArmed(event)` = `config.enabled && config.events[event]` — and `enabled` is **false by
+default**. So on a default install the alert message was never even built, and alerts were
+fire-and-forget email/webhook with no persistence at all. A bell wired to the old `notify()` would
+have been permanently empty: a placeholder pretending to be a feature.
+
+**So recording was split from delivery.** Every raised alert is now recorded in the feed
+*regardless* of the email config (migration `0014`, new `Notification` table); `enabled` and the
+per-event flags now gate only whether an alert *also leaves the building*. `notify()` records first,
+then decides on delivery; the four call sites no longer short-circuit. Delivery behaviour, coalescing
+and the release-on-failed-send are untouched — their tests pass unchanged. The feed takes its **own**
+Redis claim key (`nexus:notify:feed:`), separate from the send guard (`nexus:notify:sent:`), because
+the send path *releases* its claim on a failed delivery to allow a retry — sharing one key would
+re-insert an entry already sitting in the bell. This reframes Settings → Notifications as *email*
+settings, which lines up with the deferred note #2 below (that UI reorg is still deferred).
+
+**The bell** (`shell/NotificationsBell.tsx`) is a real dropdown: unread badge (counted over *all*
+unread, never just the page shown), entries with relative time, mark-one / mark-all read, close on
+outside-click or Escape, and a 60s poll (a socket would be overkill — alerts are coalesced to one per
+window per source). Selecting an alert marks it read and **jumps to the section that raised it** via
+a pure `sectionFor()` map in `lib/notify.ts` (keyBanned/breakerOpened/tierExhausted → Nexus,
+adminLockout → Security, budgetThreshold → Teams) — an alert saying a key died is only useful if it
+lands you where you can replace it.
+
+**Branding** — company name + logo in the sidebar and on the sign-in screen. **No schema**: it is one
+small singleton blob, which is what `AppSettings` is for. The logo is stored as a **data URI**, never
+a URL: this gateway self-hosts its assets (the Chart.js CDN was removed for exactly this reason), and
+a remote logo would break air-gapped/strict-CSP deployments *and* leak a request to a third party on
+every load of a public sign-in page. Validation is pure and tested (`lib/branding.ts`): PNG/JPEG/WEBP/SVG
+only, ≤64KB, and a stored value that no longer validates is dropped rather than served. SVG is safe
+because the logo is only ever rendered through an `<img src=…>` (browsers treat that as secure static
+mode) — it must never be inlined into the DOM. The read is a **public `GET /branding`** (the login
+screen has no session yet; a branded login page is public by definition); the write is
+`PUT /admin/branding`, owner-only and audited. A white-labelled sidebar keeps "Alayra Nexus" on the
+line beneath, so the console still says what it is.
+
+**Enhancements taken in this phase:** (1) **notification retention** — the feed is pruned by the
+existing `runRetention()` job via a new `notificationRetentionDays` (default **30**, editable in
+Settings → Compliance, `0` = forever). Alerts are operational noise, not a record — the audit trail
+testifies to what happened — so they default shorter than the 90-day audit/usage windows, and this is
+the one growing table that would otherwise have had no ceiling. (2) Mark-all-read + unread-only
+filtering. **Caught in live verification:** saving branding left the sidebar showing the old name
+until a page reload, because each reader holds its own fetch — fixed with a `nx:branding` event that
+every `useBranding` listens for (the same idiom the session gate already uses for `nx:unauthorized`),
+and pinned by a regression test. Dead code removed: `notificationsArmed` had no callers left.
 
 ### P7.12 — Server health
 Redis (memory, clients, ops/sec, latency), Postgres (query latency, pool usage, cache-hit ratio),

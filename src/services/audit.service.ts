@@ -25,11 +25,18 @@ import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getSetting, setSetting } from './settings.service';
+import { pruneNotifications } from './notificationFeed.service';
 import { anonymizeIp, clampRetentionDays, DEFAULT_RETENTION_DAYS, MAX_RETENTION_DAYS } from '../lib/audit';
 
 export const SETTING_AUDIT_RETENTION = 'AUDIT_RETENTION_DAYS';
 export const SETTING_USAGE_RETENTION = 'USAGE_RETENTION_DAYS';
 export const SETTING_ANONYMIZE_USAGE = 'ANONYMIZE_USAGE';
+export const SETTING_NOTIFICATION_RETENTION = 'NOTIFICATION_RETENTION_DAYS';
+
+// The alert feed is operational noise, not a record: a months-old "a key was banned" is stale, and
+// the audit trail is what actually testifies to what happened. So it defaults to a shorter window
+// than audit/usage rather than inheriting their 90 days.
+export const DEFAULT_NOTIFICATION_RETENTION_DAYS = 30;
 
 // ── The entry a caller records ────────────────────────────────────────────────
 
@@ -51,6 +58,8 @@ export interface AuditEntry {
 export interface ComplianceConfig {
   auditRetentionDays: number;
   usageRetentionDays: number;
+  /** How long the in-app alert feed is kept (Phase 7.11). 0 = keep forever, like the others. */
+  notificationRetentionDays: number;
   anonymizeUsage:     boolean;
   maxDays:            number;
 }
@@ -72,14 +81,16 @@ export async function isUsageAnonymized(): Promise<boolean> {
 }
 
 export async function getComplianceConfig(): Promise<ComplianceConfig> {
-  const [audit, usage, anon] = await Promise.all([
+  const [audit, usage, notif, anon] = await Promise.all([
     getSetting(SETTING_AUDIT_RETENTION),
     getSetting(SETTING_USAGE_RETENTION),
+    getSetting(SETTING_NOTIFICATION_RETENTION),
     getSetting(SETTING_ANONYMIZE_USAGE),
   ]);
   return {
     auditRetentionDays: audit === null ? DEFAULT_RETENTION_DAYS : clampRetentionDays(audit),
     usageRetentionDays: usage === null ? DEFAULT_RETENTION_DAYS : clampRetentionDays(usage),
+    notificationRetentionDays: notif === null ? DEFAULT_NOTIFICATION_RETENTION_DAYS : clampRetentionDays(notif),
     anonymizeUsage:     isOn(anon),
     maxDays:            MAX_RETENTION_DAYS,
   };
@@ -87,11 +98,17 @@ export async function getComplianceConfig(): Promise<ComplianceConfig> {
 
 export async function setComplianceConfig(input: {
   auditRetentionDays: number; usageRetentionDays: number; anonymizeUsage: boolean;
+  notificationRetentionDays?: number;
 }): Promise<void> {
   await Promise.all([
     setSetting(SETTING_AUDIT_RETENTION, String(clampRetentionDays(input.auditRetentionDays))),
     setSetting(SETTING_USAGE_RETENTION, String(clampRetentionDays(input.usageRetentionDays))),
     setSetting(SETTING_ANONYMIZE_USAGE, input.anonymizeUsage ? 'true' : 'false'),
+    // Optional so a caller that predates the alert feed keeps the default rather than being forced
+    // to send a window it has never heard of.
+    ...(input.notificationRetentionDays === undefined ? [] : [
+      setSetting(SETTING_NOTIFICATION_RETENTION, String(clampRetentionDays(input.notificationRetentionDays))),
+    ]),
   ]);
   anonMemo = { value: input.anonymizeUsage, at: Date.now() }; // reflect the change at once
 }
@@ -215,14 +232,15 @@ export async function pruneUsage(days: number): Promise<number> {
 }
 
 /**
- * Apply both retention windows. Best-effort: a failure to prune must never crash the
+ * Apply every retention window. Best-effort: a failure to prune must never crash the
  * scheduler that calls this. Returns how many rows each window removed.
  */
-export async function runRetention(): Promise<{ audit: number; usage: number }> {
+export async function runRetention(): Promise<{ audit: number; usage: number; notifications: number }> {
   const cfg = await getComplianceConfig();
-  const [audit, usage] = await Promise.all([
+  const [audit, usage, notifications] = await Promise.all([
     pruneAuditLogs(cfg.auditRetentionDays).catch(() => 0),
     pruneUsage(cfg.usageRetentionDays).catch(() => 0),
+    pruneNotifications(cfg.notificationRetentionDays).catch(() => 0),
   ]);
-  return { audit, usage };
+  return { audit, usage, notifications };
 }

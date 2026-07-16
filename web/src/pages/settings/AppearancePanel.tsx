@@ -1,16 +1,27 @@
 import { Sun, Moon } from 'lucide-preact';
 import { Card } from '../../ui';
 import { useTheme, setTheme, type Theme } from '../../theme';
+import { BrandingCard } from './BrandingCard';
 import s from '../pages.module.css';
 
-// Appearance is the one panel with nothing to save: the theme lives in the browser, not the gateway,
-// so it applies the instant it is chosen and there is no Save button to pretend otherwise.
+// Appearance holds the two "how this looks" settings, and they are deliberately different in kind:
+// the theme lives in this browser and applies instantly (no Save button to pretend otherwise), while
+// branding (P7.11) is a gateway setting everyone sees and therefore has one. Each card says which.
 const OPTIONS: { id: Theme; label: string; hint: string; icon: preact.JSX.Element }[] = [
   { id: 'dark',  label: 'Dark',  hint: 'Softened slate — the default.',        icon: <Moon size={15} /> },
   { id: 'light', label: 'Light', hint: 'Bright, for well-lit rooms.',          icon: <Sun size={15} /> },
 ];
 
 export function AppearancePanel() {
+  return (
+    <>
+      <ThemeCard />
+      <BrandingCard />
+    </>
+  );
+}
+
+function ThemeCard() {
   const { theme } = useTheme();
   return (
     <Card heading="Appearance">

@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeNotificationConfig, keyBannedMessage, breakerOpenedMessage, adminLockoutMessage,
-  budgetThresholdCrossed, budgetThresholdMessage, tierExhaustedMessage,
+  budgetThresholdCrossed, budgetThresholdMessage, tierExhaustedMessage, sectionFor,
   coalesceRedisKey, DEFAULT_WINDOW_SECONDS, MIN_WINDOW_SECONDS, NOTIFY_EVENTS,
 } from './notify';
 
@@ -119,5 +119,19 @@ describe('budgetThreshold + tierExhausted message builders (Phase 6.4b)', () => 
     const isolated = tierExhaustedMessage('embedding', true);
     expect(isolated.dedupeKey).toBe('tierExhausted:embedding:isolated');
     expect(isolated.body).toContain('fall-back is disabled');
+  });
+});
+
+describe('sectionFor (Phase 7.11)', () => {
+  it('sends each alert to the section where it can actually be acted on', () => {
+    expect(sectionFor('keyBanned')).toBe('nexus');        // replace the dead credential
+    expect(sectionFor('breakerOpened')).toBe('nexus');    // the pool whose key is cooling
+    expect(sectionFor('tierExhausted')).toBe('nexus');    // add keys / wait out the cooldown
+    expect(sectionFor('adminLockout')).toBe('security');  // sign-in policy + second factor
+    expect(sectionFor('budgetThreshold')).toBe('teams');  // the team that hit its cap
+  });
+
+  it('has a destination for every event, so a new one cannot ship without a home', () => {
+    for (const e of NOTIFY_EVENTS) expect(sectionFor(e)).toBeTruthy();
   });
 });

@@ -155,6 +155,26 @@ model AppSettings {
   updatedAt DateTime @updatedAt
 }
 
+// The in-app operator alert feed (Phase 7.11). Alerts used to be email/webhook only and were never
+// written down, so the dashboard bell had nothing to read — and since delivery is off by default,
+// a feed built from the send path would have been permanently empty. Every raised alert is recorded
+// here regardless of the email configuration; external delivery stays gated by it. `dedupeKey` is
+// the same logical-occurrence key the send path coalesces on, so a flapping source leaves one entry
+// per window rather than a storm. Pruned by the retention job like every other growing table.
+model Notification {
+  id        String    @id @default(uuid())
+  type      String    // NotifyEventType: keyBanned | breakerOpened | adminLockout | budgetThreshold | tierExhausted
+  title     String
+  body      String
+  section   String?   // dashboard section that raised it, for click-through (e.g. "nexus")
+  dedupeKey String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([readAt, createdAt])
+}
+
 // ── Admin authentication (Phase 6) ────────────────────────────────────────────
 
 // Single-row table holding the admin's second factor. `totpSecret` is stored with the

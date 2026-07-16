@@ -18,14 +18,20 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const { prismaMock, settingsMock } = vi.hoisted(() => ({
   prismaMock: {
-    auditLog:   { createMany: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
-    tokenUsage: { deleteMany: vi.fn() },
+    auditLog:     { createMany: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
+    tokenUsage:   { deleteMany: vi.fn() },
+    // The retention pass also prunes the alert feed (Phase 7.11).
+    notification: { deleteMany: vi.fn() },
   },
   settingsMock: { getSetting: vi.fn(), setSetting: vi.fn() },
 }));
 
 vi.mock('../lib/prisma', () => ({ prisma: prismaMock }));
 vi.mock('./settings.service', () => ({ getSetting: settingsMock.getSetting, setSetting: settingsMock.setSetting }));
+// runRetention prunes notifications, whose module reaches Redis for the record path. This suite
+// never records, so a bare stub is enough to keep the real client (which demands REDIS_URL at
+// import) out of the graph.
+vi.mock('../lib/redis', () => ({ redis: {} }));
 
 import {
   recordAudit, flush, drainAudit, pendingAuditCount,
@@ -79,20 +85,38 @@ describe('buffered writer', () => {
 });
 
 describe('compliance config', () => {
-  it('defaults both retention windows to 90 days when unset', async () => {
+  it('defaults the retention windows when unset (alerts are shorter-lived than the record)', async () => {
     settingsMock.getSetting.mockResolvedValue(null);
     const cfg = await getComplianceConfig();
-    expect(cfg).toEqual({ auditRetentionDays: 90, usageRetentionDays: 90, anonymizeUsage: false, maxDays: 90 });
+    expect(cfg).toEqual({
+      auditRetentionDays: 90, usageRetentionDays: 90,
+      notificationRetentionDays: 30, // operational noise, not a record — see audit.service
+      anonymizeUsage: false, maxDays: 90,
+    });
   });
 
   it('parses and clamps stored values', async () => {
     settingsMock.getSetting.mockImplementation(async (k: string) => {
-      if (k === 'AUDIT_RETENTION_DAYS') return '30';
-      if (k === 'USAGE_RETENTION_DAYS') return '0';       // Off = keep forever
-      if (k === 'ANONYMIZE_USAGE')      return 'true';
+      if (k === 'AUDIT_RETENTION_DAYS')        return '30';
+      if (k === 'USAGE_RETENTION_DAYS')        return '0';       // Off = keep forever
+      if (k === 'NOTIFICATION_RETENTION_DAYS') return '1000';    // clamped to the max
+      if (k === 'ANONYMIZE_USAGE')             return 'true';
       return null;
     });
-    expect(await getComplianceConfig()).toEqual({ auditRetentionDays: 30, usageRetentionDays: 0, anonymizeUsage: true, maxDays: 90 });
+    expect(await getComplianceConfig()).toEqual({
+      auditRetentionDays: 30, usageRetentionDays: 0, notificationRetentionDays: 90,
+      anonymizeUsage: true, maxDays: 90,
+    });
+  });
+
+  it('leaves the notification window alone when a caller omits it', async () => {
+    // A client written before the alert feed existed must not silently reset a window it has
+    // never heard of.
+    await setComplianceConfig({ auditRetentionDays: 30, usageRetentionDays: 30, anonymizeUsage: false });
+    expect(settingsMock.setSetting).not.toHaveBeenCalledWith('NOTIFICATION_RETENTION_DAYS', expect.anything());
+
+    await setComplianceConfig({ auditRetentionDays: 30, usageRetentionDays: 30, anonymizeUsage: false, notificationRetentionDays: 14 });
+    expect(settingsMock.setSetting).toHaveBeenCalledWith('NOTIFICATION_RETENTION_DAYS', '14');
   });
 
   it('persists clamped values and reflects the anonymize flag immediately', async () => {
@@ -138,11 +162,21 @@ describe('retention', () => {
     expect(where.createdAt.lt.getTime()).toBeLessThan(Date.now());
   });
 
-  it('runRetention applies both configured windows', async () => {
+  it('runRetention applies every configured window, including the alert feed', async () => {
     settingsMock.getSetting.mockImplementation(async (k: string) =>
-      k === 'AUDIT_RETENTION_DAYS' ? '30' : k === 'USAGE_RETENTION_DAYS' ? '90' : null);
+      k === 'AUDIT_RETENTION_DAYS' ? '30' : k === 'USAGE_RETENTION_DAYS' ? '90'
+      : k === 'NOTIFICATION_RETENTION_DAYS' ? '30' : null);
     prismaMock.auditLog.deleteMany.mockResolvedValue({ count: 3 });
     prismaMock.tokenUsage.deleteMany.mockResolvedValue({ count: 5 });
-    expect(await runRetention()).toEqual({ audit: 3, usage: 5 });
+    prismaMock.notification.deleteMany.mockResolvedValue({ count: 7 });
+    expect(await runRetention()).toEqual({ audit: 3, usage: 5, notifications: 7 });
+  });
+
+  it('runRetention survives one window failing, so a bad prune cannot stall the others', async () => {
+    settingsMock.getSetting.mockResolvedValue('30');
+    prismaMock.auditLog.deleteMany.mockResolvedValue({ count: 1 });
+    prismaMock.tokenUsage.deleteMany.mockRejectedValue(new Error('deadlock'));
+    prismaMock.notification.deleteMany.mockResolvedValue({ count: 2 });
+    expect(await runRetention()).toEqual({ audit: 1, usage: 0, notifications: 2 });
   });
 });

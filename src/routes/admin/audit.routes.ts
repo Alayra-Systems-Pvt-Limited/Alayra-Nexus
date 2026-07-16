@@ -29,6 +29,9 @@ const retentionDays = z.coerce.number().int().min(0).max(MAX_RETENTION_DAYS);
 const complianceSchema = z.object({
   auditRetentionDays: retentionDays,
   usageRetentionDays: retentionDays,
+  // Optional: a client written before the alert feed existed (Phase 7.11) must not have its
+  // notification window silently reset to a default it never chose.
+  notificationRetentionDays: retentionDays.optional(),
   anonymizeUsage:     z.boolean(),
 });
 

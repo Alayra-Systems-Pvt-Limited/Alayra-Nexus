@@ -7,7 +7,8 @@ import s from './shell.module.css';
 /**
  * The top bar: live status, theme toggle, notifications, and the account chip. Sign-out (Phase 7.9b)
  * clears the session token and fires `nx:unauthorized`, which App listens for to drop back to the
- * login screen. The account name is still a placeholder; branding (company logo/name) is P7.11.
+ * login screen. The bell owns its own feed and count (P7.11). The account name stays a placeholder
+ * until real admin identities land in P7.13 — there is no user to name yet.
  */
 function signOut() {
   clearToken();
@@ -20,7 +21,7 @@ export function Topbar() {
       <span class={s.livePill}><span class={s.pulse} />LIVE</span>
       <div class={s.topSpacer} />
       <ThemeToggle />
-      <NotificationsBell count={0} />
+      <NotificationsBell />
       <div class={s.account}>
         <span class={s.avatar}>A</span>
         <span class={s.accountName}>Admin</span>

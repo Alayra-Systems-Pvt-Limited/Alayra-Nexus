@@ -1,6 +1,7 @@
 import { useLocation } from 'preact-iso';
 import { clsx } from 'clsx';
 import { SECTIONS, sectionByPath, type Section } from '../nav';
+import { useBranding } from '../hooks/useBranding';
 import s from './shell.module.css';
 
 function NavLink({ section, activeId }: { section: Section; activeId?: string }) {
@@ -23,13 +24,19 @@ export function Sidebar() {
   const workspace = SECTIONS.filter((x) => x.group === 'workspace');
   const system = SECTIONS.filter((x) => x.group === 'system');
 
+  // Operator branding (P7.11) takes the headline; the product name moves to the line beneath rather
+  // than disappearing, so a white-labelled console still says what it is. Unset → the product's own
+  // mark and name, exactly as before.
+  const brand = useBranding();
+  const name  = brand.companyName || 'Alayra Nexus';
+
   return (
     <aside class={s.sidebar}>
-      <a href="/" class={s.brand} aria-label="Alayra Nexus — Overview">
-        <img class={s.brandMark} src="/logo.svg" width="26" height="26" alt="" />
+      <a href="/" class={s.brand} aria-label={`${name} — Overview`}>
+        <img class={s.brandMark} src={brand.logoDataUri || '/logo.svg'} width="26" height="26" alt="" />
         <span>
-          <div class={s.brandText}>Alayra Nexus</div>
-          <div class={s.brandBy}>by Alayra Systems</div>
+          <div class={s.brandText}>{name}</div>
+          <div class={s.brandBy}>{brand.companyName ? 'Alayra Nexus' : 'by Alayra Systems'}</div>
         </span>
       </a>
 

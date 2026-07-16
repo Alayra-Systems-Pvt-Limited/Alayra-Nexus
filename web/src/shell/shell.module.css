@@ -48,3 +48,54 @@
 
 .content { flex: 1; overflow-y: auto; padding: 26px 30px; }
 .contentInner { max-width: 1180px; margin: 0 auto; }
+
+/* ── Notifications bell panel (P7.11) ─────────────────────────────────────── */
+
+.bellWrap { position: relative; display: inline-flex; }
+
+.bellPanel {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+  width: min(380px, calc(100vw - 32px));
+  background: var(--surface-solid);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.bellHead {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+}
+.bellTitle { font-size: 13px; font-weight: 700; }
+.bellMarkAll {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 0; cursor: pointer; padding: 2px 4px;
+  color: var(--muted); font: inherit; font-size: 12px; border-radius: var(--radius-sm);
+}
+.bellMarkAll:hover { color: var(--text); }
+
+.bellEmpty { margin: 0; padding: 16px 12px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+.bellList { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow-y: auto; }
+
+.bellItem {
+  display: flex; flex-direction: column; gap: 3px; width: 100%;
+  padding: 10px 12px; background: none; border: 0; border-bottom: 1px solid var(--border);
+  cursor: pointer; text-align: left; color: var(--text); font: inherit;
+}
+.bellItem:hover { background: var(--bg-accent); }
+.bellUnread { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+
+.bellItemTop { display: flex; align-items: center; gap: 6px; }
+.bellDot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.bellItemTitle {
+  font-size: 12px; font-weight: 600; flex: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bellWhen { font-size: 11px; color: var(--subtle); white-space: nowrap; }
+
+/* Two lines is enough to know whether it matters; the section it links to has the detail. */
+.bellBody {
+  font-size: 11.5px; color: var(--muted); line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}

@@ -81,10 +81,10 @@ vi.mock('./model.service',   () => ({
   activeProviderSlugs: vi.fn(async () => new Set(state.providers.map(p => p.provider as string))),
 }));
 vi.mock('./ssrf.service',    () => ({ getSsrfPolicy: vi.fn(async () => ({})) }));
-vi.mock('./notifications.service', () => ({ notificationsArmed: vi.fn(async () => false), notify: vi.fn(async () => {}) }));
+vi.mock('./notifications.service', () => ({ notify: vi.fn(async () => {}) }));
 
 import { discoverBestPool, SHARED_SCOPE, reportTierExhausted } from './nexus.service';
-import { notificationsArmed, notify } from './notifications.service';
+import { notify } from './notifications.service';
 import { getStickyKeyId } from '../lib/sticky';
 import { admitKey, admitUser } from '../lib/admission';
 import type { RoutingScope } from '../lib/scope';
@@ -106,16 +106,18 @@ beforeEach(() => {
 });
 
 describe('reportTierExhausted (Phase 6.4b)', () => {
-  it('stays silent when notifications are not armed for the event', async () => {
-    vi.mocked(notificationsArmed).mockResolvedValueOnce(false);
+  // 7.11: this used to short-circuit on `notificationsArmed`, which read the *email* config — so
+  // with delivery off (the default) the gateway could run out of capacity and the dashboard would
+  // never hear about it. The alert is now always raised; notify() decides what leaves the building.
+  it('always raises the alert, leaving delivery for notify() to gate', async () => {
     await reportTierExhausted('chat', false);
-    expect(notify).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'tierExhausted', dedupeKey: 'tierExhausted:chat:shared',
+    }));
   });
 
-  it('sends one coalesced alert, tagged isolated vs shared, when armed', async () => {
-    vi.mocked(notificationsArmed).mockResolvedValueOnce(true);
+  it('tags the alert isolated vs shared, and coalesces on that distinction', async () => {
     await reportTierExhausted('embedding', true);
-    expect(notificationsArmed).toHaveBeenCalledWith('tierExhausted');
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({
       type: 'tierExhausted', dedupeKey: 'tierExhausted:embedding:isolated',
     }));

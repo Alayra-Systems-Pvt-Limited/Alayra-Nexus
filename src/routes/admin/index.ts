@@ -29,6 +29,8 @@ import adminModelsRoutes    from './models.routes';
 import adminAnalyticsRoutes from './analytics.routes';
 import adminTeamsRoutes     from './teams.routes';
 import adminAuditRoutes     from './audit.routes';
+import adminNotificationsRoutes from './notifications.routes';
+import adminBrandingRoutes  from './branding.routes';
 import { recordAudit }      from '../../services/audit.service';
 import { deriveAction, shouldAutoAudit } from '../../lib/audit';
 
@@ -75,4 +77,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   await fastify.register(adminAnalyticsRoutes);
   await fastify.register(adminTeamsRoutes);
   await fastify.register(adminAuditRoutes);
+  await fastify.register(adminNotificationsRoutes);
+  await fastify.register(adminBrandingRoutes);
 }

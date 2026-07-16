@@ -28,7 +28,7 @@ import { extractModelIds }   from '../lib/modelPath';
 import { withExtraHeaders }  from '../lib/providerHeaders';
 import { getSsrfPolicy }     from './ssrf.service';
 import { SHARED_NAMESPACE, type RoutingScope } from '../lib/scope';
-import { notificationsArmed, notify } from './notifications.service';
+import { notify } from './notifications.service';
 import { keyBannedMessage, breakerOpenedMessage, tierExhaustedMessage } from '../lib/notify';
 
 export { maskKey };
@@ -458,12 +458,13 @@ export async function reportAuthFailure(keyId: string): Promise<void> {
   }
 }
 
-// Fire-and-forget operator alert (Phase 6.4) for a key-level failure. The armed check is a
-// cheap cached read, so the extra lookup for the provider/masked-key display only runs when
-// notifications are actually enabled for this event. Never awaited by the reporters.
+// Fire-and-forget operator alert (Phase 6.4) for a key-level failure. Never awaited by the reporters.
+// The armed check that used to short-circuit here was removed in 7.11: it gated on the *email*
+// config, so with delivery off (the default) the alert was never built and the in-app feed could
+// never show that a key had died. notify() now records first and gates only delivery. The extra
+// lookup this costs is for the display name of a key that just got banned or tripped its breaker —
+// rare by construction, and off the request path.
 async function alertKeyEvent(keyId: string, kind: 'banned' | 'opened', cooldownSeconds = 0): Promise<void> {
-  const event = kind === 'banned' ? 'keyBanned' : 'breakerOpened';
-  if (!(await notificationsArmed(event))) return;
   const k = await prisma.nexusKey.findUnique({
     where: { id: keyId }, select: { maskedKey: true, provider: { select: { slug: true } } },
   });
@@ -478,11 +479,15 @@ async function alertKeyEvent(keyId: string, kind: 'banned' | 'opened', cooldownS
  * serve `capability` is exhausted, so the gateway is refusing that traffic. Called from the
  * `discoverBestPool → null` boundary in both the chat and non-chat handlers, giving one
  * uniform tap. `isolated` distinguishes a hard-isolated BYOK team from the shared pool.
- * Armed check gates it to a cheap cached read; coalescing keeps a persistent outage to one
- * message per window. Never awaited by the caller.
+ * Coalescing keeps a persistent outage to one message per window. Never awaited by the caller.
+ *
+ * This fires per refused request, so it is the one alert with real volume. It stays cheap: the
+ * message builder is pure, and notify() coalesces on a Redis SET NX — a sustained outage costs one
+ * set per 503 and one row per window, not a row per request. (7.11 removed the armed check that
+ * used to gate this; it keyed off the email config, so a bell fed by it would never have seen the
+ * gateway run out of capacity unless email happened to be set up.)
  */
 export async function reportTierExhausted(capability: Capability, isolated: boolean): Promise<void> {
-  if (!(await notificationsArmed('tierExhausted'))) return;
   await notify(tierExhaustedMessage(capability, isolated));
 }
 

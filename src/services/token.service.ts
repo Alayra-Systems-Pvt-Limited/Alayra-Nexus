@@ -19,7 +19,7 @@ import { randomUUID }      from 'crypto';
 import { getModelRegistry } from './model.service';
 import { emit }            from './usagePipeline';
 import { addSpend, periodKey, type BudgetPeriod } from './budget.service';
-import { notificationsArmed, notify } from './notifications.service';
+import { notify } from './notifications.service';
 import { budgetThresholdCrossed, budgetThresholdMessage } from '../lib/notify';
 import { isUsageAnonymized } from './audit.service';
 import { hashIdentifier }    from '../lib/audit';
@@ -208,15 +208,16 @@ export async function recordOutcome(p: RecordOutcomeParams): Promise<void> {
 }
 
 // Fire-and-forget operator alert (Phase 6.4b) when a team's spend crosses 80% or 100% of its
-// budget for the window. The crossing test is pure and the armed check is a cheap cached read,
-// so the team-name lookup only runs on the rare request that actually vaults a threshold and
-// only when notifications are enabled. Never awaited by recordTokenUsage.
+// budget for the window. The crossing test is pure, so the team-name lookup only runs on the rare
+// request that actually vaults a threshold — and a crossing happens at most twice per team per
+// budget window by construction. Never awaited by recordTokenUsage. (7.11 dropped the armed check:
+// it gated on the email config, so a team quietly burning its budget would never have reached the
+// in-app feed unless email was configured.)
 async function alertBudgetThreshold(
   teamId: string, period: BudgetPeriod, previous: number, next: number, budgetUsd: number,
 ): Promise<void> {
   const pct = budgetThresholdCrossed(previous, next, budgetUsd);
   if (!pct) return;
-  if (!(await notificationsArmed('budgetThreshold'))) return;
   const team = await prisma.team.findUnique({ where: { id: teamId }, select: { name: true } });
   await notify(budgetThresholdMessage({
     teamId, teamName: team?.name ?? teamId, pct,

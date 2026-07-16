@@ -20,7 +20,7 @@ import { redis }             from '../lib/redis';
 import { encrypt, decrypt }  from '../lib/encryption';
 import { safeEqual }         from '../lib/timingSafe';
 import { verifyTotp, generateTotpSecret, otpauthUri } from '../lib/totp';
-import { notificationsArmed, notify } from './notifications.service';
+import { notify } from './notifications.service';
 import { adminLockoutMessage } from '../lib/notify';
 
 // ── Admin authentication (Phase 6) ────────────────────────────────────────────
@@ -266,10 +266,11 @@ export type LoginResult =
  * two-step sign-in (password, then password + code) is not penalised: a success clears
  * the counter, so only an *abandoned* sign-in accumulates.
  */
-// Fire-and-forget operator alert (Phase 6.4) when admin sign-in locks out. The armed check
-// is a cheap cached read, so nothing happens unless the operator enabled this alert.
+// Fire-and-forget operator alert (Phase 6.4) when admin sign-in locks out. Always raised: a lockout
+// means someone is guessing the admin password, which is precisely the alert an operator must still
+// see in the dashboard when they never set up email (7.11 — the armed check that used to gate this
+// keyed off the email config). notify() records it and decides on its own whether to send it out.
 async function alertAdminLockout(source: string): Promise<void> {
-  if (!(await notificationsArmed('adminLockout'))) return;
   await notify(adminLockoutMessage(source));
 }
 

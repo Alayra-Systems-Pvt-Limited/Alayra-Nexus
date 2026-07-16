@@ -22,11 +22,14 @@ export function CompliancePanel() {
 function ComplianceForm({ data, ctx }: { data: ComplianceConfig; ctx: SaveCtx<ComplianceConfig> }) {
   const [audit, setAudit]   = useState(String(data.auditRetentionDays));
   const [usage, setUsage]   = useState(String(data.usageRetentionDays));
+  const [notif, setNotif]   = useState(String(data.notificationRetentionDays));
   const [anon, setAnon]     = useState(data.anonymizeUsage);
 
   const auditDays = Math.max(0, parseInt(audit, 10) || 0);
   const usageDays = Math.max(0, parseInt(usage, 10) || 0);
-  const dirty = auditDays !== data.auditRetentionDays || usageDays !== data.usageRetentionDays || anon !== data.anonymizeUsage;
+  const notifDays = Math.max(0, parseInt(notif, 10) || 0);
+  const dirty = auditDays !== data.auditRetentionDays || usageDays !== data.usageRetentionDays
+    || notifDays !== data.notificationRetentionDays || anon !== data.anonymizeUsage;
 
   return (
     <>
@@ -38,6 +41,15 @@ function ComplianceForm({ data, ctx }: { data: ComplianceConfig; ctx: SaveCtx<Co
           <Input type="number" min={0} value={usage} onInput={(e) => setUsage((e.target as HTMLInputElement).value)} />
         </Field>
       </FieldRow>
+
+      <Field label="Keep notifications for" hint="days · 0 = forever · shorter than the others by default">
+        <Input type="number" min={0} value={notif} onInput={(e) => setNotif((e.target as HTMLInputElement).value)} />
+      </Field>
+      <p class={s.setHint}>
+        How long alerts stay in the notifications bell. They are operational noise rather than a
+        record — the audit trail is what testifies to what happened — so they default to a shorter
+        window.
+      </p>
 
       <p class={s.warnNote}>
         <b>Deletion is permanent.</b> Anything past the retention window is removed by the cleanup job
@@ -55,7 +67,10 @@ function ComplianceForm({ data, ctx }: { data: ComplianceConfig; ctx: SaveCtx<Co
       <SaveBar
         ctx={ctx}
         dirty={dirty}
-        onSave={() => ctx.save({ auditRetentionDays: auditDays, usageRetentionDays: usageDays, anonymizeUsage: anon })}
+        onSave={() => ctx.save({
+          auditRetentionDays: auditDays, usageRetentionDays: usageDays,
+          notificationRetentionDays: notifDays, anonymizeUsage: anon,
+        })}
       />
     </>
   );

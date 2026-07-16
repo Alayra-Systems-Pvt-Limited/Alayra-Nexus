@@ -2,11 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/preact';
 
 const loginFn = vi.fn();
-vi.mock('../api', () => ({ login: (p: string, c?: string) => loginFn(p, c) }));
+// The sign-in screen reads the public branding endpoint (P7.11) so an operator's own name and logo
+// greet their team before anyone has a session.
+const get = vi.fn();
+vi.mock('../api', () => ({
+  login: (p: string, c?: string) => loginFn(p, c),
+  GET:   (p: string) => get(p),
+}));
 
 import { Login } from './Login';
 
-beforeEach(() => loginFn.mockReset());
+beforeEach(() => {
+  loginFn.mockReset();
+  get.mockReset();
+  get.mockResolvedValue({ companyName: '', logoDataUri: '' }); // unbranded by default
+});
 
 const typePassword = (v: string) =>
   fireEvent.input(screen.getByPlaceholderText(/your admin password/i), { target: { value: v } });
@@ -67,5 +77,16 @@ describe('Login', () => {
   it('will not submit an empty password', () => {
     render(<Login onAuthed={vi.fn()} />);
     expect(screen.getByRole('button', { name: /sign in/i })).toBeDisabled();
+  });
+
+  it('shows the operator’s branding, and the product’s own when unset (P7.11)', async () => {
+    render(<Login onAuthed={vi.fn()} />);
+    // Unset → the product's own name, so an unbranded install is unchanged.
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/branding'));
+    expect(screen.getByText('Alayra Nexus')).toBeInTheDocument();
+
+    get.mockResolvedValue({ companyName: 'Acme Corp', logoDataUri: 'data:image/png;base64,AAAA' });
+    render(<Login onAuthed={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('Acme Corp')).toBeInTheDocument());
   });
 });

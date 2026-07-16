@@ -24,6 +24,7 @@ import staticFiles        from '@fastify/static';
 import path               from 'path';
 import proxyRoutes        from './routes/proxy';
 import adminRoutes        from './routes/admin';
+import brandingRoutes     from './routes/branding.routes';
 import { prisma }         from './lib/prisma';
 import { redis }          from './lib/redis';
 import { deriveRateLimitKey } from './lib/rateLimitKey';
@@ -140,6 +141,9 @@ async function bootstrap() {
 
   await app.register(proxyRoutes);
   await app.register(adminRoutes);
+  // Public branding read (Phase 7.11) — the sign-in screen renders the operator's name and logo
+  // before any session exists, so it sits outside the admin router. The write is owner-guarded.
+  await app.register(brandingRoutes);
 
   await app.listen({ port: PORT, host: HOST });
   console.log(`\n🚀  Alayra Nexus running on http://${HOST}:${PORT}`);

@@ -22,6 +22,7 @@
 
 import { getSetting, setSetting } from './settings.service';
 import { redis }                  from '../lib/redis';
+import { recordNotification }     from './notificationFeed.service';
 import { encrypt, decrypt, maskKey } from '../lib/encryption';
 import {
   normalizeNotificationConfig, coalesceRedisKey,
@@ -98,12 +99,6 @@ export async function setNotificationConfig(input: NotificationConfigInput): Pro
   await setSetting(SETTING_KEY, JSON.stringify(merged));
 }
 
-/** Cheap, cached check a caller uses before doing any lookup work to build a message. */
-export async function notificationsArmed(event: NotifyEventType): Promise<boolean> {
-  const c = await readConfig();
-  return c.enabled && c.events[event] === true;
-}
-
 async function postJson(url: string, headers: Record<string, string>, body: unknown): Promise<void> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
@@ -139,13 +134,19 @@ async function sendWebhook(c: NotificationConfig, msg: NotifyMessage): Promise<C
 }
 
 /**
- * Deliver an alert: at most one email and one webhook per `dedupeKey` per window. Coalescing
- * is a Redis SET NX with the window as its TTL — the first caller to claim the key sends, and
- * everyone else within the window is a no-op, so a flapping key produces one message, not a
- * storm. Fully guarded: a disabled feature, an unconfigured channel, or a failed send all
- * resolve quietly. Never on the request path — callers invoke this fire-and-forget.
+ * Raise an alert: record it in the in-app feed, and deliver at most one email and one webhook per
+ * `dedupeKey` per window. Coalescing is a Redis SET NX with the window as its TTL — the first caller
+ * to claim the key sends, and everyone else within the window is a no-op, so a flapping key produces
+ * one message, not a storm. Fully guarded: a disabled feature, an unconfigured channel, or a failed
+ * send all resolve quietly. Never on the request path — callers invoke this fire-and-forget.
  *
- * The claim is taken *before* the send, which is what makes coalescing atomic — but it means a
+ * Recording comes first and is **not** gated by the config (Phase 7.11). Email delivery is off until
+ * an operator sets up a channel, which is the default, so gating the feed on it would leave the
+ * dashboard bell permanently empty on a fresh install — the alert would be raised and thrown away.
+ * The `enabled` switch and the per-event flags therefore mean "send this out of the building", not
+ * "notice this at all".
+ *
+ * The send claim is taken *before* the send, which is what makes coalescing atomic — but it means a
  * send that then fails would silently swallow the whole window. So when a configured channel
  * was actually attempted and nothing got through, the claim is released, letting the next
  * occurrence retry rather than being lost until the window expires. A purely skipped
@@ -154,6 +155,11 @@ async function sendWebhook(c: NotificationConfig, msg: NotifyMessage): Promise<C
 export async function notify(msg: NotifyMessage): Promise<void> {
   try {
     const c = await readConfig();
+
+    // The feed: always, and on its own claim key so a released send-claim cannot duplicate an
+    // entry that is already sitting in the bell.
+    await recordNotification(msg, c.windowSeconds);
+
     if (!c.enabled || !c.events[msg.type]) return;
 
     const key = coalesceRedisKey(msg.dedupeKey);

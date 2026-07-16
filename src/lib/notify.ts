@@ -39,6 +39,24 @@ export interface NotifyMessage {
   body:      string;
 }
 
+/**
+ * The dashboard section an alert should take you to (Phase 7.11) — an alert that tells you a key
+ * died is only useful if it lands you where you can replace it. A static map rather than a field on
+ * each message: the destination is a property of the event *type*, not of one occurrence, so there
+ * is no way for a builder to forget it or to disagree with another builder of the same type.
+ */
+const EVENT_SECTION: Record<NotifyEventType, string> = {
+  keyBanned:       'nexus',    // the pool holding the dead credential
+  breakerOpened:   'nexus',    // the pool whose key is cooling
+  adminLockout:    'security', // sign-in policy and second factor live here
+  budgetThreshold: 'teams',    // the team that hit its cap
+  tierExhausted:   'nexus',    // capacity — add keys or wait out the cooldown
+};
+
+export function sectionFor(type: NotifyEventType): string {
+  return EVENT_SECTION[type];
+}
+
 export interface NotificationConfig {
   enabled:      boolean;                        // master switch — off by default
   resendApiKey: string;                         // ciphertext at rest ('' = unset); never plaintext

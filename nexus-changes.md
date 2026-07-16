@@ -7,6 +7,60 @@
 
 ---
 
+## 2026-07-16 (Session 58)
+
+---
+
+**Date:** 2026-07-16 · Session 58  
+**Title:** A working notifications bell, and your own name and logo on the dashboard  
+
+**Summary:**  
+Two things in this change: alerts you can actually see, and the ability to make the dashboard yours.
+
+**The bell now works — and it turned out it never could have.** Studying the code before building
+revealed the real problem. Alerts (a provider key going dead, a circuit breaker opening, a team
+approaching its budget, sign-in being locked out, the gateway running out of capacity) were only ever
+sent as an email or a webhook, and were never written down anywhere. Worse, each one was suppressed at
+source unless email had already been set up — and email is off until an administrator configures it,
+which is the default. So on a normal installation, an alert was raised and thrown away. A bell built on
+top of that would have been permanently empty: a decoration pretending to be a feature.
+
+So the two ideas were separated. **Noticing an alert and sending it are now different things.** Every
+alert is recorded the moment it is raised, whether or not email is configured. The email settings now
+control only one thing: whether an alert *also leaves the building*. Nothing about email delivery
+changed — the same alerts, the same grouping so a flapping key produces one message rather than a
+flood.
+
+**What you see.** The bell in the top corner carries a count of unread alerts and opens a panel
+listing them, newest first, each with how long ago it happened. Selecting one marks it read and takes
+you straight to the section that raised it — an alert telling you a key has died is only useful if it
+lands you where you can replace it. There is a "mark all read" for a quiet sweep, and when there is
+nothing to report it says so plainly rather than showing a zero.
+
+**Alerts do not pile up forever.** They are cleared out on a schedule like every other record here,
+after 30 days by default, adjustable under Settings → Compliance (or set to 0 to keep them
+indefinitely). A shorter default than the audit trail is deliberate: alerts are day-to-day noise,
+whereas the audit trail is the thing that testifies to what actually happened.
+
+**Your branding.** Under Settings → Appearance you can now set your company name and upload your logo.
+Both appear in the sidebar and on the sign-in screen, so the people you hand this to see your name
+first. Leave them empty and nothing changes. Two deliberate choices: the logo is **uploaded and stored
+in the gateway**, not linked from another website — so it keeps working on an isolated or
+tightly-locked-down network, and no outside party is contacted every time your sign-in page loads.
+And a re-branded sidebar still names Alayra Nexus on the line beneath, so the console never hides what
+it is.
+
+**A defect caught before release.** Testing the finished screen in a real browser showed that saving a
+new company name left the sidebar showing the old one until the page was reloaded. That is fixed, and
+a test now guards it.
+
+The alert feed, the bell, the branding, the logo checks and the retention window are all covered by
+tests. The complete automated gate — code style, type safety, tests, production build, and a
+dependency security scan — passes cleanly on both the gateway and the dashboard, with no known
+vulnerabilities.
+
+---
+
 ## 2026-07-16 (Session 57)
 
 ---

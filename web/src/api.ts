@@ -293,6 +293,32 @@ export interface SsrfConfig {
 
 export interface ComplianceConfig {
   auditRetentionDays: number; usageRetentionDays: number; anonymizeUsage: boolean;
+  /** How long the in-app alert feed is kept (Phase 7.11). 0 = keep forever. */
+  notificationRetentionDays: number;
+}
+
+// ── Notifications feed (notifications.routes.ts) ──────────────────────────────
+// The bell's alerts. Recorded whenever the gateway raises one, independently of whether email or a
+// webhook is configured — those gate delivery, not whether an alert is noticed at all.
+export interface NotificationRow {
+  id: string; type: string; title: string; body: string;
+  /** The section that raised it, for click-through. Null for an alert with no obvious home. */
+  section: string | null;
+  read: boolean;
+  createdAt: string;
+}
+export interface NotificationsFeed {
+  notifications: NotificationRow[];
+  /** Over every unread alert, not just the page returned. */
+  unreadCount: number;
+}
+
+// ── Branding (branding.routes.ts) ─────────────────────────────────────────────
+// The operator's own name and logo. Read from the PUBLIC `GET /branding` — the sign-in screen shows
+// it before any session exists. The logo is a data URI served from this origin, never a remote URL.
+export interface Branding {
+  companyName: string;
+  logoDataUri: string;
 }
 
 // Mirrors GET /admin/audit — the read-only audit trail.

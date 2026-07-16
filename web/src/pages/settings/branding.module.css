@@ -1,0 +1,39 @@
+/* Branding card (P7.11) — the logo picker and its preview. */
+
+.logoRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+/* A checkered-ish neutral plate: a logo is often transparent, and previewing it against the card
+   background alone would hide a white mark on a light theme. */
+.logoPreview {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-accent);
+}
+.logoPreview img { max-width: 40px; max-height: 40px; object-fit: contain; }
+
+.logoActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* The native control is replaced by a Button that clicks it, so it stays keyboard- and
+   screen-reader-reachable while matching the rest of the kit. */
+.fileInput { display: none; }
+
+.logoHint {
+  font-size: 11.5px;
+  color: var(--subtle);
+}
