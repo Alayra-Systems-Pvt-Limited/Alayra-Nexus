@@ -1,13 +1,19 @@
 import { LogOut } from 'lucide-preact';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationsBell } from './NotificationsBell';
+import { clearToken } from '../api';
 import s from './shell.module.css';
 
 /**
- * The top bar: live status, theme toggle, notifications, and the account chip. The account name
- * and the sign-out control are placeholders here; P7.7 wires branding (company logo/name) into
- * the account slot and P7.9 the real identity.
+ * The top bar: live status, theme toggle, notifications, and the account chip. Sign-out (Phase 7.9b)
+ * clears the session token and fires `nx:unauthorized`, which App listens for to drop back to the
+ * login screen. The account name is still a placeholder; branding (company logo/name) is P7.11.
  */
+function signOut() {
+  clearToken();
+  window.dispatchEvent(new CustomEvent('nx:unauthorized'));
+}
+
 export function Topbar() {
   return (
     <header class={s.topbar}>
@@ -18,7 +24,7 @@ export function Topbar() {
       <div class={s.account}>
         <span class={s.avatar}>A</span>
         <span class={s.accountName}>Admin</span>
-        <button type="button" class={s.iconChip} aria-label="Sign out" title="Sign out"><LogOut size={16} /></button>
+        <button type="button" class={s.iconChip} aria-label="Sign out" title="Sign out" onClick={signOut}><LogOut size={16} /></button>
       </div>
     </header>
   );

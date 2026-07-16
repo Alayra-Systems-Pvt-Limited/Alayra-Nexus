@@ -1,7 +1,10 @@
 import type { FunctionComponent } from 'preact';
+import { useState, useEffect } from 'preact/hooks';
 import { LocationProvider, Router, Route } from 'preact-iso';
 import { AppShell } from './shell/AppShell';
 import { SECTIONS } from './nav';
+import { getToken } from './api';
+import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
 import { Nexus } from './pages/Nexus';
 import { Connect } from './pages/Connect';
@@ -42,6 +45,18 @@ function NotFound() {
  * preact-iso intercepts same-origin anchor navigations under LocationProvider.
  */
 export function App() {
+  // Auth gate: render the sign-in screen until there is a session token. `authed` seeds synchronously
+  // from the stored token so an already-signed-in reload never flashes the login screen. A 401 from any
+  // API call clears the token and fires `nx:unauthorized` (see api.ts), which drops back to sign-in.
+  const [authed, setAuthed] = useState(() => !!getToken());
+  useEffect(() => {
+    const onUnauth = () => setAuthed(false);
+    window.addEventListener('nx:unauthorized', onUnauth);
+    return () => window.removeEventListener('nx:unauthorized', onUnauth);
+  }, []);
+
+  if (!authed) return <Login onAuthed={() => setAuthed(true)} />;
+
   return (
     <LocationProvider>
       <AppShell>

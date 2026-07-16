@@ -7,6 +7,38 @@
 
 ---
 
+## 2026-07-16 (Session 56)
+
+---
+
+**Date:** 2026-07-16 · Session 56  
+**Title:** A sign-in screen for the new dashboard  
+
+**Summary:**  
+Switching to the new dashboard in the previous change revealed a gap: the redesigned dashboard never
+had its own sign-in screen, so after the switch there was no built-in way to log in. The ability to
+sign in — password, optional second factor, lockout after repeated failures — has existed in the
+gateway all along; what was missing was the screen for it. This change adds that screen.
+
+**What you now see.** Opening the dashboard presents a clean sign-in page asking for the admin
+password. If you have turned on two-factor authentication, it then asks for your authenticator code (or
+a recovery code) — and only then, so a first-time sign-in isn't cluttered with a field most setups
+don't use yet. Wrong password, or too many attempts in a row, are each explained plainly. Once you're
+in, you stay in until you sign out or the session naturally expires, and the "sign out" control in the
+top corner now actually works. If a session quietly expires while you're away, the dashboard returns
+you to the sign-in page instead of leaving panels stuck on an error.
+
+**Nothing is stored that shouldn't be.** The password is never kept — signing in exchanges it for a
+short-lived session token, exactly as the gateway was already designed to work. This is purely the
+missing front door; the security behind it is unchanged.
+
+The new screen is covered by tests for every path — correct sign-in, the second-factor prompt, a wrong
+password, and a lockout. The complete automated gate — code style, type safety, tests, production
+build, and a dependency security scan — passes cleanly on both the gateway and the dashboard, with no
+known vulnerabilities.
+
+---
+
 ## 2026-07-16 (Session 55)
 
 ---

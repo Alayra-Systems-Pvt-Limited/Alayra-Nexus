@@ -1,0 +1,40 @@
+.wrap {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, var(--bg-accent), transparent),
+    var(--bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: var(--shadow);
+}
+
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
+.title { font-size: 17px; font-weight: 650; color: var(--text); line-height: 1.2; }
+.sub   { font-size: 12.5px; color: var(--muted); }
+
+.hint { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin: 0; }
+
+.note {
+  max-width: 380px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--subtle);
+  line-height: 1.6;
+  margin: 0;
+}

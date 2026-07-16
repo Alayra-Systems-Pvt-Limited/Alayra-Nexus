@@ -154,6 +154,17 @@ the runtime image. Verified: an `inject` integration test drives the real wiring
 API path → JSON 404), and the built deep link serves 200 + absolute assets. **This is the phase that
 makes P7.1–P7.8 real.** Small in code, largest in consequence.
 
+### ~~P7.9b — Sign-in screen~~ ✅ **DONE** — *the cutover's missing front door*
+The cutover surfaced that the redesigned dashboard never rebuilt the old dashboard's login, so it was
+unreachable without a hand-set token. Backend auth (password → session token, TOTP, lockout) has
+existed since Phase 6; this added only its screen. `web/src/pages/Login.tsx` (password, on-demand 2FA
+code field, plain wrong-password / lockout messages); `App` gates on a session token and seeds it
+synchronously so a signed-in reload never flashes login; a global 401 clears the token and fires
+`nx:unauthorized` → back to sign-in; the Topbar sign-out is wired. `api.ts` gained `login()` (off the
+generic path so a failed sign-in doesn't self-trigger the 401 handler) and `clearToken()`. Full basic
+identity (sub-admins, first-run, recovery-key, device fingerprint) is still P7.13; this is just the
+front door so the product is usable.
+
 ### P7.10 — Budgeting cascade *(depends on P7.8 — a budget cannot cascade to teams that have no UI)*
 Org-total budget → pools → teams, each team knowing its limit; route X% of a team's budget to premium
 vs standard; configurable threshold actions (notify admin / notify admin + team / block / route
@@ -181,6 +192,33 @@ The largest backend item; deliberately last, once the shell exists to present it
   are no presets. Purely a convenience layer.
 - **Enterprise/Org section** — no `Org` model exists (`Team` was shaped to take an `orgId` later).
 - **Per-team analytics** — the Analytics aggregate is global; a team filter is a small extension.
+
+---
+
+## Further changes notes (post-completion polish — DEFER until every phase is done)
+
+> Captured 2026-07-16 from Abbas's first real click-through of the live product (Docker). These are
+> **cosmetic/UX refinements, not functional gaps** — the decision is to finish all functional phases
+> first, then return to these so we ship a complete product before polishing. Do NOT action these mid-phase.
+
+1. **Content does not fill the width — too much empty space on every tab.** The main content column is
+   effectively capped/narrow, so pages (Overview especially) leave a large blank area on the right and
+   look under-filled on a wide screen. Audit the page/shell max-width and padding; let content breathe
+   into the full width (or introduce a sensible max with better use of the space — e.g. more columns).
+   Applies to **all tabs**, so it is a shell/layout fix, not a per-page one.
+2. **Notifications tab is cluttered — split it up.** (a) Give **Email** its own sub-tab (Resend API
+   key + From address + recipients), separate from the event list. (b) The events section should sit
+   under a single master **"Enable email notifications"** toggle; when off, the whole event list is
+   disabled/hidden. Right now the master "Send alerts" switch and the per-event switches read as one
+   undifferentiated cluster. Reorganise into: master toggle → (when on) event checklist + Email config
+   in its own tab.
+3. **"Add provider pool" dialog — clarity, not new fields.** Users don't know what SLUG / Auth header /
+   Auth prefix / Model ID path / Extra headers mean. Add short inline hints on each (one line each,
+   like the "url-safe id" hint already on SLUG). **Also make it discoverable that model *capabilities*
+   (chat/embedding/image/…) are chosen on the *models inside a pool*, not on the pool** — e.g. a note in
+   the dialog ("you'll pick each model's capabilities after creating the pool") and/or a prompt to add a
+   model right after a pool is created. This is a known-correct design (pool = credentials; model =
+   capabilities/tier/pricing) that simply isn't obvious in the UI.
 
 ---
 

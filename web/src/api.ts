@@ -12,6 +12,11 @@ export function setToken(token: string): void {
   try { sessionStorage.setItem(TOKEN_KEY, token); } catch { /* private mode */ }
 }
 
+/** Drop the session token — on sign-out, or when the gateway rejects it as expired. */
+export function clearToken(): void {
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ }
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); this.name = 'ApiError'; }
 }
@@ -23,10 +28,51 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   if (!res.ok) {
+    // A 401 means the session token is missing or expired: clear it and let the app fall back to the
+    // login screen rather than leaving every panel stuck on "Unauthorized". A 403 (viewer hitting an
+    // owner-only route) is NOT this — the session is valid, the action just isn't allowed — so it is
+    // left to the calling panel to report.
+    if (res.status === 401) {
+      clearToken();
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nx:unauthorized'));
+    }
     const text = await res.text().catch(() => '');
     throw new ApiError(res.status, text || `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
+}
+
+/** The outcome of a sign-in attempt. `ok` stores the session token as a side effect. */
+export interface LoginOutcome {
+  ok:            boolean;
+  totpRequired?: boolean;   // correct password, but a second-factor code is now required
+  lockedOut?:    boolean;   // too many failed attempts
+  retryAfter?:   number;    // seconds, when lockedOut
+  error?:        string;
+}
+
+/**
+ * Exchange the admin password (and a TOTP or recovery code, once a second factor is enrolled) for a
+ * session token, stored for every subsequent request. Kept off the generic `api()` path on purpose: a
+ * failed sign-in must not trip the global 401 → logout handling (there is nothing to log out of yet),
+ * and it needs the parsed body to tell "wrong password" from "code required".
+ */
+export async function login(password: string, code?: string): Promise<LoginOutcome> {
+  let res: Response;
+  try {
+    res = await fetch('/admin/login', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(code ? { password, code } : { password }),
+    });
+  } catch {
+    return { ok: false, error: 'Could not reach the gateway.' };
+  }
+  const b = await res.json().catch(() => ({} as Record<string, unknown>));
+  if (res.ok && typeof b.token === 'string') { setToken(b.token); return { ok: true }; }
+  if (res.status === 429)  return { ok: false, lockedOut: true, retryAfter: Number(b.retryAfter) || undefined, error: String(b.error ?? 'Too many attempts.') };
+  if (b.totpRequired)      return { ok: false, totpRequired: true, error: String(b.error ?? 'Authenticator code required.') };
+  return { ok: false, error: String(b.error ?? 'Invalid credentials.') };
 }
 
 // ── Endpoint contracts ────────────────────────────────────────────────────────
