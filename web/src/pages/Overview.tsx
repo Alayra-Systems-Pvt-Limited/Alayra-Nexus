@@ -58,7 +58,10 @@ export function Overview() {
         <StatCard label="Output tokens" value={compactNumber(stats.outputTokens7d)} icon={<ArrowDownUp size={14} />} tone={CHART_ACCENTS.outputTokens} sub="last 7 days"       href="/analytics" />
         <StatCard label="Total cost"    value={currency(stats.totalCostUsd)}       icon={<DollarSign size={14} />}  tone={CHART_ACCENTS.usd}          sub="to date"           href="/analytics" />
         <StatCard label="Active keys"   value={compactNumber(stats.activeKeys)}    icon={<KeyRound size={14} />}    sub="across pools"      href="/nexus" />
-        <StatCard label="Active models" value={compactNumber(stats.activeModels)}  icon={<Cpu size={14} />}         sub="in the registry"  href="/models" />
+        {/* Points at Nexus, not a /models page: the standalone registry was folded into Nexus in
+            P7.4b (a pool owns its own models), and this link was left behind pointing at a route
+            that no longer exists — every click landed on "Not found". */}
+        <StatCard label="Active models" value={compactNumber(stats.activeModels)}  icon={<Cpu size={14} />}         sub="across pools"     href="/nexus" />
         <StatCard label="Active teams"  value={compactNumber(stats.activeTeams)}   icon={<Users size={14} />}       sub="with access keys" href="/teams" />
         <StatCard label="Status"        value="Live"                               icon={<Activity size={14} />}    sub="all systems"      href="/security" />
       </div>

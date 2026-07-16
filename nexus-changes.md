@@ -7,6 +7,67 @@
 
 ---
 
+**Date:** 2026-07-17 · Session 61  
+**Title:** Four faults found by clicking, and what that tells us  
+
+**Summary:**  
+Every fault in this session was found by a person using the dashboard, and none by our automated
+checks. That is worth stating plainly, because it is now the third time running, and it points at
+something we intend to fix in a phase of its own.
+
+**Buttons that sent no information were being refused before they ran.** Setting up two-factor
+authentication was the visible one — it answered with a wall of red technical text. The cause sat
+underneath all of it. When our dashboard speaks to the gateway it announces what it is about to
+send; it was announcing "a form is coming" even when it had nothing to send, and the gateway
+correctly refused a promise that was not kept. **Eleven buttons were affected**, including removing
+a person and revoking an invitation — the very offboarding we shipped last session — and marking
+notifications as read, which had been failing quietly for some time because that particular action
+was written to ignore its own failures. One correction fixed all eleven.
+
+**Why nothing caught it.** The piece of the dashboard that talks to the gateway had **no tests at
+all** — every page's tests replace it with a stand-in, so nothing ever examined the real thing. It
+has its own tests now, and the first one asserts exactly the mistake that caused this.
+
+**The gateway's technical errors were being shown to people.** Raw diagnostic text belongs in a log,
+not on screen. The dashboard now shows the sentence and keeps the diagnostics to itself.
+
+**A dead link on the Overview page.** The "Active models" figure was correct, but clicking it landed
+on "page not found" — models moved inside the Nexus section some sessions ago and the link was left
+behind. It now goes to Nexus. The new test checks **every** link on that page against the sections
+that actually exist, rather than checking that one link says what someone typed. It was confirmed to
+fail against the original fault before being kept — a test that cannot fail proves nothing.
+
+**The Enterprise section no longer names a phase.** It said it would be built in a phase that had
+already shipped as something else, so it was both a promise and wrong. It reads "Coming soon". Our
+internal phase numbers mean nothing to the person reading the screen.
+
+**On the address the Connect page gives you.** A fair question was raised: it shows a local address
+during development — will it show your real domain once deployed? **It will.** The gateway builds
+that address from how you actually reached it, and we confirmed this session that a deployment on a
+real domain produces the real domain. One caveat is worth planning for rather than discovering: when
+a gateway sits behind the standard front-door software most deployments use, that software must tell
+the gateway the visitor arrived securely. If it neglects to, the Connect page would print a slightly
+wrong address with confidence — which is the worst kind of wrong, because it looks right. We will
+close that properly in a small dedicated phase: the deployer will be able to state the address
+outright, and the dashboard will speak up when it has reason to doubt what it is showing.
+
+**A trap worth recording.** Our published, ready-to-run package and our source code are two different
+things, and the running system on the test machine was the last published release rather than this
+month's work. It briefly produced two "faults" that did not exist. The lesson is general: confirm
+what is actually running before believing what it tells you.
+
+**Checks:** every quality gate green on both halves of the project — 638 automated checks on the
+gateway, 137 on the dashboard (14 new), zero known security vulnerabilities. Verified against a real
+live gateway and database: the original fault reproduced exactly, the correction confirmed, and
+two-factor setup completed in a real browser.
+
+**Next:** the remaining half of the accounts work (the devices you are signed in on, hiding actions a
+viewer cannot take, and the full reset), then the address-accuracy phase above, then the end-to-end
+testing that would have caught all of this — followed by the interface refinements noted earlier.
+
+---
+
+
 ## 2026-07-17 (Session 60)
 
 ---

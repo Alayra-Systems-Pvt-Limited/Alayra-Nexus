@@ -53,11 +53,46 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); this.name = 'ApiError'; }
 }
 
+/**
+ * Pull the human sentence out of a gateway error response.
+ *
+ * Our routes answer `{ error: "..." }` — a sentence written for the person reading it. Fastify's own
+ * failures answer `{ statusCode, code, error, message }`, where `message` is the readable part. We
+ * showed the raw body for either, so a framework-level failure printed
+ * `{"statusCode":400,"code":"FST_ERR_CTP_EMPTY_JSON_BODY",...}` into the UI.
+ */
+function errorText(body: string, status: number): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown; message?: unknown; statusCode?: unknown };
+
+    // Which field holds the sentence depends on who wrote the response. Ours puts it in `error`.
+    // Fastify's puts a bare status name there ("Bad Request") and the sentence in `message`, so
+    // reading `error` first would show every framework failure as two useless words. `statusCode`
+    // tells them apart: Fastify always sends it, our routes never do.
+    const order = typeof parsed.statusCode === 'number'
+      ? [parsed.message, parsed.error]
+      : [parsed.error, parsed.message];
+
+    for (const field of order) {
+      if (typeof field === 'string' && field.trim()) return field;
+    }
+  } catch { /* not JSON — fall through to the raw text */ }
+  return body.trim() || `HTTP ${status}`;
+}
+
 export async function api<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+  const hasBody = body !== undefined;
   const res = await fetch(path, {
     method,
-    headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    // `Content-Type: application/json` is a promise that a JSON body follows, so it may only be sent
+    // when one actually does. Sending it unconditionally broke every request with nothing to send:
+    // the gateway rejected them with FST_ERR_CTP_EMPTY_JSON_BODY before the route ever ran (setting
+    // up two-factor, enabling a key, removing a person, marking a notification read).
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(hasBody ? { body: JSON.stringify(body) } : {}),
   });
   if (!res.ok) {
     // A 401 means the session token is missing or expired: clear it and let the app fall back to the
@@ -69,7 +104,7 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
       if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nx:unauthorized'));
     }
     const text = await res.text().catch(() => '');
-    throw new ApiError(res.status, text || `HTTP ${res.status}`);
+    throw new ApiError(res.status, errorText(text, res.status));
   }
   return res.json() as Promise<T>;
 }

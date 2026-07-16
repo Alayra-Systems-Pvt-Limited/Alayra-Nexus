@@ -343,6 +343,43 @@ injected email/role, an admin refused on all five owner-only routes, the last-ow
 holding on the one path that reaches it (an owner **API token**, which has no self to check), and
 the audit trail naming Abbas and Liaqat — with `(nobody)` exactly where there is genuinely nobody.
 
+### ~~P7.13a-fix — four defects found by clicking~~ ✅ **DONE** *(2026-07-17)*
+Abbas found these in the running dashboard, not in the suite. Cause of the first, and of why it
+survived: **`web/src/api.ts` had no test file at all** — the seam every page reaches the gateway
+through, and every page test mocks it away.
+
+- **Every bodyless request was rejected before its route ran.** The client sent
+  `Content-Type: application/json` unconditionally; Fastify answers `FST_ERR_CTP_EMPTY_JSON_BODY`
+  when that header arrives with no body. Broke **11 call sites**: setting up two-factor, enabling
+  and disabling a provider key, marking notifications read (twice), and all 7 `DELETE`s — including
+  **Remove person** and **Revoke invite**, i.e. the offboarding P7.13a had just shipped. The
+  notification calls end in `.catch(() => {})`, so they had been failing silently. Fix: send the
+  header only when a body accompanies it. Guarded by `web/src/api.test.ts` (new, 13 tests).
+- **Framework errors printed raw JSON at the user.** `{"statusCode":400,"code":"FST_ERR_CTP…"}`
+  rendered verbatim on the Security page. `errorText()` now extracts the sentence — reading
+  `message` for Fastify's shape and `error` for ours, told apart by `statusCode`, which Fastify
+  always sends and our routes never do. (The first cut of this read `error` first and would have
+  shown "Bad Request" for every framework failure; the test caught it.)
+- **Overview → "Active models" linked to `/models`**, removed when models were folded into Nexus in
+  P7.4b. Right number, click landed on "Not found". Now `/nexus`. Asserting the href would not have
+  caught it — the href was what someone typed. The new test checks **every** Overview link against
+  `SECTIONS`, and was confirmed to fail on the real bug before being kept.
+- **Enterprise's placeholder named a phase, and the name was wrong.** "Built in P7.8" — P7.8 shipped
+  as Teams; Enterprise was never in it. Now reads "Coming soon". Our phase numbers are a promise in
+  a private language, which is worse than no promise.
+
+**Live-verified against a source build + real Postgres/Redis:** the old client behaviour reproduces
+the exact error from Abbas's screenshot; the new one returns a secret; two-factor setup completes in
+a real browser; Enterprise reads "Coming soon"; every Overview link resolves. Green both packages —
+backend 638, web **137** (+14).
+
+> **Trap that cost an hour, worth writing down:** `docker compose up -d --build` **does not build
+> this repo.** `docker-compose.yml` pulls the *published* image (that is the README's promise to
+> users); building from source needs `-f docker-compose.dev.yml`. The stack on `localhost:3000` was
+> the last release — **five** migrations against our fifteen — so it authenticated `ADMIN_PASSWORD`
+> against pre-accounts code and mislabelled the authenticator `admin`. Both "findings" evaporated on
+> a real build. **Check what is actually running before believing what it tells you.**
+
 ### P7.13b — Sessions & devices, viewer gating, danger zone
 Sessions & devices (browser, IP, last-seen; revoke one, sign out everywhere) — the honest version of
 the plan's "device fingerprint", which cannot be an auth factor because any client can forge it.
@@ -352,6 +389,45 @@ audit record of itself: it destroys the table it would write to, so it logs to s
 
 *In the gap, an admin who clicks an owner-only action gets a clear 403 naming what they have and
 what is needed — which is exactly today's behaviour, so the split regresses nothing.*
+
+### P7.14 — Public URL truth *(small; the `https` problem)*
+**The question:** deployed on `xyz.com`, does Connect still say `localhost`? **No — that part
+already works.** The base URL is built from how the client actually reached us
+(`X-Forwarded-Proto`/`X-Forwarded-Host`, else `Host`). Verified live: with a proxy's headers it
+returns `https://xyz.com/v1`.
+
+**The real hole is the scheme.** A reverse proxy terminates TLS and speaks plain HTTP to the
+gateway, so the gateway *cannot observe* that the visitor used HTTPS — it only knows if the proxy
+says so. A proxy that forwards `Host` but forgets `X-Forwarded-Proto` makes Connect print
+`http://xyz.com/v1`: verified live, and the worst kind of wrong, because the page looks fine and
+the operator copies it. Then either their client is redirected (works, silently), or it is refused
+on a strict deployment, or an HTTPS dashboard fetches an HTTP URL and the browser blocks it as mixed
+content. We cannot fix someone's proxy — but we must not *print a confident lie* because of one.
+
+Three layers, cheapest first:
+- **`PUBLIC_URL` env var wins over everything.** The deployer states the address; no inference can
+  contradict it. This is the only source that is true by construction, and it is what a locked-down
+  deployment wants anyway.
+- **The dashboard cross-checks.** It is served by the gateway from the same origin, so the browser's
+  own address bar is ground truth — it cannot be lied to about the scheme it used. If
+  `window.location` disagrees with what the gateway believes, say so on the page rather than hand
+  over a URL we have reason to doubt.
+- **Document the two proxy headers** in the README, next to the deployment section.
+
+### P7.15 — End-to-end proof *(the testing phase Abbas asked for)*
+**The state of it today: CI has no database and no Redis, and nothing in it drives a browser.** All
+775 tests call our code directly with stand-ins. That is precisely why `/v1/v1` (P7.9→7.13a), the
+bodyless-request bug (found today), and 11 broken buttons all shipped green. **Three bugs, one
+pattern: found by a human clicking.** That is the argument for this phase.
+
+- **Real Postgres + Redis behind the existing test job** (compose services in CI). Catches migration
+  and data-shape bugs the mocks define away.
+- **Browser-driven flows:** claim → sign in → invite → accept → role change → remove, and every
+  bodyless button, against a real gateway. Every bug above dies here.
+- **Rate limits (RPM/TPM), team limits, budget refusals** asserted at the real boundary.
+- **Latency is deliberately NOT a gate.** A shared runner's timings are noisy; a latency check there
+  fails at random, and a test everyone learns to ignore is worse than no test. Latency belongs in a
+  measurement we run on purpose, not a merge gate.
 
 ### Backlog (unscheduled — pull in when they earn it)
 - **Team stats: Comparison mode** *(Abbas, 2026-07-16)* — a "Compare" button in Team stats to select

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/preact';
 import type { Overview as OverviewData } from '../api';
+import { SECTIONS } from '../nav';
 
 // The page is pure composition over useApi, so the hook is mocked to drive each state.
 const useApi = vi.fn();
@@ -41,5 +42,20 @@ describe('Overview', () => {
     expect(screen.getByText('Alpha')).toBeInTheDocument();         // top key
     expect(screen.getByText(/keys\.create/)).toBeInTheDocument();  // recent activity
     expect(screen.getByRole('img', { name: 'Cost over the last 7 days' })).toBeInTheDocument();
+  });
+
+  it('every stat card links to a section that exists', () => {
+    // The "Active models" card pointed at /models long after that page was folded into Nexus, so
+    // the number was right and the click landed on "Not found". Asserting each specific href would
+    // not have caught it — the href was exactly what someone had typed. What was missing is that
+    // nothing checked the targets against the routes the app actually has.
+    useApi.mockReturnValue({ data: sample, loading: false, error: null, reload: vi.fn() });
+    render(<Overview />);
+
+    const known = new Set(SECTIONS.map((s) => s.path));
+    const targets = screen.getAllByRole('link').map((a) => a.getAttribute('href') ?? '');
+
+    expect(targets.length).toBeGreaterThan(0);
+    for (const href of targets) expect(known).toContain(href);
   });
 });
