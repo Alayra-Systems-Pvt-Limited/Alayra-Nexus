@@ -54,14 +54,17 @@
 }
 .done svg { color: var(--accent); flex-shrink: 0; }
 
-.keyRow { display: flex; align-items: center; gap: 8px; }
+.keyRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* The recovery key is shown exactly once, so it is set to be read and transcribed accurately:
-   monospaced, selectable, and allowed to wrap rather than being cut off at the edge of the card. */
+   monospaced and selectable. It stays on ONE line — wrapping made the hyphenated key look broken
+   and "squeezed"; if it can't fit it scrolls sideways rather than folding mid-group. Copy and
+   Download sit beside it, so nobody has to transcribe it by eye anyway. */
 .key {
   flex: 1;
+  min-width: 0;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 12px;
   letter-spacing: 0.02em;
   color: var(--text);
   background: var(--surface);
@@ -69,7 +72,8 @@
   border-radius: var(--radius-sm);
   padding: 9px 10px;
   user-select: all;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow-x: auto;
 }
 
 /* A text button that sits inside a form without competing with the primary action. */

@@ -1,8 +1,10 @@
 import { useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { ShieldCheck, KeyRound } from 'lucide-preact';
+import { ShieldCheck, KeyRound, Download } from 'lucide-preact';
 import { claimGateway } from '../../api';
 import { Button, Field, Input, FormError, CopyButton } from '../../ui';
+import { download } from '../../lib/download';
+import { recoveryKeyFile } from './recoveryFile';
 import s from '../login.module.css';
 
 // First run (Phase 7.13a): the screen that turns a gateway with no accounts into one with an owner.
@@ -63,6 +65,9 @@ export function ClaimGateway({
             <div class={s.keyRow}>
               <code class={s.key}>{recoveryKey}</code>
               <CopyButton value={recoveryKey} label="Copy" variant="secondary" />
+              <Button type="button" variant="secondary" onClick={() => download('nexus-recovery-key.txt', recoveryKeyFile(recoveryKey))}>
+                <Download size={14} /> Download
+              </Button>
             </div>
           </Field>
 

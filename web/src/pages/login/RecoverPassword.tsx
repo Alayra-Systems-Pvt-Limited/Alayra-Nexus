@@ -1,8 +1,10 @@
 import { useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { LifeBuoy, Check } from 'lucide-preact';
+import { LifeBuoy, Check, Download } from 'lucide-preact';
 import { recoverPassword } from '../../api';
 import { Button, Field, Input, FormError, CopyButton } from '../../ui';
+import { download } from '../../lib/download';
+import { recoveryKeyFile } from './recoveryFile';
 import s from '../login.module.css';
 
 // A forgotten password (Phase 7.13a).
@@ -51,6 +53,9 @@ export function RecoverPassword({ brand, onDone }: { brand: ComponentChildren; o
             <div class={s.keyRow}>
               <code class={s.key}>{replacement}</code>
               <CopyButton value={replacement} label="Copy" variant="secondary" />
+              <Button type="button" variant="secondary" onClick={() => download('nexus-recovery-key.txt', recoveryKeyFile(replacement))}>
+                <Download size={14} /> Download
+              </Button>
             </div>
           </Field>
 

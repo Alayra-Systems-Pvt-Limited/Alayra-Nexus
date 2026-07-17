@@ -19,7 +19,8 @@
     "clsx": "^2.1.1",
     "lucide-preact": "^1.24.0",
     "preact": "^10.29.7",
-    "preact-iso": "^2.12.0"
+    "preact-iso": "^2.12.0",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

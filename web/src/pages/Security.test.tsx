@@ -52,7 +52,11 @@ describe('Security — sign-in', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /set up two-factor/i })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: /set up two-factor/i }));
-    await waitFor(() => expect(screen.getByText('ABC123SECRET')).toBeInTheDocument()); // the setup key
+    // The QR is the primary path now; assert it rendered, named for assistive tech.
+    await waitFor(() => expect(screen.getByRole('img', { name: /two-factor setup qr code/i })).toBeInTheDocument());
+    // The typed key is a fallback behind a toggle — reveal it, then assert it and the otpauth URI.
+    fireEvent.click(screen.getByRole('button', { name: /enter the key by hand/i }));
+    expect(screen.getByText('ABC123SECRET')).toBeInTheDocument();
     expect(screen.getByText('otpauth://totp/x')).toBeInTheDocument();
 
     fireEvent.input(screen.getByPlaceholderText('123456'), { target: { value: '000111' } });

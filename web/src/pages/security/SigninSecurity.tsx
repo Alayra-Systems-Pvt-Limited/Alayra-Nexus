@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { ShieldCheck } from 'lucide-preact';
 import { POST, ApiError, type AuthStatus } from '../../api';
-import { Card, Button, Badge, Spinner, Field, Input, CopyField, FormError } from '../../ui';
+import { Card, Button, Badge, Spinner, Field, Input, CopyField, QrCode, FormError } from '../../ui';
 import { useApi } from '../../hooks/useApi';
 import { RecoveryCodes } from './RecoveryCodes';
 import s from '../pages.module.css';
@@ -37,6 +37,7 @@ export function SigninSecurity() {
   const [recovery, setRecovery] = useState<string[] | null>(null);
   const [code, setCode]         = useState('');           // shared code field for the active action
   const [reveal, setReveal]     = useState<null | 'regen' | 'disable'>(null);
+  const [showManual, setManual] = useState(false);   // "can't scan?" fallback to the typed key
   const [busy, setBusy]         = useState<string | null>(null);
   const [actionError, setError] = useState<string | null>(null);
 
@@ -153,16 +154,31 @@ export function SigninSecurity() {
             {enrol && (
               <div class={s.secEnrol}>
                 <p class={s.setHint}>
-                  Add this to your authenticator app — a QR code scan is not needed, most authenticator
-                  apps accept a typed key. Enter the code it shows to confirm.
+                  Scan this with your authenticator app — Google Authenticator, 1Password, Authy, any of
+                  them — then enter the six-digit code it shows to confirm.
                 </p>
-                <CopyField label="Setup key" value={enrol.secret} />
-                <CopyField label="otpauth" value={enrol.otpauthUri} />
+
+                <figure class={s.secQr}>
+                  <QrCode value={enrol.otpauthUri} label="Two-factor setup QR code" />
+                  <figcaption>Alayra Nexus · two-factor</figcaption>
+                </figure>
+
+                <button type="button" class={s.secManualToggle} onClick={() => setManual((m) => !m)}>
+                  {showManual ? 'Hide manual setup' : 'Can’t scan? Enter the key by hand'}
+                </button>
+                {showManual && (
+                  <div class={s.secManual}>
+                    <p class={s.secQrHint}>Most apps also accept a typed key or the full setup link.</p>
+                    <CopyField label="Setup key" value={enrol.secret} />
+                    <CopyField label="otpauth" value={enrol.otpauthUri} />
+                  </div>
+                )}
+
                 <Field label="Code from your app" hint="6 digits">
                   <Input value={code} placeholder="123456" onInput={(e) => setCode((e.target as HTMLInputElement).value)} autofocus />
                 </Field>
                 <div class={s.secActions}>
-                  <Button size="sm" variant="ghost" onClick={() => { setEnrol(null); reset(); }} disabled={busy === 'confirm'}>Cancel</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setEnrol(null); setManual(false); reset(); }} disabled={busy === 'confirm'}>Cancel</Button>
                   <Button size="sm" variant="primary" onClick={confirmEnrol} disabled={!code.trim() || busy === 'confirm'}>{busy === 'confirm' ? 'Confirming…' : 'Confirm & enable'}</Button>
                 </div>
               </div>

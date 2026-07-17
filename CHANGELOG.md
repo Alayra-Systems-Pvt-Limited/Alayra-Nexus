@@ -9,6 +9,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+- **A real QR code for two-factor setup, and downloads for the one-time secrets (Phase 7.15b).**
+  Enrolling in two-factor now shows a **scannable QR code** — drawn as inline SVG from the secret
+  in the browser, never sent to any image service — with the typed setup key and `otpauth` URI kept
+  as a "can't scan?" fallback. The one-time credentials can now be **saved to a file**, not just
+  copied: the recovery key (a headed `nexus-recovery-key.txt`) on the claim, invite-accept, and
+  password-recovery screens, and the ten TOTP recovery codes (`nexus-recovery.txt`, headed
+  "Alayra Nexus TOTP Recovery code"). The recovery key also renders on a single line instead of
+  wrapping into a squeezed-looking block.
+
 ### Changed
 - **Every copy button now confirms itself (Phase 7.15a).** One shared `CopyButton` replaces nine
   hand-rolled copy controls across the dashboard — recovery keys and codes, invite links, API

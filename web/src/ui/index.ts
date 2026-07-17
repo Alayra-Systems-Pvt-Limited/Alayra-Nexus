@@ -9,6 +9,7 @@ export { Spinner } from './Spinner';
 export { EmptyState } from './EmptyState';
 export { CopyField } from './CopyField';
 export { CopyButton } from './CopyButton';
+export { QrCode } from './QrCode';
 export { CodeBlock } from './CodeBlock';
 export { LineChart } from './LineChart';
 export { ChartCard } from './ChartCard';

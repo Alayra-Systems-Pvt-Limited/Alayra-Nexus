@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'preact/hooks';
-import { UserCheck } from 'lucide-preact';
+import { UserCheck, Download } from 'lucide-preact';
 import { login, type AdminRole, type RoleCatalogue } from '../../api';
 import { useBranding } from '../../hooks/useBranding';
 import { Button, Field, Input, FormError, CopyButton } from '../../ui';
+import { download } from '../../lib/download';
+import { recoveryKeyFile } from './recoveryFile';
 import s from '../login.module.css';
 
 // Accepting an invite (Phase 7.13a). Reached at /invite?token=… — before the invitee has an account,
@@ -104,6 +106,9 @@ export function AcceptInvite({ onAuthed }: { onAuthed: () => void }) {
             <div class={s.keyRow}>
               <code class={s.key}>{recoveryKey}</code>
               <CopyButton value={recoveryKey} label="Copy" variant="secondary" />
+              <Button type="button" variant="secondary" onClick={() => download('nexus-recovery-key.txt', recoveryKeyFile(recoveryKey))}>
+                <Download size={14} /> Download
+              </Button>
             </div>
           </Field>
 

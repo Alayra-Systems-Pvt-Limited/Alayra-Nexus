@@ -87,6 +87,9 @@
 /* CodeBlock's copy lives in the corner: CopyButton supplies the chrome, this only places it. */
 .codeCopyPos { position: absolute; top: 7px; right: 7px; z-index: 2; }
 
+/* QR: block-level so it never picks up inline-baseline whitespace; sized by width/height props. */
+.qr { display: block; border-radius: 4px; }
+
 /* ── Modal ── */
 .modalOverlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .5); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: nxFade .15s var(--ease); }
 .modal { width: 100%; max-width: 470px; max-height: 88vh; overflow-y: auto; background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); animation: nxRise .2s var(--ease); }
