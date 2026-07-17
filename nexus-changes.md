@@ -7,6 +7,28 @@
 
 ---
 
+**Date:** 2026-07-17 · Session 64  
+**Title:** Closing the redirect door, and three fixes from a security review  
+
+**Summary:**  
+A security-review pass over the day's work, with one significant find. The gateway has long
+checked every outbound address before making a request — the protection that stops it being
+tricked into calling servers on a private network. This session closed the loophole in that
+story: the check covered where a request *starts*, but a malicious server could still answer
+"moved — try this other address instead," and the request would follow, credentials and all,
+to somewhere the check never saw. Outbound requests now refuse to follow such redirects
+entirely, across every path that leaves the gateway — proxied AI traffic, key tests, model
+discovery, notification delivery, and single sign-on. No legitimate AI provider redirects an
+authenticated call, so nothing real is lost and a whole class of attack is gone. Alongside it,
+three fixes from the same review: single sign-on users were being shown the read-only version
+of the dashboard regardless of their actual role; editing any detail of a team that keeps its
+API keys isolated could silently switch that team back onto shared keys; and two automated
+checks were tightened to assert what their names promised. Every finding, including the
+reviewer's false alarms, was verified against the running gateway before being accepted or
+declined — the full battery of 883 automated checks stayed green throughout.
+
+---
+
 **Date:** 2026-07-17 · Session 63  
 **Title:** See every signed-in device, a dashboard honest about your role, and a factory reset  
 
