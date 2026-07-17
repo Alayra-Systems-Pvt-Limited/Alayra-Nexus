@@ -24,6 +24,7 @@ import { getCostWeight }     from './routing.service';
 import { getModelRegistry, activeProviderSlugs }  from './model.service';
 import { selectModels, type SelectableModel, type Capability } from '../lib/modelSelect';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
+import { safeFetch }        from '../lib/safeFetch';
 import { extractModelIds }   from '../lib/modelPath';
 import { withExtraHeaders, providerAuthHeader } from '../lib/providerHeaders';
 import { getSsrfPolicy }     from './ssrf.service';
@@ -507,7 +508,7 @@ export async function testKey(keyId: string): Promise<{ success: boolean; latenc
     // target reaching fetch() is exactly the one vetted (private/metadata/loopback already rejected).
     const safeUrl = assertSafeUrl(baseUrl, await getSsrfPolicy());
     safeUrl.pathname = `${stripTrailingSlash(safeUrl.pathname)}/models`;
-    const res = await fetch(safeUrl, {
+    const res = await safeFetch(safeUrl, {
       headers: withExtraHeaders(key.provider.extraHeaders, providerAuthHeader(key.provider.authHeader, key.provider.authPrefix, apiKey)),
       signal:  AbortSignal.timeout(5000),
     });
@@ -533,7 +534,7 @@ export async function validateProviderCredentials(
     // hosts / metadata / loopback already rejected). Single source of truth, no unchecked side path.
     const safeUrl = assertSafeUrl(base, await getSsrfPolicy());
     safeUrl.pathname = `${stripTrailingSlash(safeUrl.pathname)}/models`;
-    const res = await fetch(safeUrl, {
+    const res = await safeFetch(safeUrl, {
       headers: withExtraHeaders(extraHeaders, providerAuthHeader(authHeader, authPrefix, apiKey)),
       signal:  AbortSignal.timeout(8000),
     });
@@ -563,7 +564,7 @@ export async function validateModel(
     // target is the one the SSRF guard vetted, not a separately built string.
     const safeUrl = assertSafeUrl(baseUrl, await getSsrfPolicy());
     safeUrl.pathname = `${stripTrailingSlash(safeUrl.pathname)}/chat/completions`;
-    const res = await fetch(safeUrl, {
+    const res = await safeFetch(safeUrl, {
       method:  'POST',
       headers: withExtraHeaders(provider.extraHeaders, {
         'Content-Type': 'application/json',
@@ -613,8 +614,10 @@ export async function fetchProviderModels(
   if (!url) return { ok: false, models: [], error: 'No base URL or model-fetch URL configured for this pool' };
 
   try {
-    assertSafeUrl(url, await getSsrfPolicy());
-    const res = await fetch(url, {
+    // Fetch the *returned* URL object, matching the other guarded sites in this file — the value
+    // that reaches safeFetch is the one the guard vetted, not a separately-held string.
+    const safeUrl = assertSafeUrl(url, await getSsrfPolicy());
+    const res = await safeFetch(safeUrl, {
       headers: withExtraHeaders(provider.extraHeaders, providerAuthHeader(provider.authHeader, provider.authPrefix, apiKey)),
       signal:  AbortSignal.timeout(8000),
     });

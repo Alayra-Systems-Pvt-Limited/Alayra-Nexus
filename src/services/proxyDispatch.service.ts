@@ -24,6 +24,7 @@ import { reconcileTpm }         from '../lib/admission';
 import { countTokens }          from '../lib/tokenizer';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
 import { withExtraHeaders, providerAuthHeader } from '../lib/providerHeaders';
+import { safeFetch } from '../lib/safeFetch';
 import { getSsrfPolicy }         from './ssrf.service';
 import { checkTeamBudget, type BudgetPeriod, type OverBudgetAction } from './budget.service';
 import { resolveRequestScope }   from './byok.service';
@@ -219,7 +220,7 @@ export async function dispatchProxy(
 
   let upstream: Response;
   try {
-    upstream = await fetch(url, { method: 'POST', headers, body: fetchBody, signal: controller.signal });
+    upstream = await safeFetch(url, { method: 'POST', headers, body: fetchBody, signal: controller.signal });
   } catch (err) {
     if (ttft) clearTimeout(ttft);
     refund();

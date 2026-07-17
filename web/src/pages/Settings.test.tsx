@@ -20,7 +20,7 @@ const CONFIGS: Record<string, unknown> = {
     windowSeconds: 3600, resendKeySet: true, resendKeyMasked: 're_…9f2a',
   },
   '/admin/settings/ssrf':          { allowPrivate: false, allowList: ['proxy.internal'], envAllowList: ['env.host'] },
-  '/admin/settings/compliance':    { auditRetentionDays: 90, usageRetentionDays: 365, anonymizeUsage: false },
+  '/admin/settings/compliance':    { auditRetentionDays: 90, usageRetentionDays: 365, notificationRetentionDays: 30, anonymizeUsage: false },
 };
 
 beforeEach(() => {

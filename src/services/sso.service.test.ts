@@ -188,7 +188,7 @@ describe('completeLogin', () => {
     joseMock.jwtVerify.mockResolvedValue({ payload: { nonce: 'nonce-1', groups: ['nexus-admins'], sub: 'u1' } });
 
     const out = await sso.completeLogin('auth-code', 'state-xyz');
-    expect(out).toEqual({ token: 'sess-owner', role: 'owner', expiresIn: 43200 });
+    expect(out).toEqual({ token: 'sess-owner', role: 'owner', expiresIn: 43200, user: null });
     // No email claim in this token, so there is no account to tie the sign-in to and the session
     // carries a bare role — the unattributed shape SSO always had. See the provisioning tests below.
     expect(sessionMock.createSession).toHaveBeenCalledWith({ role: 'owner' }, expect.any(Object));
@@ -224,7 +224,9 @@ describe('completeLogin', () => {
     expect(usersMock.provisionSsoUser).toHaveBeenCalledWith('Ada@Example.com', 'Ada L', 'owner');
     // The session names the account, not a role: authority is then read from the account.
     expect(sessionMock.createSession).toHaveBeenCalledWith({ userId: 'user-9' }, expect.any(Object));
-    expect(out).toEqual({ token: 'sess-user-9', role: 'owner', expiresIn: 43200 });
+    // The user rides along for the callback page to store as the dashboard identity — without it,
+    // role gating reads no identity and quietly renders every SSO sign-in as a viewer.
+    expect(out).toEqual({ token: 'sess-user-9', role: 'owner', expiresIn: 43200, user: { id: 'user-9', name: 'Ada L' } });
   });
 
   it('reports the ACCOUNT’s role, not the claim’s, for someone who already exists', async () => {

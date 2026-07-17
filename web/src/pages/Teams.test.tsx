@@ -86,6 +86,25 @@ describe('Teams — list', () => {
     fireEvent.click(screen.getByRole('button', { name: /delete team/i }));
     await waitFor(() => expect(del).toHaveBeenCalledWith('/admin/teams/t1'));
   });
+
+  it('editing a BYOK-isolated team does not quietly re-enable shared-pool fallback', async () => {
+    // The edit draft once hardcoded byokFallback: true, so renaming an isolated team moved its
+    // traffic back onto shared keys — an isolation breach dressed as a rename. The draft must
+    // seed from the row and the PATCH must carry what the row said.
+    get.mockImplementation((p: string) => (p === '/admin/teams'
+      ? Promise.resolve({ teams: [team({ byokFallback: false })] })
+      : Promise.resolve({ keys: [] })));
+    render(<Teams />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /edit frontend/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /edit frontend/i }));
+
+    const nameInput = await screen.findByPlaceholderText(/Frontend, Data Science/i);
+    fireEvent.input(nameInput, { target: { value: 'Frontend Platform' } });
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/admin/teams/t1',
+      expect.objectContaining({ name: 'Frontend Platform', byokFallback: false })));
+  });
 });
 
 describe('Teams — access keys', () => {

@@ -31,6 +31,7 @@ import { prisma }        from '../lib/prisma';
 import { redis }         from '../lib/redis';
 import { encrypt, decrypt } from '../lib/encryption';
 import { assertSafeUrl, stripTrailingSlash } from '../lib/url';
+import { safeFetch } from '../lib/safeFetch';
 import { getSsrfPolicy } from './ssrf.service';
 import { createSession } from './adminAuth.service';
 import { provisionSsoUser } from './adminUsers.service';
@@ -207,7 +208,7 @@ interface Discovery {
 }
 
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
-  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
+  const res = await safeFetch(url, { ...init, signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
   if (!res.ok) throw new SsoError('token_exchange_failed', `HTTP ${res.status} from ${new URL(url).host}`);
   return res.json();
 }
@@ -227,7 +228,7 @@ async function discover(issuer: string): Promise<Discovery> {
 
   let doc: Record<string, unknown>;
   try {
-    const res = await fetch(wellKnown, { signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
+    const res = await safeFetch(wellKnown, { signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     doc = (await res.json()) as Record<string, unknown>;
   } catch (e) {
@@ -304,7 +305,7 @@ export async function completeLogin(
   code: string,
   state: string,
   meta: { ua?: string | null; ip?: string | null } = {},
-): Promise<{ token: string; role: AdminRole; expiresIn: number }> {
+): Promise<{ token: string; role: AdminRole; expiresIn: number; user: { id: string; name: string } | null }> {
   if (!code || !state) throw new SsoError('invalid_request');
 
   const raw = await redis.get(STATE_PREFIX + state);
@@ -371,7 +372,9 @@ export async function completeLogin(
     // Suspended: an offboarded person must not walk back in through the identity provider.
     if (!user) throw new SsoError('account_suspended', 'This account is suspended. Contact an owner.');
     const session = await createSession({ userId: user.id }, meta);
-    return { token: session.token, role: user.role, expiresIn: session.expiresIn };
+    // The user rides along so the callback can store the same identity a password login stores —
+    // the dashboard's role gating reads it, and without it an SSO owner renders as a viewer.
+    return { token: session.token, role: user.role, expiresIn: session.expiresIn, user: { id: user.id, name: user.name } };
   }
 
   // No email claim, so there is nobody to name. Rather than refuse a sign-in that worked yesterday,
@@ -382,5 +385,5 @@ export async function completeLogin(
     'will be recorded without a name. Add "email" to the configured scopes to attribute it.',
   );
   const session = await createSession({ role: mappedRole }, meta);
-  return { token: session.token, role: mappedRole, expiresIn: session.expiresIn };
+  return { token: session.token, role: mappedRole, expiresIn: session.expiresIn, user: null };
 }

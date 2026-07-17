@@ -149,6 +149,11 @@ test('an owner cannot demote, suspend, or remove themselves', async () => {
   });
   expect(demote.status).toBe(400);
 
+  const suspend = await gw.send('PATCH', `/admin/users/${self.id}`, {
+    token: ownerToken, body: { status: 'suspended' },
+  });
+  expect(suspend.status).toBe(400);
+
   const remove = await gw.send('DELETE', `/admin/users/${self.id}`, { token: ownerToken });
   expect(remove.status).toBe(400);
 });

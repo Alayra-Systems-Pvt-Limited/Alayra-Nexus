@@ -21,6 +21,7 @@ import { computeReserve, countMessageTokens, countTokens } from '../lib/tokenize
 import { reconcileTpm }              from '../lib/admission';
 import { sessionHash, setStickyKeyId } from '../lib/sticky';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
+import { safeFetch }                 from '../lib/safeFetch';
 import { withExtraHeaders, providerAuthHeader } from '../lib/providerHeaders';
 import { getSsrfPolicy }              from './ssrf.service';
 import { getGuardrailConfig }         from './guardrails.service';
@@ -370,7 +371,7 @@ export async function handleProxy(
 
   let upstream: Response;
   try {
-    upstream = await fetch(upstreamUrl, { method: 'POST', headers, body: JSON.stringify(upstreamBody), signal: controller.signal });
+    upstream = await safeFetch(upstreamUrl, { method: 'POST', headers, body: JSON.stringify(upstreamBody), signal: controller.signal });
   } catch (err) {
     if (ttftTimer) clearTimeout(ttftTimer);
     refundReservation();

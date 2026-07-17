@@ -21,6 +21,7 @@
 // Off by default; nothing is sent until an operator enables it and adds a channel.
 
 import { getSetting, setSetting } from './settings.service';
+import { safeFetch } from '../lib/safeFetch';
 import { redis }                  from '../lib/redis';
 import { recordNotification }     from './notificationFeed.service';
 import { encrypt, decrypt, maskKey } from '../lib/encryption';
@@ -103,7 +104,7 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body), signal: controller.signal });
+    const res = await safeFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body), signal: controller.signal });
     // A 2xx is the only "delivered". A rejected key (401), a bad sender (422), or a webhook
     // 5xx must surface as a rejection so notify() can tell a real failure from a no-op and
     // decline to burn the coalescing window on an alert that never actually went out.

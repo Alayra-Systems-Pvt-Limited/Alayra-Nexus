@@ -69,6 +69,29 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   as a clear message. Additive migration (a defaulted `role` column); the master password and
   every existing token remain owners, so upgrading changes nothing until you create a viewer.
 
+### Security
+- **Outbound requests no longer follow redirects.** The SSRF guard vets the URL a request
+  starts at; `fetch`'s default policy then follows a 3xx anywhere — so a malicious or
+  compromised "provider" answering `302 Location: http://169.254.169.254/` could walk a
+  vetted request (credentials attached) straight into cloud metadata or the internal
+  network. Every guarded outbound request — provider proxying across all modalities, key
+  and credential tests, model discovery, notification email/webhook delivery, and SSO
+  discovery/token exchange — now goes through one wrapper that refuses redirects with a
+  clear message naming the target. No real provider API redirects an authenticated call;
+  point the configuration at the final address.
+- **Revealing a team key's plaintext now requires write access.** The reveal endpoint was
+  readable by a viewer; a copyable live credential is not "read-only".
+
+### Fixed
+- **SSO sign-ins were rendered as read-only viewers.** The callback page stored the session
+  token but not the identity the dashboard's role gating reads, so an SSO owner or admin saw
+  a viewer's UI (every write control hidden) regardless of their actual role. The callback
+  now stores the same identity a password sign-in stores.
+- **Editing a team no longer silently re-enables shared-pool fallback.** The team list didn't
+  round-trip `byokFallback` and the edit form defaulted it to on — so renaming a BYOK-isolated
+  team quietly moved its traffic back onto shared keys. The field is returned, and the edit
+  form seeds from what is actually stored.
+
 ### Changed
 - **Notification delivery integrity.** A non-2xx reply from Resend (a rotated key, an
   unverified sender) or a webhook endpoint is now treated as a failure rather than silently

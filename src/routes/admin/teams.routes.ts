@@ -60,6 +60,9 @@ export default async function adminTeamsRoutes(fastify: FastifyInstance) {
       budgetUsd:    t.budgetUsd,
       budgetPeriod: t.budgetPeriod,
       overBudgetAction: t.overBudgetAction,
+      // Must round-trip: the edit modal seeds its draft from this row, and a missing field here
+      // once made every edit silently re-enable shared-pool fallback on a BYOK-isolated team.
+      byokFallback: t.byokFallback,
       keyCount:     t._count.teamKeys,
       spendUsd:     await getCurrentSpend(t.id, t.budgetPeriod as BudgetPeriod),
       createdAt:    t.createdAt,

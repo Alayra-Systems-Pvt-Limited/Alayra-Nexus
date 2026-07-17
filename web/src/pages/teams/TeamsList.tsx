@@ -44,7 +44,10 @@ export function TeamsList() {
   const openCreate = () => { setEditing(null); setFormErr(null); setDraft(emptyDraft()); };
   const openEdit = (t: TeamRow) => {
     setEditing(t); setFormErr(null);
-    setDraft({ name: t.name, status: t.status, assignedTier: t.assignedTier, budgetUsd: t.budgetUsd, budgetPeriod: t.budgetPeriod, overBudgetAction: t.overBudgetAction, byokFallback: true });
+    // Seeded from the ROW, never a default: hardcoding byokFallback here once meant that editing a
+    // team's name silently re-enabled shared-pool fallback on a BYOK-isolated team — an isolation
+    // breach dressed as a rename. (?? true guards rows cached from before the server sent the field.)
+    setDraft({ name: t.name, status: t.status, assignedTier: t.assignedTier, budgetUsd: t.budgetUsd, budgetPeriod: t.budgetPeriod, overBudgetAction: t.overBudgetAction, byokFallback: t.byokFallback ?? true });
   };
 
   const patchDraft = (over: Partial<TeamDraft>) => setDraft((d) => (d ? { ...d, ...over } : d));

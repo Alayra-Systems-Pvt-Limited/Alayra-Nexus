@@ -356,6 +356,9 @@ export interface TeamRow {
   budgetUsd:    number | null;
   budgetPeriod: TeamPeriod;
   overBudgetAction: TeamOverBudgetAction;
+  // Optional only for rows cached from servers that predate the field being returned; the edit
+  // modal must seed from this, never from a default (a default rewrote BYOK isolation on edit).
+  byokFallback?: boolean;
   keyCount:     number;
   spendUsd:     number;
   createdAt:    string;

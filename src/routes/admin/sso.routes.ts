@@ -83,14 +83,20 @@ export default async function adminSsoRoutes(fastify: FastifyInstance) {
     if (q.error) return bounce(reply, 'verification_failed');
 
     try {
-      const { token, role } = await sso.completeLogin(q.code ?? '', q.state ?? '', {
+      const { token, role, user } = await sso.completeLogin(q.code ?? '', q.state ?? '', {
         ua: request.headers['user-agent'], ip: request.ip,
       });
       recordAudit({
         action: 'auth.sso.login', method: 'GET', actorRole: role, actor: 'sso',
         ip: request.ip, status: 200, detail: JSON.stringify({ outcome: 'success' }),
       });
-      const payload = JSON.stringify({ token, role });
+      // `identity` mirrors exactly what api.ts setIdentity stores after a password login — the
+      // dashboard's role gating reads that key, and a missing one is treated as 'viewer', which
+      // silently stripped every SSO owner of their controls.
+      const payload = JSON.stringify({
+        token, role,
+        identity: { role, userId: user?.id ?? null, name: user?.name ?? null },
+      });
       return reply
         .header('Cache-Control', 'no-store')
         .type('text/html')
@@ -99,7 +105,9 @@ export default async function adminSsoRoutes(fastify: FastifyInstance) {
           `<body style="font-family:system-ui;background:#0b0f14;color:#e6edf3">` +
           `<p style="margin:40px">Signing you in…</p><script>` +
           `(function(){var d=${payload};try{sessionStorage.setItem('nx_token',d.token);` +
-          `sessionStorage.setItem('nx_role',d.role);}catch(e){}location.replace('/');})();` +
+          `sessionStorage.setItem('nx_role',d.role);` +
+          `sessionStorage.setItem('nx_identity',JSON.stringify(d.identity));}catch(e){}` +
+          `location.replace('/');})();` +
           `</script></body>`,
         );
     } catch (e) {
