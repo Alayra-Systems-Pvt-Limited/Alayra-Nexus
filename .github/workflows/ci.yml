@@ -108,3 +108,69 @@ jobs:
       - run: npm run build
       - name: Audit UI production dependencies
         run: npm audit --omit=dev --audit-level=low
+
+  # End-to-end proof (P7.15): the compiled gateway, a real PostgreSQL, a real Redis, and a
+  # real browser. Everything above tests our code with stand-ins; this job is the one that
+  # would have caught the bugs humans kept finding by clicking — /v1/v1 on the Connect page,
+  # the bodyless-request rejections, the double-spaced provider auth header. Latency is
+  # deliberately NOT asserted anywhere in it: shared-runner timings are noise, a flaky gate
+  # gets ignored, and an ignored gate is worse than none.
+  e2e:
+    name: End-to-end (Postgres + Redis + browser)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus
+          POSTGRES_DB: nexus
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nexus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run build
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: npm ci
+        working-directory: e2e
+      - run: npm run lint
+        working-directory: e2e
+      - run: npm run typecheck
+        working-directory: e2e
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+      - name: Run the suite against the compiled gateway
+        run: npx playwright test
+        working-directory: e2e
+        env:
+          # Both packages were just built above; the harness must not rebuild them.
+          E2E_SKIP_BUILD: '1'
+      - name: Keep the report when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7

@@ -25,7 +25,7 @@ import { getModelRegistry, activeProviderSlugs }  from './model.service';
 import { selectModels, type SelectableModel, type Capability } from '../lib/modelSelect';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
 import { extractModelIds }   from '../lib/modelPath';
-import { withExtraHeaders }  from '../lib/providerHeaders';
+import { withExtraHeaders, providerAuthHeader } from '../lib/providerHeaders';
 import { getSsrfPolicy }     from './ssrf.service';
 import { SHARED_NAMESPACE, type RoutingScope } from '../lib/scope';
 import { notify } from './notifications.service';
@@ -508,7 +508,7 @@ export async function testKey(keyId: string): Promise<{ success: boolean; latenc
     const safeUrl = assertSafeUrl(baseUrl, await getSsrfPolicy());
     safeUrl.pathname = `${stripTrailingSlash(safeUrl.pathname)}/models`;
     const res = await fetch(safeUrl, {
-      headers: withExtraHeaders(key.provider.extraHeaders, { [key.provider.authHeader]: `${key.provider.authPrefix ?? 'Bearer'} ${apiKey}` }),
+      headers: withExtraHeaders(key.provider.extraHeaders, providerAuthHeader(key.provider.authHeader, key.provider.authPrefix, apiKey)),
       signal:  AbortSignal.timeout(5000),
     });
     return { success: res.ok, latencyMs: Date.now() - start, error: res.ok ? undefined : `HTTP ${res.status}` };
@@ -534,7 +534,7 @@ export async function validateProviderCredentials(
     const safeUrl = assertSafeUrl(base, await getSsrfPolicy());
     safeUrl.pathname = `${stripTrailingSlash(safeUrl.pathname)}/models`;
     const res = await fetch(safeUrl, {
-      headers: withExtraHeaders(extraHeaders, { [authHeader]: `${authPrefix ?? 'Bearer'} ${apiKey}` }),
+      headers: withExtraHeaders(extraHeaders, providerAuthHeader(authHeader, authPrefix, apiKey)),
       signal:  AbortSignal.timeout(8000),
     });
     return { ok: res.ok, latencyMs: Date.now() - start, error: res.ok ? undefined : `HTTP ${res.status}` };
@@ -567,7 +567,7 @@ export async function validateModel(
       method:  'POST',
       headers: withExtraHeaders(provider.extraHeaders, {
         'Content-Type': 'application/json',
-        [provider.authHeader]: `${provider.authPrefix ?? 'Bearer'} ${apiKey}`,
+        ...providerAuthHeader(provider.authHeader, provider.authPrefix, apiKey),
       }),
       body:   JSON.stringify({ model: modelName, messages: [{ role: 'user', content: 'Hi' }], max_tokens: 1 }),
       signal: AbortSignal.timeout(15000),
@@ -615,7 +615,7 @@ export async function fetchProviderModels(
   try {
     assertSafeUrl(url, await getSsrfPolicy());
     const res = await fetch(url, {
-      headers: withExtraHeaders(provider.extraHeaders, { [provider.authHeader]: `${provider.authPrefix ?? 'Bearer'} ${apiKey}` }),
+      headers: withExtraHeaders(provider.extraHeaders, providerAuthHeader(provider.authHeader, provider.authPrefix, apiKey)),
       signal:  AbortSignal.timeout(8000),
     });
     if (!res.ok) return { ok: false, models: [], error: `HTTP ${res.status}` };

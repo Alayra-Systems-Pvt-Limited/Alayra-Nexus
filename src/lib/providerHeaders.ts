@@ -61,3 +61,27 @@ export function withExtraHeaders(
 ): Record<string, string> {
   return { ...parseExtraHeaders(extraHeaders), ...systemHeaders };
 }
+
+// The provider auth header, built in ONE place for the same reason extraHeaders are parsed in
+// one place. Six call sites used to inline `${authPrefix ?? 'Bearer'} ${key}`, and the operator
+// types that prefix: `Bearer ` with a trailing space — the natural way to type a prefix — became
+// `Bearer  <key>` (double space), and a deliberately empty prefix (providers that take the bare
+// key) became ` <key>`. Either way the provider refuses the credential and the pool fails auth
+// with nothing to debug, because an auth header is never displayed anywhere. Found by the e2e
+// suite's upstream ledger, which is the only place the assembled header is ever visible.
+
+/** `Bearer <key>` with exactly one space; a blank prefix means the key stands alone. */
+export function authHeaderValue(prefix: string | null | undefined, key: string): string {
+  const p = (prefix ?? 'Bearer').trim();
+  return p ? `${p} ${key}` : key;
+}
+
+/** The complete auth header entry: trimmed name (a padded name is an invalid HTTP token), safe value. */
+export function providerAuthHeader(
+  name: string | null | undefined,
+  prefix: string | null | undefined,
+  key: string,
+): Record<string, string> {
+  const header = (name ?? '').trim() || 'Authorization';
+  return { [header]: authHeaderValue(prefix, key) };
+}

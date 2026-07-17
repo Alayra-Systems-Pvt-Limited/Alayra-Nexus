@@ -58,3 +58,7 @@ docs/*
 # ── Misc ───────────────────────────────────────────────────────────────────────
 .claude/
 *.tgz
+
+# ── E2E (Playwright artefacts; e2e/node_modules is caught by the global rule) ──
+e2e/test-results/
+e2e/playwright-report/

@@ -9,7 +9,7 @@ import { Logs } from './Logs';
 
 const entry = (over: Partial<AuditEntry> = {}): AuditEntry => ({
   id: 'a1', action: 'keys.ban', method: 'POST', actorRole: 'owner', actor: 'password',
-  target: '/admin/keys/k1', ip: '10.0.0.4', status: 200, detail: null,
+  actorName: 'Abbas', target: '/admin/keys/k1', ip: '10.0.0.4', status: 200, detail: null,
   createdAt: new Date().toISOString(), ...over,
 });
 
@@ -24,6 +24,14 @@ describe('Logs', () => {
     await waitFor(() => expect(screen.getByText('keys.ban')).toBeInTheDocument());
     expect(screen.getByText('read-only')).toBeInTheDocument();
     expect(screen.getByText(/cannot be edited or deleted/i)).toBeInTheDocument();
+  });
+
+  it('names the person who acted, not just their role', async () => {
+    // Accounts landed in 7.13a and the trail has carried names since — but this page kept
+    // rendering only the role, so the promise was true in the database and invisible on
+    // screen. Found by the e2e browser suite looking for a removed person's name.
+    render(<Logs />);
+    await waitFor(() => expect(screen.getAllByText('Abbas').length).toBeGreaterThan(0));
   });
 
   it('keeps the action slug verbatim, so the dashboard and the logs agree', async () => {

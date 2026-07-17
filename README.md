@@ -854,8 +854,8 @@ explains the layering rule and walks the full request path;
 [`docs/architecture/FILE-OVERVIEW.md`](docs/architecture/FILE-OVERVIEW.md) is a
 where-to-look index and a checklist for adding a feature.
 
-The backend lives in `src/` and the admin dashboard in `frontend/` — the dashboard is
-plain ES modules with no build step.
+The backend lives in `src/`, the admin dashboard in `web/` (Vite + Preact), and the
+end-to-end suite in `e2e/` (Playwright).
 
 ```bash
 # Development
@@ -863,6 +863,15 @@ npm run dev
 
 # Type check
 npx tsc --noEmit
+
+# Unit tests (backend, then dashboard)
+npm test
+cd web && npm test
+
+# End-to-end: builds both packages, then drives the COMPILED gateway against a real
+# Postgres + Redis (docker compose up -d postgres redis) and a real browser. Uses its
+# own databases and Redis DBs — your local gateway's data is never touched.
+cd e2e && npm install && npx playwright install chromium && npx playwright test
 
 # Schema changes
 npx prisma migrate dev --name your_migration_name

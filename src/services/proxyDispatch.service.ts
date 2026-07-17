@@ -23,7 +23,7 @@ import { recordTokenUsage, recordOutcome } from './token.service';
 import { reconcileTpm }         from '../lib/admission';
 import { countTokens }          from '../lib/tokenizer';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
-import { withExtraHeaders }       from '../lib/providerHeaders';
+import { withExtraHeaders, providerAuthHeader } from '../lib/providerHeaders';
 import { getSsrfPolicy }         from './ssrf.service';
 import { checkTeamBudget, type BudgetPeriod, type OverBudgetAction } from './budget.service';
 import { resolveRequestScope }   from './byok.service';
@@ -198,9 +198,10 @@ export async function dispatchProxy(
   }
 
   const url = `${stripTrailingSlash(route.baseUrl)}${upstreamPath}`;
-  const headers: Record<string, string> = withExtraHeaders(route.extraHeaders, {
-    [route.authHeader]: `${route.authPrefix ?? 'Bearer'} ${route.decryptedKey}`,
-  });
+  const headers: Record<string, string> = withExtraHeaders(
+    route.extraHeaders,
+    providerAuthHeader(route.authHeader, route.authPrefix, route.decryptedKey),
+  );
   // Multipart upload: the caller rebuilds the form with the routed model, and fetch sets
   // its own multipart Content-Type (boundary). Otherwise forward JSON, dropping any
   // stream flag (these endpoints are one-shot) and injecting the model Nexus chose.

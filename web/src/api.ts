@@ -488,6 +488,9 @@ export interface AuditEntry {
   id: string; action: string; method: string; actorRole: string;
   actor: string | null; target: string | null; ip: string | null;
   status: number; detail: string | null; createdAt: string;
+  /** Who, by name (Phase 7.13a) — copied onto the record so it survives the account. Null when
+   *  there is genuinely nobody: a token-minted session, or an action from before accounts. */
+  actorName: string | null;
 }
 
 // ── Health (health.routes.ts / GET /ready — healthSampler.service.ts) ─────────

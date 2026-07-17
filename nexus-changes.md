@@ -7,6 +7,69 @@
 
 ---
 
+**Date:** 2026-07-17 · Session 62  
+**Title:** The gateway now tests itself the way a person would use it  
+
+**Summary:**  
+Three sessions in a row, real faults were found by a person clicking around the dashboard rather
+than by our automated checks. All 782 of the checks we had were of the same kind: they examine each
+piece of the gateway on its own, with the surrounding pieces replaced by stand-ins. Excellent at
+catching a broken part; structurally blind to a broken connection between parts — and every recent
+fault lived in a connection. This session closes that gap. **The gateway now has a second, different
+kind of test: it starts the finished product — the same compiled program a deployment runs, a real
+database, a real everything — and drives it the way a person would, including through a real web
+browser.**
+
+**Forty-two such checks now run on every change.** They set up a brand-new gateway from nothing and
+live a full life with it: claim it as its first owner, sign out and back in, set up two-factor with
+a working simulated authenticator app, invite a colleague through a second browser as if on another
+computer, suspend them mid-session and watch the ban land on their very next click, remove them and
+confirm their record stays in the log. On the traffic side: a request travels the entire path out to
+a pretend AI provider we control, and the request-per-minute limit, the token budget, and the team
+spending cap are each pushed until they refuse. The pretend provider keeps a ledger of everything
+that reaches it — so when the gateway refuses a request, we can prove the refusal cost nothing,
+because nothing arrived upstream. Speed is deliberately not judged: shared test machines have
+unpredictable timing, a check that fails randomly gets ignored, and an ignored check is worse than
+none.
+
+**The new tests caught three real problems before the day was out.**
+
+**First, and largest: our own build tool had been lying to us.** When a source file is renamed, the
+compiler writes the new output but never deletes the old one — and an old, pre-rename copy of the
+admin routing code was still sitting in the build output, quietly winning. Anyone running the
+gateway from source on a long-lived checkout was running a months-old administration interface
+without any way to notice; our published Docker package was immune because it always builds from a
+clean slate, which is exactly why nobody had. The build now sweeps its output clean before every
+compile. The lesson from last session — confirm what is actually running — earned its keep within a
+day.
+
+**Second, a credentials fault invisible by nature.** When an operator sets up a provider and types
+the authentication prefix with a trailing space — the most natural way to type a prefix — the
+gateway sent the provider a malformed credential, and the provider refused it. Nothing showed the
+operator what was wrong, because security headers are never displayed anywhere. Six separate places
+assembled that header, each with the same flaw; there is now exactly one place, fixed, with its own
+tests. Only the pretend provider's ledger could have caught this: it is the only place the assembled
+header is ever visible.
+
+**Third, a promise half-kept.** Last session we said the security log now records names instead of
+just "the administrator". It did — in the database. The Logs page on screen was never taught to
+show the new information, so a person reading it still saw only roles. It shows names now.
+
+**Also in this session:** the checks confirmed a piece of good behaviour we had never proven — a
+gateway that cannot reach its database refuses to start with a clear, actionable message, rather
+than starting up broken.
+
+**Checks:** every quality gate green across all three parts of the project — 644 on the gateway (6
+new), 138 on the dashboard (1 new), 42 end-to-end, zero known security vulnerabilities. The new
+suite runs on every change alongside the existing gates.
+
+**Next:** the remaining half of the accounts work — the devices you are signed in on, hiding actions
+a viewer cannot take, and the full reset — now built with this safety net already underneath it.
+Then the address-accuracy work, then the interface refinements.
+
+---
+
+
 **Date:** 2026-07-17 · Session 61  
 **Title:** Four faults found by clicking, and what that tells us  
 

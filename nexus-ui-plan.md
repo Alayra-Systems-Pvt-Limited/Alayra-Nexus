@@ -414,20 +414,71 @@ Three layers, cheapest first:
   over a URL we have reason to doubt.
 - **Document the two proxy headers** in the README, next to the deployment section.
 
-### P7.15 — End-to-end proof *(the testing phase Abbas asked for)*
-**The state of it today: CI has no database and no Redis, and nothing in it drives a browser.** All
-775 tests call our code directly with stand-ins. That is precisely why `/v1/v1` (P7.9→7.13a), the
-bodyless-request bug (found today), and 11 broken buttons all shipped green. **Three bugs, one
-pattern: found by a human clicking.** That is the argument for this phase.
+### ~~P7.15 — End-to-end proof~~ ✅ **DONE** *(2026-07-17 — built out of order, before 13b, on purpose: the remaining phases get built with the net already under them)*
 
-- **Real Postgres + Redis behind the existing test job** (compose services in CI). Catches migration
-  and data-shape bugs the mocks define away.
-- **Browser-driven flows:** claim → sign in → invite → accept → role change → remove, and every
-  bodyless button, against a real gateway. Every bug above dies here.
-- **Rate limits (RPM/TPM), team limits, budget refusals** asserted at the real boundary.
-- **Latency is deliberately NOT a gate.** A shared runner's timings are noisy; a latency check there
-  fails at random, and a test everyone learns to ignore is worse than no test. Latency belongs in a
-  measurement we run on purpose, not a merge gate.
+**What exists now: `e2e/` — 42 tests against the compiled `dist/server.js`, a real PostgreSQL, a
+real Redis, and a real Chromium.** Nothing under test is imported; everything is reached over a
+socket, exactly as a deployment is. New CI job `e2e` (postgres+redis services, chromium) alongside
+the unit jobs — NOT behind them: the unit tests mock the database away, so services there would
+prove nothing. Full local run ≈ 35s including both builds: `cd e2e && npx playwright test`.
+
+**Architecture, and the reasoning that shaped it:**
+- **Two gateway stacks** (`nexus_e2e_api` on :3100 / redis DB 1, `nexus_e2e_ui` on :3101 / DB 2) —
+  a gateway can be CLAIMED exactly once per database, and both the API story and the browser story
+  must prove that flow from its unclaimed beginning. Isolated from a developer's live gateway by
+  construction (own DBs; the redis-flush script refuses DB 0 outright).
+- **Every run re-proves the migrations**: setup is `prisma migrate reset` onto an empty database —
+  all fifteen apply from scratch, every time.
+- **A mock upstream provider with a LEDGER** (`/__requests`). The ledger is how a negative is
+  proven: a rate-limited request must appear as a refusal at our door AND an absence upstream. A
+  limit that rejects the caller but still bills the provider passes any test that only reads the
+  response. Admitted via `SSRF_ALLOWLIST` — a real deployment knob, not a test backdoor.
+- **A hand-rolled 20-line RFC-6238 TOTP** plays the authenticator app — nothing under test may
+  verify itself, so `src/lib/totp.ts` is not imported.
+- **No retries, one worker, serial stories.** A retry policy is a flakiness amnesty. The suites
+  are stories (claim → sign in → invite → suspend → remove), each step's precondition the previous
+  step's outcome. The lockout spec is pinned LAST (`99-`) because the lockout it triggers bars the
+  source address for everything after it.
+- **Latency asserted nowhere**, per the plan: runner timings are noise, and an ignored gate is
+  worse than none.
+
+**What it caught before it was even finished — four findings in one day:**
+1. **The local build was serving GHOST ROUTES.** `require('./routes/admin')` resolved to
+   `dist/routes/admin.js` — a compiled FOSSIL of the pre-split monolithic router that tsc never
+   cleans up, and Node prefers a file over a directory. Every local `node dist/server.js` since the
+   admin split ran a Phase-6-era admin API; Docker never saw it (images build from a clean copy),
+   which is why the container kept working while local boots 404'd `/admin/login`. Fix: `npm run
+   build` now removes `dist/` first. Diagnosed via `onRoute` instrumentation after printRoutes
+   string-matching lied.
+2. **The provider auth header was assembled wrong in six places.** `` `${authPrefix} ${key}` ``
+   turned an operator-typed `Bearer ` (trailing space — the natural way to type a prefix) into
+   `Bearer  <key>`, and a deliberately empty prefix into ` <key>`. Providers refuse both, and the
+   header is never displayed anywhere, so the pool just failed auth with nothing to debug. Caught
+   by the ledger — the only place the assembled header is visible. Fix: `providerAuthHeader()` in
+   `lib/providerHeaders.ts`, ONE place, used by proxyDispatch, completionsProxy, and all four
+   nexus.service probes (+6 unit tests).
+3. **The Logs page never showed the names 7.13a promised.** `actorName` was in the database and on
+   the wire, but the dashboard's `AuditEntry` type never learned the field, so the Actor column
+   showed only roles. "The log records names" was true in the database and invisible on screen.
+   Caught by the browser suite looking for a removed person's name (+1 web test).
+4. **Confirmed fail-fast is real**: a gateway with an unreachable database refuses to start with
+   the actionable startup message — the earlier "half-booted server" scare was finding #1 wearing
+   a costume.
+
+**Coverage:** first-run claim (unclaimed → Phase-6 sign-in intact → wrong/weak refusals → claim →
+recovery key → master password dead → double-claim 409) · invites (flat 404s, spent tokens,
+injected email/role ignored) · roles at the wire (admin writes, owner-only 403s with the sentence) ·
+per-user TOTP with computed codes · suspension killing a live session on the next request ·
+last-owner/self-change refusals · removal revoking access while the trail keeps the name · source
+lockout (right password refused too) · the full proxy path (credential isolation proven upstream,
+team keys, revocation, budget 429 before upstream, RPM exhausted at exactly its budget → 503 +
+Retry-After, TPM likewise, rotation killing the old key) · and the browser story through real
+Chromium in two contexts (claim screen, recovery-key-once, the exact 2FA flow from the P7.13a-fix
+screenshot, invite link handover, suspension mid-session, removal + the trail surviving).
+
+*Deliberate scope cuts:* audit-pipeline latency is tolerated with a bounded reload loop, not raced
+(batched inserts are the design); streaming completions not yet exercised (the mock answers
+non-streamed); SSO needs a fake IdP — later, if it earns it.
 
 ### Backlog (unscheduled — pull in when they earn it)
 - **Team stats: Comparison mode** *(Abbas, 2026-07-16)* — a "Compare" button in Team stats to select

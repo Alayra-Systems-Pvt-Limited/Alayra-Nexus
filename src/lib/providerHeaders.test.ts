@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseExtraHeaders, withExtraHeaders } from './providerHeaders';
+import { parseExtraHeaders, withExtraHeaders, authHeaderValue, providerAuthHeader } from './providerHeaders';
 
 describe('parseExtraHeaders', () => {
   it('parses a JSON object of string headers', () => {
@@ -43,5 +43,40 @@ describe('withExtraHeaders', () => {
 
   it('returns just the system headers when there are no extras', () => {
     expect(withExtraHeaders(null, { Authorization: 'Bearer real' })).toEqual({ Authorization: 'Bearer real' });
+  });
+});
+
+describe('authHeaderValue', () => {
+  it('joins prefix and key with exactly one space', () => {
+    expect(authHeaderValue('Bearer', 'sk-1')).toBe('Bearer sk-1');
+  });
+
+  it('absorbs an operator-typed trailing space instead of sending a double space upstream', () => {
+    // `Bearer ` is the natural way to type a "prefix"; six call sites used to turn it into
+    // `Bearer  sk-1`, which providers refuse — and the header is never displayed anywhere,
+    // so the pool just failed auth with nothing to debug.
+    expect(authHeaderValue('Bearer ', 'sk-1')).toBe('Bearer sk-1');
+    expect(authHeaderValue('  Bearer  ', 'sk-1')).toBe('Bearer sk-1');
+  });
+
+  it('a deliberately blank prefix means the key stands alone, with no stray space', () => {
+    expect(authHeaderValue('', 'sk-1')).toBe('sk-1');
+    expect(authHeaderValue('   ', 'sk-1')).toBe('sk-1');
+  });
+
+  it('defaults to Bearer when no prefix is stored', () => {
+    expect(authHeaderValue(null, 'sk-1')).toBe('Bearer sk-1');
+    expect(authHeaderValue(undefined, 'sk-1')).toBe('Bearer sk-1');
+  });
+});
+
+describe('providerAuthHeader', () => {
+  it('trims the header name — a padded name is an invalid HTTP token that kills the request', () => {
+    expect(providerAuthHeader(' x-api-key ', '', 'sk-1')).toEqual({ 'x-api-key': 'sk-1' });
+  });
+
+  it('falls back to Authorization when the name is missing or blank', () => {
+    expect(providerAuthHeader(null, 'Bearer', 'sk-1')).toEqual({ Authorization: 'Bearer sk-1' });
+    expect(providerAuthHeader('  ', 'Bearer', 'sk-1')).toEqual({ Authorization: 'Bearer sk-1' });
   });
 });

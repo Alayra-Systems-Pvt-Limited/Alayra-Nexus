@@ -51,9 +51,14 @@ export function Logs() {
       </div>
     ) },
     { key: 'actorRole', label: 'Actor', render: (e) => (
+      // The name leads, the role qualifies it. Accounts landed in 7.13a and the trail has named
+      // people since — but this column kept showing only the role, so "the log records names"
+      // was true in the database and invisible on screen. No name means there is genuinely
+      // nobody: a token-minted session, or an entry from before accounts existed.
       <div class={s.logActor}>
+        {e.actorName && <span class={s.logName}>{e.actorName}</span>}
         <Badge tone={e.actorRole === 'owner' ? 'blue' : 'gray'}>{e.actorRole}</Badge>
-        {e.actor && <span class={s.logVia}>via {e.actor}</span>}
+        {e.actor && !e.actorName && <span class={s.logVia}>via {e.actor}</span>}
       </div>
     ) },
     { key: 'target', label: 'Target', render: (e) => <span class={s.logTarget}>{e.target ?? '—'}</span> },
