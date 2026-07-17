@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'preact/hooks';
-import { UserCheck, Copy, Check } from 'lucide-preact';
+import { UserCheck } from 'lucide-preact';
 import { login, type AdminRole, type RoleCatalogue } from '../../api';
 import { useBranding } from '../../hooks/useBranding';
-import { Button, Field, Input, FormError } from '../../ui';
+import { Button, Field, Input, FormError, CopyButton } from '../../ui';
 import s from '../login.module.css';
 
 // Accepting an invite (Phase 7.13a). Reached at /invite?token=… — before the invitee has an account,
@@ -28,7 +28,6 @@ export function AcceptInvite({ onAuthed }: { onAuthed: () => void }) {
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -104,17 +103,7 @@ export function AcceptInvite({ onAuthed }: { onAuthed: () => void }) {
           >
             <div class={s.keyRow}>
               <code class={s.key}>{recoveryKey}</code>
-              <Button
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(recoveryKey).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  });
-                }}
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
-              </Button>
+              <CopyButton value={recoveryKey} label="Copy" variant="secondary" />
             </div>
           </Field>
 

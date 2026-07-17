@@ -1,8 +1,8 @@
 import { useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { ShieldCheck, KeyRound, Copy, Check } from 'lucide-preact';
+import { ShieldCheck, KeyRound } from 'lucide-preact';
 import { claimGateway } from '../../api';
-import { Button, Field, Input, FormError } from '../../ui';
+import { Button, Field, Input, FormError, CopyButton } from '../../ui';
 import s from '../login.module.css';
 
 // First run (Phase 7.13a): the screen that turns a gateway with no accounts into one with an owner.
@@ -34,7 +34,6 @@ export function ClaimGateway({
   // the recovery key is ever visible, so the flow stops here on purpose rather than sliding past it.
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [carried, setCarried] = useState(false);
-  const [copied, setCopied]   = useState(false);
 
   const submit = async (e: Event) => {
     e.preventDefault();
@@ -63,17 +62,7 @@ export function ClaimGateway({
           >
             <div class={s.keyRow}>
               <code class={s.key}>{recoveryKey}</code>
-              <Button
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(recoveryKey).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  });
-                }}
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
-              </Button>
+              <CopyButton value={recoveryKey} label="Copy" variant="secondary" />
             </div>
           </Field>
 

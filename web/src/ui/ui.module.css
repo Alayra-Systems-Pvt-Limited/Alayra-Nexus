@@ -84,12 +84,8 @@
 .code pre { margin: 0; padding: 30px 16px 14px; overflow-x: auto; }
 .code code { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; color: var(--text); white-space: pre; }
 .codeLang { position: absolute; top: 9px; left: 14px; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--subtle); z-index: 1; }
-.codeCopy {
-  position: absolute; top: 7px; right: 7px; z-index: 2; display: inline-flex; align-items: center; justify-content: center;
-  padding: 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); cursor: pointer;
-  transition: color .15s var(--ease), border-color .15s var(--ease);
-}
-.codeCopy:hover { color: var(--text); border-color: var(--border-strong); }
+/* CodeBlock's copy lives in the corner: CopyButton supplies the chrome, this only places it. */
+.codeCopyPos { position: absolute; top: 7px; right: 7px; z-index: 2; }
 
 /* ── Modal ── */
 .modalOverlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .5); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: nxFade .15s var(--ease); }

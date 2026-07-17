@@ -1,8 +1,8 @@
 import { useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { LifeBuoy, Copy, Check } from 'lucide-preact';
+import { LifeBuoy, Check } from 'lucide-preact';
 import { recoverPassword } from '../../api';
-import { Button, Field, Input, FormError } from '../../ui';
+import { Button, Field, Input, FormError, CopyButton } from '../../ui';
 import s from '../login.module.css';
 
 // A forgotten password (Phase 7.13a).
@@ -23,7 +23,6 @@ export function RecoverPassword({ brand, onDone }: { brand: ComponentChildren; o
   const [busy, setBusy]               = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [replacement, setReplacement] = useState<string | null>(null);
-  const [copied, setCopied]           = useState(false);
 
   const submit = async (e: Event) => {
     e.preventDefault();
@@ -51,17 +50,7 @@ export function RecoverPassword({ brand, onDone }: { brand: ComponentChildren; o
           >
             <div class={s.keyRow}>
               <code class={s.key}>{replacement}</code>
-              <Button
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(replacement).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  });
-                }}
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
-              </Button>
+              <CopyButton value={replacement} label="Copy" variant="secondary" />
             </div>
           </Field>
 

@@ -1,12 +1,12 @@
 import { useState } from 'preact/hooks';
-import { UserPlus, Trash2, Copy, Check, KeyRound } from 'lucide-preact';
+import { UserPlus, Trash2, KeyRound } from 'lucide-preact';
 import {
   POST, PATCH, DEL, getIdentity,
   type AdminUsersResponse, type AdminUserRow, type AdminInvitesResponse, type AdminInviteRow,
   type AdminRole, type RoleCatalogue,
 } from '../../api';
 import { useApi } from '../../hooks/useApi';
-import { Card, Table, Badge, Button, Modal, Field, Input, Select, FormError, Spinner, type Column } from '../../ui';
+import { Card, Table, Badge, Button, Modal, Field, Input, Select, FormError, Spinner, CopyButton, type Column } from '../../ui';
 import s from './admin.module.css';
 import p from '../pages.module.css';
 
@@ -42,7 +42,6 @@ function InviteDialog({ roles, onClose, onDone }: {
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink]   = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const submit = async () => {
     if (busy) return;
@@ -66,16 +65,7 @@ function InviteDialog({ roles, onClose, onDone }: {
         <div class={s.once}>
           <div class={s.onceTitle}><KeyRound size={15} /> Send this link to {email}</div>
           <div class={s.linkBox}>{link}</div>
-          <Button
-            onClick={() => {
-              void navigator.clipboard?.writeText(link).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              });
-            }}
-          >
-            {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy link'}
-          </Button>
+          <CopyButton value={link} label="Copy link" variant="secondary" />
           <p class={s.onceNote}>
             This is the only time the link is shown — the gateway stores only a fingerprint of it.
             It works once, expires in 7 days, and lets them choose their own password. Send it to

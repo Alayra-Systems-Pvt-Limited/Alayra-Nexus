@@ -9,6 +9,15 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Changed
+- **Every copy button now confirms itself (Phase 7.15a).** One shared `CopyButton` replaces nine
+  hand-rolled copy controls across the dashboard — recovery keys and codes, invite links, API
+  tokens, quick-start snippets, and team access keys. Each now flips to an animated "Copied" tick
+  and reverts, including the reveal-then-copy on a team key, which previously wrote the key to the
+  clipboard with **no feedback at all** — a click that looked like nothing happened. The Teams
+  access-keys table also gains breathing room so its column header no longer merges into the filter
+  row above it.
+
 ### Added
 - **Public URL truth (Phase 7.14).** The gateway can now be told its public address instead of
   having to guess it. A new `PUBLIC_URL` environment variable pins the origin every printed URL

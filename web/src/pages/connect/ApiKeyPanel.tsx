@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
-import { RotateCw, Copy, Check, ShieldAlert } from 'lucide-preact';
+import { RotateCw, ShieldAlert } from 'lucide-preact';
 import { POST } from '../../api';
-import { Button, Modal, FormError } from '../../ui';
+import { Button, Modal, FormError, CopyButton } from '../../ui';
 import { isOwner as ownerRole } from '../../lib/access';
 import s from '../pages.module.css';
 
@@ -27,7 +27,6 @@ export function ApiKeyPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fresh, setFresh] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const rotate = async () => {
     if (busy) return;
@@ -100,16 +99,7 @@ export function ApiKeyPanel({
           <div class={s.onceBox}>
             <div class={s.onceHead}><ShieldAlert size={15} /> This is the only time it is shown</div>
             <div class={s.onceKey}>{fresh}</div>
-            <Button
-              onClick={() => {
-                void navigator.clipboard?.writeText(fresh).then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                });
-              }}
-            >
-              {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy key'}
-            </Button>
+            <CopyButton value={fresh} label="Copy key" variant="secondary" />
           </div>
           <p class={s.setDesc}>
             The previous key no longer works. Update your clients now.

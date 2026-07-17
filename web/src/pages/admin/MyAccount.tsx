@@ -1,8 +1,8 @@
 import { useState } from 'preact/hooks';
-import { Copy, Check, ShieldAlert } from 'lucide-preact';
+import { ShieldAlert } from 'lucide-preact';
 import { POST, type MeResponse } from '../../api';
 import { useApi } from '../../hooks/useApi';
-import { Card, Button, Badge, Field, Input, FormError, Spinner } from '../../ui';
+import { Card, Button, Badge, Field, Input, FormError, Spinner, CopyButton } from '../../ui';
 import { Sessions } from './Sessions';
 import s from './admin.module.css';
 import p from '../pages.module.css';
@@ -25,7 +25,6 @@ export function MyAccount() {
 
   const [newKey, setNewKey] = useState<string | null>(null);
   const [keyBusy, setKeyBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   if (me.loading) return <Spinner />;
   if (me.error || !me.data) return <Card><FormError>{me.error ?? 'Could not load your account.'}</FormError></Card>;
@@ -173,16 +172,7 @@ export function MyAccount() {
                 <div class={s.once}>
                   <div class={s.onceTitle}><ShieldAlert size={15} /> Save this now — it is shown once</div>
                   <div class={s.linkBox}>{newKey}</div>
-                  <Button
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(newKey).then(() => {
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                      });
-                    }}
-                  >
-                    {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
-                  </Button>
+                  <CopyButton value={newKey} label="Copy" variant="secondary" />
                   <p class={s.onceNote}>
                     The gateway keeps only a fingerprint of this key, so it cannot show it to you
                     again — and a stolen database cannot yield a usable one either.

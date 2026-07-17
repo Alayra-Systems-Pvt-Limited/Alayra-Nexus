@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
-import { KeyRound, Copy, Shuffle, Trash2 } from 'lucide-preact';
+import { KeyRound, Shuffle, Trash2 } from 'lucide-preact';
 import { GET, POST, PATCH, DEL, ApiError, type TeamKeyRow, type TeamRow } from '../../api';
-import { Card, Button, Badge, Spinner, Table, Field, Input, Select, CopyField, FormError, Modal, type Column } from '../../ui';
+import { Card, Button, Badge, Spinner, Table, Field, Input, Select, CopyField, CopyButton, FormError, Modal, type Column } from '../../ui';
 import { useApi } from '../../hooks/useApi';
 import { relativeTime } from '../../lib/format';
 import { canWrite } from '../../lib/access';
@@ -54,12 +54,12 @@ export function TeamKeys() {
     finally { setCreating(false); }
   };
 
-  const copyKey = async (row: TeamKeyRow) => {
+  // Resolve the LIVE key at click time — CopyButton handles the clipboard write and its animated
+  // confirmation, so a reveal-then-copy no longer looks like nothing happened.
+  const revealKey = async (row: TeamKeyRow): Promise<string> => {
     setFormErr(null);
-    try {
-      const { key } = await GET<{ key: string }>(`/admin/team-keys/${row.id}/reveal`);
-      await navigator.clipboard.writeText(key);
-    } catch (e) { setFormErr(friendlyError(e, 'Could not reveal the key to copy.')); }
+    const { key } = await GET<{ key: string }>(`/admin/team-keys/${row.id}/reveal`);
+    return key;
   };
 
   const doReassign = async () => {
@@ -88,7 +88,8 @@ export function TeamKeys() {
     { key: 'actions', label: '', align: 'right', render: (k) => (canWrite()
       ? (
         <span class={s.rowActions}>
-          <Button size="sm" variant="ghost" onClick={() => copyKey(k)} aria-label={`Copy ${k.name}`}><Copy size={13} /></Button>
+          <CopyButton iconOnly ariaLabel={`Copy ${k.name}`} getValue={() => revealKey(k)}
+            onError={(e) => setFormErr(friendlyError(e, 'Could not reveal the key to copy.'))} />
           <Button size="sm" variant="ghost" onClick={() => { setFormErr(null); setReTo(k.team?.id ?? ''); setReassign(k); }} aria-label={`Reassign ${k.name}`}><Shuffle size={13} /></Button>
           <Button size="sm" variant="ghost" onClick={() => { setFormErr(null); setRevoking(k); }} aria-label={`Revoke ${k.name}`}><Trash2 size={13} /></Button>
         </span>

@@ -10,7 +10,9 @@
 .rowActions { display: inline-flex; gap: 6px; }
 
 /* The "create an access key" row: a growable name field, a fixed-width team picker, then the button. */
-.keyCreateRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* margin-bottom: the create form and the filter row both sit directly above a table; without it
+   the NAME/KEY/TEAM/CREATED header crowds the row above and the two read as one strip (#9a). */
+.keyCreateRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .keyCreateRow input { flex: 1 1 200px; min-width: 0; }
 .keyCreateRow select { flex: 0 0 180px; }
 .keyCreateRow button { flex: 0 0 auto; }

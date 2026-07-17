@@ -556,7 +556,10 @@ non-streamed); SSO needs a fake IdP — later, if it earns it.
    `/models` response CARRIES per-model pricing (and context length). Harvest it during the fetch
    and pre-fill each selected model's prices/context automatically; the catalog stays the fallback
    for providers whose /models is bare (OpenAI/Anthropic). This is what makes cost tracking real
-   without hand-typing 339 prices.
+   without hand-typing 339 prices. **Selected-models display (Abbas, 2026-07-18): selections
+   append into a collapsed summary strip — when more than ~2 are picked it shows up to 4 in the
+   box and turns scrollable above that, expanding on click — so a big selection never sprawls
+   the dialog.**
 9. **Teams → Access keys table.** (a) The NAME/KEY/TEAM/CREATED header row visually merges with the
    card header above — needs spacing/divider. (b) Copy button gives no feedback — every copy button
    in the product should animate + show "Copied". (c) **A "connection card" per key**: one click
