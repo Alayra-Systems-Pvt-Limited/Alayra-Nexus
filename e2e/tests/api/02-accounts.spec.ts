@@ -169,10 +169,16 @@ test('removal ends access, and the audit trail still names the person', async ()
 
   // The record outlives the account — that is what makes it a record. The name is copied,
   // not joined, so deleting the row cannot orphan the history.
-  const audit = await gw.get<{ entries: { actorName: string | null; action: string }[] }>(
-    '/admin/audit?limit=100', ownerToken,
-  );
-  expect(audit.status).toBe(200);
-  const theirs = audit.body.entries.filter((l) => l.actorName === INVITEE.name);
-  expect(theirs.length).toBeGreaterThan(0);
+  //
+  // Audit writes are pipelined (batched inserts, drained on shutdown), so on a fast runner
+  // this read can beat the flush — CI caught exactly that while every slower local run had
+  // passed. Poll bounded instead of racing the pipeline, as the browser suite already does.
+  await expect(async () => {
+    const audit = await gw.get<{ entries: { actorName: string | null; action: string }[] }>(
+      '/admin/audit?limit=100', ownerToken,
+    );
+    expect(audit.status).toBe(200);
+    const theirs = audit.body.entries.filter((l) => l.actorName === INVITEE.name);
+    expect(theirs.length).toBeGreaterThan(0);
+  }).toPass({ timeout: 15_000 });
 });
