@@ -29,8 +29,9 @@ export function KeyRow({ k, onChanged }: { k: NexusKeyHealth; onChanged: () => v
     setProbe(null);
     try {
       if (action === 'test') {
-        const r = await POST<{ ok: boolean; latencyMs?: number; status?: number; error?: string }>(`/admin/keys/${k.id}/test`);
-        setProbe(r.ok ? `Reachable${r.latencyMs != null ? ` · ${r.latencyMs}ms` : ''}` : `Failed${r.status ? ` · ${r.status}` : ''}`);
+        const r = await POST<{ ok: boolean; latencyMs?: number; error?: string }>(`/admin/keys/${k.id}/test`);
+        // Show the reason, not a bare "Failed" — "HTTP 401" and "timed out" call for different fixes.
+        setProbe(r.ok ? `Reachable${r.latencyMs != null ? ` · ${r.latencyMs}ms` : ''}` : `Failed${r.error ? ` · ${r.error}` : ''}`);
       } else if (action === 'delete') {
         await DEL(`/admin/keys/${k.id}`);
         onChanged();

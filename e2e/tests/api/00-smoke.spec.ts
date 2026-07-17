@@ -31,3 +31,12 @@ test('an unauthenticated admin request is refused', async () => {
   const res = await gw.get('/admin/status');
   expect(res.status).toBe(401);
 });
+
+test('a doubled /v1/v1 path reaches the same route as /v1', async () => {
+  // The footgun this covers: a tool that appends `/v1/models` to a pasted base that already ends
+  // in `/v1`. The rewrite must land on the real route — a 401 (key required), never a 404 — and
+  // must not fire twice: /v1/v1/v1/... stays the honest 404 it deserves.
+  expect((await gw.get('/v1/v1/models')).status).toBe(401);
+  expect((await gw.get('/v1/models')).status).toBe(401);
+  expect((await gw.get('/v1/v1/v1/models')).status).toBe(404);
+});

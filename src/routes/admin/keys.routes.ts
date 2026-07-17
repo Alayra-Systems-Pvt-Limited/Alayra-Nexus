@@ -140,7 +140,10 @@ export default async function adminKeysRoutes(fastify: FastifyInstance) {
   fastify.post('/admin/keys/:id/test', adminWriteGuard, async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await testKey(id);
-    return reply.send(result);
+    // `ok` is the wire contract the dashboard reads. The service's field is `success`; sending it
+    // through unmapped once made EVERY test — pass or fail — render as "Failed" (r.ok was
+    // undefined), while the audit trail showed the 200 that told the truth.
+    return reply.send({ ok: result.success, latencyMs: result.latencyMs, error: result.error });
   });
 
   fastify.post('/admin/keys/:id/cool', adminWriteGuard, async (request, reply) => {

@@ -526,6 +526,40 @@ non-streamed); SSO needs a fake IdP — later, if it earns it.
    model right after a pool is created. This is a known-correct design (pool = credentials; model =
    capabilities/tier/pricing) that simply isn't obvious in the UI.
 
+> Captured 2026-07-17 from Abbas's click-through of the LIVE Railway deployment (screenshots in
+> C:\Users\KineticLLC\Desktop\issues). Same rule: polish batch, do NOT action mid-phase. The two
+> functional items from that session (key-test showing "Failed" on success; /v1/v1 tolerance) were
+> fixed immediately and are NOT in this list.
+
+4. **First-run claim screen — make it world-class.** (a) An **account type selector** (Personal /
+   Organization): Personal → First name + Last name fields; Organization → Company name field.
+   (Server: still one `name` string — compose "First Last" or company name client-side; no schema
+   change.) (b) **Eye toggles** on every password input (admin password + new password) so what was
+   typed can be verified. (c) A **Confirm password** field that must match before submit enables.
+   (d) A larger, more premium card — this screen is the product's first impression.
+5. **Recovery key display (claim success screen).** The hyphenated key wraps to two lines and looks
+   squeezed — render on ONE line (smaller font / wider box / `white-space: nowrap`). **Copy button
+   must animate** (flash/checkmark on the key itself). Add a **Download** button: a `.txt` containing
+   the heading `Alayra Nexus API key:` and the key below it.
+6. **2FA enrolment must show a real QR code.** Today only the base32 setup key + otpauth URI are
+   shown with copy buttons — the text says "scan" but there is nothing to scan; typing a 32-char
+   secret into a phone is hostile. Render the otpauth URI as a QR (needs a tiny QR lib in web/ or a
+   hand-rolled encoder — backend stays zero-dep, this is browser-side only).
+7. **TOTP recovery codes — download button.** Alongside "Copy all": download a file titled
+   `Alayra Nexus TOTP Recovery code` (heading) + the ten codes, filename `nexus-recovery.txt`.
+8. **Model picker in Add/Edit key — opt-IN, not opt-out.** Fetching OpenRouter returns 339 models
+   rendered as delete-me chips; the user must close 338 to keep one. Replace with a searchable
+   list (search icon + filter box) where each row has a select control that animates to a clear
+   tick; **only ticked models are added**. Bulk actions (select all / none) for small providers.
+9. **Teams → Access keys table.** (a) The NAME/KEY/TEAM/CREATED header row visually merges with the
+   card header above — needs spacing/divider. (b) Copy button gives no feedback — every copy button
+   in the product should animate + show "Copied". (c) **A "connection card" per key**: one click
+   opens a card with the (revealable) full key + copy, the gateway base URL + copy, and the models
+   URL — so an admin doesn't visit three tabs (Connect for URL, Teams for key) to onboard one user.
+10. **Copy feedback everywhere.** Audit every Copy control (recovery key, setup key, otpauth, invite
+    link, team keys, Connect URLs): all must give animated "Copied" confirmation. One shared
+    component (`CopyButton`) — several ad-hoc implementations exist.
+
 ---
 
 ## 4. Standing decisions (do not re-litigate)

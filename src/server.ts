@@ -75,7 +75,19 @@ async function bootstrap() {
     console.log('    Add it to Cursor as: Authorization: Bearer <key>\n');
   }
 
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
+  const app = Fastify({
+    logger: { level: process.env.LOG_LEVEL ?? 'info' },
+    // Tool-mercy rewrite — must live HERE, not in an onRequest hook: Fastify routes the request
+    // BEFORE any hook runs, so a hook rewrites too late and the 404 is already chosen. Many
+    // clients take a "base URL" and append `/v1/...` themselves; an operator who pastes the
+    // Connect page's `https://gateway/v1` into such a tool produces `/v1/v1/models`, a request
+    // that is unambiguous about what it wants and used to get a 404 that looked like an outage.
+    // Collapse the doubled prefix exactly once; a tripled one stays the honest 404 it deserves.
+    rewriteUrl(req) {
+      const url = req.url ?? '/';
+      return url.startsWith('/v1/v1/') ? url.slice('/v1'.length) : url;
+    },
+  });
 
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors,   { origin: true });
