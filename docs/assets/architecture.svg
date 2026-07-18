@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 640" font-family="'Segoe UI',system-ui,sans-serif" role="img" aria-label="Alayra Nexus request architecture">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#0d1a1e"/>
+    </linearGradient>
+    <linearGradient id="gw" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#0891b2"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22c55e" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#22c55e" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <style>
+      .lbl{fill:#e2e8f0;font-size:13px;font-weight:600}
+      .sub{fill:#94a3b8;font-size:10.5px}
+      .tier{fill:#cbd5e1;font-size:11px;font-weight:600}
+      .card{fill:#111a2e;stroke:#1e293b;stroke-width:1}
+      .prov{fill:#0f1b24;stroke:#164e4a;stroke-width:1}
+      .out{fill:#0f1526;stroke:#312e81;stroke-width:1}
+      .wire{stroke:#334155;stroke-width:1.5;fill:none}
+      .pulse{stroke:url(#flow);stroke-width:2.5;fill:none;stroke-dasharray:34 170;animation:dash 2.4s linear infinite}
+      @keyframes dash{to{stroke-dashoffset:-204}}
+      .beat{animation:beat 2.4s ease-in-out infinite}
+      @keyframes beat{0%,100%{opacity:.55}50%{opacity:1}}
+      .live{fill:#22c55e;animation:live 1.8s ease-in-out infinite}
+      @keyframes live{0%,100%{opacity:.3}50%{opacity:1}}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="900" height="640" rx="16" fill="url(#bg)"/>
+  <circle class="live" cx="26" cy="28" r="5"/>
+  <text x="40" y="32" class="lbl" font-size="14">Alayra Nexus — request path</text>
+  <text x="760" y="32" class="sub">one endpoint · every model</text>
+
+  <!-- request spine: animated pulse travels top→bottom -->
+  <path class="wire" d="M450 78 V150 M450 300 V344 M450 470 V512"/>
+  <path class="pulse" d="M450 78 V150 M450 300 V344 M450 470 V512"/>
+
+  <!-- Client -->
+  <rect class="card" x="330" y="46" width="240" height="34" rx="8"/>
+  <text x="450" y="68" text-anchor="middle" class="lbl">Your App · IDE · Agent · Script</text>
+
+  <text x="462" y="120" class="sub">POST /v1/chat/completions</text>
+  <text x="462" y="135" class="sub" fill="#64748b">Authorization: Bearer &lt;team-key&gt;</text>
+
+  <!-- Gateway container -->
+  <rect x="150" y="150" width="600" height="150" rx="14" fill="#0c1526" stroke="url(#gw)" stroke-width="1.5"/>
+  <text x="174" y="176" class="lbl" fill="#a78bfa">Alayra Nexus Gateway</text>
+
+  <rect class="card" x="174" y="190" width="180" height="46" rx="8"/>
+  <text x="264" y="210" text-anchor="middle" class="tier">Team Auth</text>
+  <text x="264" y="226" text-anchor="middle" class="sub">SHA-256 · budgets</text>
+
+  <rect class="card" x="546" y="190" width="180" height="46" rx="8"/>
+  <text x="636" y="210" text-anchor="middle" class="tier">Rate Limiter</text>
+  <text x="636" y="226" text-anchor="middle" class="sub">RPM / TPM · Redis</text>
+
+  <rect class="card" x="368" y="190" width="164" height="92" rx="10" stroke="#3730a3"/>
+  <text x="450" y="210" text-anchor="middle" class="tier" fill="#c4b5fd">Router</text>
+  <rect x="384" y="220" width="132" height="17" rx="4" fill="#1e1b4b"/><text x="450" y="232" text-anchor="middle" class="sub" fill="#a5b4fc">Premium</text>
+  <rect x="384" y="240" width="132" height="17" rx="4" fill="#164e63"/><text x="450" y="252" text-anchor="middle" class="sub" fill="#67e8f9">Standard</text>
+  <rect x="384" y="260" width="132" height="17" rx="4" fill="#14532d"/><text x="450" y="272" text-anchor="middle" class="sub" fill="#86efac">Fast · failover</text>
+
+  <!-- fan-out to providers -->
+  <path class="wire" d="M450 344 H130 V376 M450 344 H290 V376 M450 344 V376 M450 344 H610 V376 M450 344 H770 V376"/>
+  <g class="beat">
+    <rect class="prov" x="60"  y="376" width="140" height="42" rx="8"/><text x="130" y="398" text-anchor="middle" class="tier">Anthropic</text><text x="130" y="412" text-anchor="middle" class="sub">Claude</text>
+    <rect class="prov" x="220" y="376" width="140" height="42" rx="8"/><text x="290" y="398" text-anchor="middle" class="tier">OpenAI</text><text x="290" y="412" text-anchor="middle" class="sub">GPT</text>
+    <rect class="prov" x="380" y="376" width="140" height="42" rx="8"/><text x="450" y="398" text-anchor="middle" class="tier">Google</text><text x="450" y="412" text-anchor="middle" class="sub">Gemini</text>
+    <rect class="prov" x="540" y="376" width="140" height="42" rx="8"/><text x="610" y="398" text-anchor="middle" class="tier">Groq</text><text x="610" y="412" text-anchor="middle" class="sub">LPU</text>
+    <rect class="prov" x="700" y="376" width="140" height="42" rx="8"/><text x="770" y="398" text-anchor="middle" class="tier">OpenRouter</text><text x="770" y="412" text-anchor="middle" class="sub">+ any OpenAI-compatible</text>
+  </g>
+
+  <!-- converge to telemetry -->
+  <path class="wire" d="M130 418 V444 H450 M770 418 V444 H450 M450 418 V512"/>
+  <rect class="out" x="230" y="512" width="180" height="44" rx="8"/><text x="320" y="533" text-anchor="middle" class="tier">PostgreSQL</text><text x="320" y="548" text-anchor="middle" class="sub">usage · cost (batched)</text>
+  <rect class="out" x="440" y="512" width="120" height="44" rx="8"/><text x="500" y="533" text-anchor="middle" class="tier">Redis</text><text x="500" y="548" text-anchor="middle" class="sub">live metrics</text>
+  <rect class="out" x="590" y="512" width="180" height="44" rx="8"/><text x="680" y="533" text-anchor="middle" class="tier">Dashboard</text><text x="680" y="548" text-anchor="middle" class="sub">analytics · audit</text>
+
+  <text x="450" y="600" text-anchor="middle" class="sub">tiered failover · circuit breaker · cache-aware sticky routing · per-team budgets · SSRF-guarded</text>
+</svg>

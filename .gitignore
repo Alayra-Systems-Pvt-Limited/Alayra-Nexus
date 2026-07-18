@@ -54,6 +54,7 @@ prisma/*.db-journal
 # so a negation for a child would never be evaluated.
 docs/*
 !docs/architecture/
+!docs/assets/
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 .claude/

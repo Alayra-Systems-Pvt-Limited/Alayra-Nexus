@@ -103,6 +103,20 @@ Alayra Nexus is the infrastructure layer that sits between your application and 
 
 ## Architecture
 
+<div align="center">
+
+<img src="./docs/assets/architecture.svg" alt="Alayra Nexus request path — client to gateway (team auth, rate limiter, tiered router) to providers to telemetry" width="100%"/>
+
+</div>
+
+One request enters authenticated and budget-checked, the router picks a healthy key by
+tier and cache affinity, the circuit breaker keeps a failing provider out of rotation, and
+usage is batched to PostgreSQL while live metrics land in Redis — all behind a single
+OpenAI-compatible URL.
+
+<details>
+<summary>Same diagram as plain text</summary>
+
 ```
   Your Application / IDE / Agent / Script
            │
@@ -134,6 +148,8 @@ Alayra Nexus is the infrastructure layer that sits between your application and 
     Real-time metrics  → Redis
     Analytics          → Admin Dashboard
 ```
+
+</details>
 
 ---
 
@@ -635,6 +651,15 @@ closes that door. See [Accounts and roles](#accounts-and-roles).
 
 The built-in web dashboard (served at `/`, a Vite + Preact app) gives you full operational
 control — no CLI required for day-to-day work:
+
+<div align="center">
+
+<img src="./docs/assets/health.png" alt="Alayra Nexus Health dashboard — gateway process, Redis and PostgreSQL vitals, and readiness checks" width="100%"/>
+
+<sub><i>The <b>Health</b> tab — the gateway's own vitals: process, Redis, and PostgreSQL latency, cache-hit rates, and the readiness checks your load balancer sees.</i></sub>
+
+</div>
+
 
 - **Overview** — live gateway telemetry: request/token/cost trends, active keys and models, top teams, and recent admin activity by name
 - **Nexus** — provider pools and the model registry: per-key RPM utilization meters, add/test/ban keys, and each model's tier, capability flags, context window, and per-1M token pricing
