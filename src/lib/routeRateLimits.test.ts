@@ -38,9 +38,17 @@ describe('route rate-limit tiers', () => {
 
   // The proof that matters: a per-route cap actually returns 429 once exceeded. Global is off, so
   // only the route's own `config.rateLimit` is in force — the same mechanism the admin routes use.
+  //
+  // keyGenerator is pinned to a constant on purpose. The plugin's in-memory counter is fully
+  // deterministic for a fixed bucket key (1→2→3→4, and the 4th trips max:3), and the ONLY variable
+  // input is the key, which defaults to `req.ip`. Under `app.inject` the resolved IP can vary — and
+  // one request landing in a different bucket makes the 4th a 200 instead of the expected 429. That
+  // was this file's long-standing rare flake under full-suite load. Fixing the key to one value
+  // removes the only nondeterminism while proving exactly the same thing: the 4th in-window request
+  // to this route is throttled.
   it('returns 429 once a route’s per-route cap is exceeded', async () => {
     const app = Fastify();
-    await app.register(rateLimit, { global: false }); // in-memory store, per-route only
+    await app.register(rateLimit, { global: false, keyGenerator: () => 'probe-bucket' });
     app.get('/probe', rateLimited({ max: 3, timeWindow: '1 minute' }), async () => ({ ok: true }));
 
     const hit = () => app.inject({ method: 'GET', url: '/probe' });
