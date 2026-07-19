@@ -38,15 +38,24 @@ test.afterAll(async () => {
 
 test('a fresh gateway greets its installer with the setup screen, not a sign-in', async () => {
   await page.goto('/');
-  // The claim screen asks for the one thing only the installer has.
-  await expect(page.getByPlaceholder('From your .env')).toBeVisible();
+  // The claim screen asks for the one thing only the installer has (step 1 of the wizard).
+  await expect(page.getByPlaceholder('ADMIN_PASSWORD')).toBeVisible();
 });
 
 test('claiming creates the owner and shows the recovery key exactly once', async () => {
-  await page.getByPlaceholder('From your .env').fill(ADMIN_PASSWORD);
+  // Step 1 — prove ownership.
+  await page.getByPlaceholder('ADMIN_PASSWORD').fill(ADMIN_PASSWORD);
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 2 — the account, including confirm-password.
   await page.getByPlaceholder('Ada Lovelace').fill(OWNER.name);
   await page.getByPlaceholder('you@company.com').fill(OWNER.email);
   await page.getByPlaceholder('Your new password').fill(OWNER.password);
+  await page.getByPlaceholder('Type it again').fill(OWNER.password);
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 3 — workspace name is optional; leave it blank and finish.
+  await expect(page.getByText('Name your workspace')).toBeVisible();
   await page.getByRole('button', { name: 'Create owner account' }).click();
 
   await expect(page.getByText('Your owner account is ready.')).toBeVisible();
@@ -111,7 +120,8 @@ test('the owner invites a colleague and is handed the link exactly once', async 
 test('the colleague accepts in their own browser and lands signed in', async () => {
   await colleaguePage.goto(inviteLink);
   await colleaguePage.getByPlaceholder('Ada Lovelace').fill(INVITEE.name);
-  await colleaguePage.getByLabel(/Choose a password/i).fill(INVITEE.password);
+  await colleaguePage.getByPlaceholder('Your new password').fill(INVITEE.password);
+  await colleaguePage.getByPlaceholder('Type it again').fill(INVITEE.password);
   await colleaguePage.getByRole('button', { name: 'Create account' }).click();
 
   // Their own recovery key, their own once.

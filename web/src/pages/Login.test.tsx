@@ -117,8 +117,8 @@ describe('Login', () => {
     render(<Login onAuthed={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByText('Set up your gateway')).toBeInTheDocument());
-    // It asks for the environment secret — proof you installed this, not merely that you found it.
-    expect(screen.getByPlaceholderText(/from your .env/i)).toBeInTheDocument();
+    // Step 1 asks for the environment secret — proof you installed this, not merely that you found it.
+    expect(screen.getByPlaceholderText('ADMIN_PASSWORD')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^sign in$/i })).not.toBeInTheDocument();
   });
 

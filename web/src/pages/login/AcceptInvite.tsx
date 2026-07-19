@@ -2,7 +2,7 @@ import { useState, useEffect } from 'preact/hooks';
 import { UserCheck, Download } from 'lucide-preact';
 import { login, type AdminRole, type RoleCatalogue } from '../../api';
 import { useBranding } from '../../hooks/useBranding';
-import { Button, Field, Input, FormError, CopyButton } from '../../ui';
+import { Button, Field, Input, PasswordInput, PasswordStrength, FormError, CopyButton } from '../../ui';
 import { download } from '../../lib/download';
 import { recoveryKeyFile } from './recoveryFile';
 import s from '../login.module.css';
@@ -27,6 +27,8 @@ export function AcceptInvite({ onAuthed }: { onAuthed: () => void }) {
   const [checking, setChecking] = useState(true);
   const [name, setName]         = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm]   = useState('');
+  const [confirmTouched, setConfirmTouched] = useState(false);
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
@@ -154,16 +156,27 @@ export function AcceptInvite({ onAuthed }: { onAuthed: () => void }) {
         </Field>
 
         <Field label="Choose a password" hint="At least 12 characters. Nobody else ever sees it — not even the person who invited you.">
-          <Input
-            type="password"
+          <PasswordInput
             value={password}
             autoComplete="new-password"
             placeholder="Your new password"
             onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
           />
         </Field>
+        <PasswordStrength value={password} />
 
-        <Button variant="primary" type="submit" disabled={busy || !name || !password}>
+        <Field label="Confirm password">
+          <PasswordInput
+            value={confirm}
+            autoComplete="new-password"
+            placeholder="Type it again"
+            onInput={(e) => setConfirm((e.target as HTMLInputElement).value)}
+            onBlur={() => setConfirmTouched(true)}
+          />
+        </Field>
+        {confirm.length > 0 && confirm !== password && confirmTouched && <p class={s.confirmErr}>Passwords don’t match.</p>}
+
+        <Button variant="primary" type="submit" disabled={busy || !name || password.length < 12 || confirm !== password}>
           {busy ? 'Creating your account…' : 'Create account'}
         </Button>
       </form>

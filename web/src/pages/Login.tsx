@@ -2,7 +2,7 @@ import { useState, useEffect } from 'preact/hooks';
 import { LogIn } from 'lucide-preact';
 import { login, fetchClaimStatus } from '../api';
 import { useBranding } from '../hooks/useBranding';
-import { Button, Field, Input, FormError } from '../ui';
+import { Button, Field, Input, PasswordInput, FormError } from '../ui';
 import { ClaimGateway } from './login/ClaimGateway';
 import { RecoverPassword } from './login/RecoverPassword';
 import s from './login.module.css';
@@ -113,8 +113,7 @@ export function Login({ onAuthed }: { onAuthed: () => void }) {
         </Field>
 
         <Field label="Password">
-          <Input
-            type="password"
+          <PasswordInput
             value={password}
             autoComplete="current-password"
             placeholder="Your password"

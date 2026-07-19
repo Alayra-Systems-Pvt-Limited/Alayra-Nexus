@@ -76,6 +76,29 @@
   overflow-x: auto;
 }
 
+/* ── Claim wizard (Phase 7.16b) — a stepped, org-aware first run ──────────── */
+
+/* Three dots that track progress; the current one grows and the done ones fill. */
+.stepper { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.stepDot { width: 7px; height: 7px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); transition: all .2s var(--ease); }
+.stepDotDone { background: var(--accent); border-color: var(--accent); }
+.stepDotActive { width: 22px; border-radius: 4px; background: var(--accent); border-color: var(--accent); }
+
+.stepHead { display: flex; flex-direction: column; gap: 4px; }
+.stepTitle { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 650; color: var(--text); }
+.stepTitle svg { color: var(--accent); flex-shrink: 0; }
+
+/* Each step slides in from the right as you advance — keyed by step so it re-fires on change. */
+.step { display: flex; flex-direction: column; gap: 15px; animation: nxStepSlide .26s var(--ease); }
+@keyframes nxStepSlide { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: translateX(0); } }
+
+.stepActions { display: flex; gap: 8px; }
+.stepActions > * { flex: 1; }
+
+.confirmErr { font-size: 11.5px; color: var(--red); margin: -6px 0 0; }
+
+@media (prefers-reduced-motion: reduce) { .step { animation: none; } }
+
 /* A text button that sits inside a form without competing with the primary action. */
 .link {
   background: none;

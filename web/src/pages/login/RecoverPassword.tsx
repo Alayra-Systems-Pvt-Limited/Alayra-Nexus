@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { LifeBuoy, Check, Download } from 'lucide-preact';
 import { recoverPassword } from '../../api';
-import { Button, Field, Input, FormError, CopyButton } from '../../ui';
+import { Button, Field, Input, PasswordInput, PasswordStrength, FormError, CopyButton } from '../../ui';
 import { download } from '../../lib/download';
 import { recoveryKeyFile } from './recoveryFile';
 import s from '../login.module.css';
@@ -22,6 +22,8 @@ export function RecoverPassword({ brand, onDone }: { brand: ComponentChildren; o
   const [email, setEmail]             = useState('');
   const [recoveryKey, setRecoveryKey] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirm, setConfirm]         = useState('');
+  const [confirmTouched, setConfirmTouched] = useState(false);
   const [busy, setBusy]               = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [replacement, setReplacement] = useState<string | null>(null);
@@ -103,16 +105,27 @@ export function RecoverPassword({ brand, onDone }: { brand: ComponentChildren; o
         </Field>
 
         <Field label="Choose a new password" hint="At least 12 characters.">
-          <Input
-            type="password"
+          <PasswordInput
             value={newPassword}
             autoComplete="new-password"
             placeholder="Your new password"
             onInput={(e) => setNewPassword((e.target as HTMLInputElement).value)}
           />
         </Field>
+        <PasswordStrength value={newPassword} />
 
-        <Button variant="primary" type="submit" disabled={busy || !email || !recoveryKey || !newPassword}>
+        <Field label="Confirm new password">
+          <PasswordInput
+            value={confirm}
+            autoComplete="new-password"
+            placeholder="Type it again"
+            onInput={(e) => setConfirm((e.target as HTMLInputElement).value)}
+            onBlur={() => setConfirmTouched(true)}
+          />
+        </Field>
+        {confirm.length > 0 && confirm !== newPassword && confirmTouched && <p class={s.confirmErr}>Passwords don’t match.</p>}
+
+        <Button variant="primary" type="submit" disabled={busy || !email || !recoveryKey || newPassword.length < 12 || confirm !== newPassword}>
           {busy ? 'Resetting…' : 'Reset password'}
         </Button>
 

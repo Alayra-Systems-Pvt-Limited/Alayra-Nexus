@@ -1,22 +1,25 @@
 import { useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { ShieldCheck, KeyRound, Download } from 'lucide-preact';
-import { claimGateway } from '../../api';
-import { Button, Field, Input, FormError, CopyButton } from '../../ui';
+import { ShieldCheck, KeyRound, Download, ShieldQuestion, UserPlus, Building2, ArrowLeft } from 'lucide-preact';
+import { claimGateway, PUT } from '../../api';
+import { Button, Field, Input, PasswordInput, PasswordStrength, FormError, CopyButton } from '../../ui';
 import { download } from '../../lib/download';
 import { recoveryKeyFile } from './recoveryFile';
 import s from '../login.module.css';
 
-// First run (Phase 7.13a): the screen that turns a gateway with no accounts into one with an owner.
+// First run (Phase 7.13a; restyled as a stepped wizard in 7.16b): the screen that turns a gateway
+// with no accounts into one with an owner.
 //
 // It asks for the ADMIN_PASSWORD from the server's .env, and that is the whole security model here:
 // it lives in the deployer's environment and nowhere else, so it is proof that you are the person who
-// installed this gateway — not merely the first person to find the port. Without it, whoever reached
-// an unclaimed gateway first would own it.
+// installed this gateway — not merely the first person to find the port.
 //
-// An existing deployment sees this screen once, after upgrading, and nothing about it is a
-// disruption: the master password kept working right up to this moment, and their authenticator
-// carries over.
+// The wizard walks three steps — prove ownership, create the account, name the workspace — but the
+// claim itself is one call at the end. The workspace name (step 3, optional) is saved to branding
+// after the claim, using the session token the claim returns, so the dashboard is white-labelled
+// from first paint. Failing to save it never blocks onboarding.
+
+const MIN_PASSWORD = 12;
 
 export function ClaimGateway({
   brand, carriesExistingTwoFactor, onAuthed,
@@ -25,10 +28,14 @@ export function ClaimGateway({
   carriesExistingTwoFactor: boolean;
   onAuthed: () => void;
 }) {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [masterPassword, setMasterPassword] = useState('');
   const [name, setName]         = useState('');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm]   = useState('');
+  const [orgName, setOrgName]   = useState('');
+  const [confirmTouched, setConfirmTouched] = useState(false);
   const [busy, setBusy]         = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
@@ -37,13 +44,22 @@ export function ClaimGateway({
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [carried, setCarried] = useState(false);
 
-  const submit = async (e: Event) => {
-    e.preventDefault();
+  const mismatch  = confirm.length > 0 && confirm !== password;
+  const step1Ok = masterPassword.length > 0;
+  const step2Ok = name.trim().length > 0 && email.trim().length > 0
+    && password.length >= MIN_PASSWORD && confirm === password;
+
+  const finish = async () => {
     if (busy) return;
     setBusy(true); setError(null);
     const r = await claimGateway({ masterPassword, name, email, password });
+    if (!r.ok) { setBusy(false); setError(r.error ?? 'Could not create your account.'); return; }
+    // The claim signed us in; name the workspace if one was given. Best-effort — a branding failure
+    // must never strand a freshly-created owner outside their gateway.
+    if (orgName.trim()) {
+      try { await PUT('/admin/branding', { companyName: orgName.trim() }); } catch { /* non-fatal */ }
+    }
     setBusy(false);
-    if (!r.ok) { setError(r.error ?? 'Could not create your account.'); return; }
     setCarried(!!r.twoFactorCarriedOver);
     setRecoveryKey(r.recoveryKey ?? '');
   };
@@ -94,7 +110,7 @@ export function ClaimGateway({
 
   return (
     <div class={s.wrap}>
-      <form class={s.card} onSubmit={submit}>
+      <div class={s.card}>
         {brand}
 
         <div class={s.done}>
@@ -102,64 +118,105 @@ export function ClaimGateway({
           <span>Set up your gateway</span>
         </div>
 
-        <p class={s.hint}>
-          Nobody administers this gateway yet. Create the owner account — after this, everyone signs
-          in as themselves, and the audit trail records who did what by name.
-        </p>
+        <div class={s.stepper} role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={3} aria-label={`Step ${step} of 3`}>
+          {[1, 2, 3].map((n) => (
+            <span key={n} class={n === step ? s.stepDotActive : n < step ? s.stepDotDone : s.stepDot} />
+          ))}
+        </div>
 
         {error && <FormError>{error}</FormError>}
 
-        <Field
-          label="Administrator password"
-          hint="The ADMIN_PASSWORD from your server’s environment. It proves you installed this gateway."
-        >
-          <Input
-            type="password"
-            value={masterPassword}
-            autoFocus
-            autoComplete="off"
-            placeholder="From your .env"
-            onInput={(e) => setMasterPassword((e.target as HTMLInputElement).value)}
-          />
-        </Field>
+        {step === 1 && (
+          <div key="s1" class={s.step}>
+            <div class={s.stepHead}>
+              <div class={s.stepTitle}><ShieldQuestion size={16} /> Prove you installed this</div>
+              <p class={s.hint}>
+                Enter the <code>ADMIN_PASSWORD</code> from your server’s environment. It lives only in
+                your deployment, so it proves you are the installer — not the first stranger to find
+                the port.
+              </p>
+            </div>
 
-        <Field label="Your name">
-          <Input
-            value={name}
-            autoComplete="name"
-            placeholder="Ada Lovelace"
-            onInput={(e) => setName((e.target as HTMLInputElement).value)}
-          />
-        </Field>
+            <Field label="Administrator password" hint="From your .env">
+              <PasswordInput
+                value={masterPassword}
+                autoFocus
+                autoComplete="off"
+                placeholder="ADMIN_PASSWORD"
+                onInput={(e) => setMasterPassword((e.target as HTMLInputElement).value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && step1Ok) setStep(2); }}
+              />
+            </Field>
 
-        <Field label="Your email" hint="This is how you will sign in.">
-          <Input
-            type="email"
-            value={email}
-            autoComplete="username"
-            placeholder="you@company.com"
-            onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
-          />
-        </Field>
+            <Button variant="primary" disabled={!step1Ok} onClick={() => setStep(2)}>Continue</Button>
+          </div>
+        )}
 
-        <Field label="Choose a password" hint="At least 12 characters. A long phrase beats a short, complicated one.">
-          <Input
-            type="password"
-            value={password}
-            autoComplete="new-password"
-            placeholder="Your new password"
-            onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
-          />
-        </Field>
+        {step === 2 && (
+          <div key="s2" class={s.step}>
+            <div class={s.stepHead}>
+              <div class={s.stepTitle}><UserPlus size={16} /> Create your account</div>
+              <p class={s.hint}>
+                You are the owner. After this, everyone signs in as themselves and the audit trail
+                records who did what by name.
+              </p>
+            </div>
 
-        <Button
-          variant="primary"
-          type="submit"
-          disabled={busy || !masterPassword || !name || !email || !password}
-        >
-          {busy ? 'Creating your account…' : 'Create owner account'}
-        </Button>
-      </form>
+            <Field label="Your name">
+              <Input value={name} autoFocus autoComplete="name" placeholder="Ada Lovelace"
+                onInput={(e) => setName((e.target as HTMLInputElement).value)} />
+            </Field>
+
+            <Field label="Your email" hint="This is how you will sign in.">
+              <Input type="email" value={email} autoComplete="username" placeholder="you@company.com"
+                onInput={(e) => setEmail((e.target as HTMLInputElement).value)} />
+            </Field>
+
+            <Field label="Choose a password" hint="At least 12 characters. A long phrase beats a short, complicated one.">
+              <PasswordInput value={password} autoComplete="new-password" placeholder="Your new password"
+                onInput={(e) => setPassword((e.target as HTMLInputElement).value)} />
+            </Field>
+            <PasswordStrength value={password} />
+
+            <Field label="Confirm password">
+              <PasswordInput value={confirm} autoComplete="new-password" placeholder="Type it again"
+                onInput={(e) => setConfirm((e.target as HTMLInputElement).value)}
+                onBlur={() => setConfirmTouched(true)} />
+            </Field>
+            {mismatch && confirmTouched && <p class={s.confirmErr}>Passwords don’t match.</p>}
+
+            <div class={s.stepActions}>
+              <Button variant="ghost" onClick={() => setStep(1)}><ArrowLeft size={14} /> Back</Button>
+              <Button variant="primary" disabled={!step2Ok} onClick={() => setStep(3)}>Continue</Button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div key="s3" class={s.step}>
+            <div class={s.stepHead}>
+              <div class={s.stepTitle}><Building2 size={16} /> Name your workspace</div>
+              <p class={s.hint}>
+                Optional. Set your organization’s name and the whole console carries it instead of
+                “Alayra Nexus” — you can change it, and add a logo, later in Settings.
+              </p>
+            </div>
+
+            <Field label="Organization name" hint="optional">
+              <Input value={orgName} autoFocus placeholder="Acme Corp"
+                onInput={(e) => setOrgName((e.target as HTMLInputElement).value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void finish(); }} />
+            </Field>
+
+            <div class={s.stepActions}>
+              <Button variant="ghost" onClick={() => setStep(2)} disabled={busy}><ArrowLeft size={14} /> Back</Button>
+              <Button variant="primary" disabled={busy} onClick={finish}>
+                {busy ? 'Creating your account…' : 'Create owner account'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {carriesExistingTwoFactor && (
         <p class={s.note}>

@@ -9,6 +9,17 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+- **A stepped, workspace-aware first-run wizard, and password reveal everywhere (Phase 7.16b).**
+  Claiming a gateway is now a three-step wizard — prove you installed it, create your account, name
+  your workspace — instead of one long form. Every password field across claim, invite-acceptance,
+  password-recovery, and sign-in gained a **show/hide eye toggle** (one shared control), the new
+  account screens show a live **password-strength meter** and a **confirm-password** field that
+  blocks continuing on a mismatch, and the optional final step lets the owner set an **organization
+  name** that white-labels the whole console from first paint (saved to branding after the claim; a
+  failure there never blocks onboarding). No backend change — the claim API is untouched and the
+  workspace name rides the existing branding endpoint.
+
 ### Changed
 - **The model picker is opt-in, searchable, and harvests real pricing (Phase 7.16a).** Fetching a
   provider's models used to dump every one of them — 339, for OpenRouter — into the selection as

@@ -109,7 +109,8 @@ test('the owner invites a viewer, who accepts in their own browser', async () =>
 
   await viewerPage.goto(inviteLink);
   await viewerPage.getByPlaceholder('Ada Lovelace').fill(VIEWER.name);
-  await viewerPage.getByLabel(/Choose a password/i).fill(VIEWER.password);
+  await viewerPage.getByPlaceholder('Your new password').fill(VIEWER.password);
+  await viewerPage.getByPlaceholder('Type it again').fill(VIEWER.password);
   await viewerPage.getByRole('button', { name: 'Create account' }).click();
   await viewerPage.getByRole('button', { name: /continue/i }).click();
   await expect(viewerPage.getByRole('link', { name: 'Alayra Nexus — Overview' })).toBeVisible();
@@ -149,11 +150,11 @@ test('the factory reset asks for both proofs, then lands on the setup screen', a
 
   await eraseButton.click();
   // The story ends where it began: an unclaimed gateway offering the setup screen.
-  await expect(page.getByPlaceholder('From your .env')).toBeVisible();
+  await expect(page.getByPlaceholder('ADMIN_PASSWORD')).toBeVisible();
 });
 
 test('the reset signed the viewer out too — their session died with everything else', async () => {
   await viewerPage.reload();
   // Their token is dead and their account is gone; the app can only offer first-run setup.
-  await expect(viewerPage.getByPlaceholder('From your .env')).toBeVisible();
+  await expect(viewerPage.getByPlaceholder('ADMIN_PASSWORD')).toBeVisible();
 });
