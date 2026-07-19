@@ -17,7 +17,7 @@ vi.mock('preact-iso', async (orig) => ({
 import { NotificationsBell } from './NotificationsBell';
 
 const alert = (over: Record<string, unknown> = {}) => ({
-  id: 'n1', type: 'keyBanned', title: 'A openai key was auto-banned',
+  id: 'n1', type: 'keyBanned', severity: 'critical', title: 'A openai key was auto-banned',
   body: 'That credential is dead — traffic is degrading until you replace it.',
   section: 'nexus', read: false, createdAt: new Date(Date.now() - 60_000).toISOString(),
   ...over,
@@ -77,6 +77,30 @@ describe('NotificationsBell', () => {
     fireEvent.click(await screen.findByRole('button', { name: /1 unread/i }));
     fireEvent.click(await screen.findByRole('button', { name: /mark all read/i }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/admin/notifications/read-all'));
+  });
+
+  it('groups the feed by day under a Today header', async () => {
+    renderBell();
+    fireEvent.click(await screen.findByRole('button', { name: /1 unread/i }));
+    expect(await screen.findByText('Today')).toBeInTheDocument();
+  });
+
+  it('the Unread filter hides read alerts', async () => {
+    get.mockResolvedValue({
+      notifications: [
+        alert({ id: 'r', read: true, title: 'A read alert' }),
+        alert({ id: 'u', read: false, title: 'An unread alert' }),
+      ],
+      unreadCount: 1,
+    });
+    renderBell();
+    fireEvent.click(await screen.findByRole('button', { name: /1 unread/i }));
+    // All tab shows both…
+    expect(await screen.findByText('A read alert')).toBeInTheDocument();
+    // …switching to Unread drops the read one.
+    fireEvent.click(screen.getByRole('tab', { name: /unread/i }));
+    expect(screen.queryByText('A read alert')).not.toBeInTheDocument();
+    expect(screen.getByText('An unread alert')).toBeInTheDocument();
   });
 
   it('says so plainly when there is nothing to report, with no badge', async () => {

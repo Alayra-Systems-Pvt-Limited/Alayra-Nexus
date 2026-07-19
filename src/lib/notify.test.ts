@@ -122,6 +122,24 @@ describe('budgetThreshold + tierExhausted message builders (Phase 6.4b)', () => 
   });
 });
 
+describe('severity (Phase 7.16c)', () => {
+  it('marks actively-broken and under-attack events critical', () => {
+    expect(keyBannedMessage('openai', '●●●●1234').severity).toBe('critical');
+    expect(adminLockoutMessage('203.0.113.7').severity).toBe('critical');
+    expect(tierExhaustedMessage('chat', false).severity).toBe('critical');
+  });
+
+  it('marks a heading-that-way event a warning', () => {
+    expect(breakerOpenedMessage('groq', '●●●●abcd', 30).severity).toBe('warning');
+  });
+
+  it('escalates a budget alert from warning at 80% to critical at 100%', () => {
+    const base = { teamId: 't1', teamName: 'Acme', spendUsd: 8, budgetUsd: 10, period: 'monthly', windowId: '2026-07' } as const;
+    expect(budgetThresholdMessage({ ...base, pct: 80 }).severity).toBe('warning');
+    expect(budgetThresholdMessage({ ...base, pct: 100 }).severity).toBe('critical');
+  });
+});
+
 describe('sectionFor (Phase 7.11)', () => {
   it('sends each alert to the section where it can actually be acted on', () => {
     expect(sectionFor('keyBanned')).toBe('nexus');        // replace the dead credential

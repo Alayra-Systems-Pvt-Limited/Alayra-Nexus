@@ -63,6 +63,13 @@ describe('recordNotification', () => {
     });
   });
 
+  it('persists the message severity so the panel can tint it', async () => {
+    await recordNotification(keyBannedMessage('openai', '●●●●1234'), 3600);
+    expect(prismaMock.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ severity: 'critical' }),
+    });
+  });
+
   it('routes a budget alert to Teams, not to Nexus', async () => {
     await recordNotification(budgetThresholdMessage({
       teamId: 't1', teamName: 'Frontend', pct: 80, spendUsd: 8, budgetUsd: 10,
@@ -100,13 +107,13 @@ describe('listNotifications', () => {
     // A badge that only counted the visible page would under-report the moment the feed grew
     // past one screen.
     prismaMock.notification.findMany.mockResolvedValueOnce([
-      { id: 'n1', type: 'keyBanned', title: 't', body: 'b', section: 'nexus', readAt: null, createdAt: new Date('2026-07-16T10:00:00Z') },
+      { id: 'n1', type: 'keyBanned', severity: 'critical', title: 't', body: 'b', section: 'nexus', readAt: null, createdAt: new Date('2026-07-16T10:00:00Z') },
     ] as never);
     prismaMock.notification.count.mockResolvedValueOnce(42 as never);
 
     const r = await listNotifications({ limit: 1 });
     expect(r.unreadCount).toBe(42);
-    expect(r.notifications[0]).toMatchObject({ id: 'n1', read: false, createdAt: '2026-07-16T10:00:00.000Z' });
+    expect(r.notifications[0]).toMatchObject({ id: 'n1', severity: 'critical', read: false, createdAt: '2026-07-16T10:00:00.000Z' });
     expect(prismaMock.notification.count).toHaveBeenCalledWith({ where: { readAt: null } });
   });
 

@@ -164,6 +164,7 @@ model AppSettings {
 model Notification {
   id        String    @id @default(uuid())
   type      String // NotifyEventType: keyBanned | breakerOpened | adminLockout | budgetThreshold | tierExhausted
+  severity  String    @default("info") // NotifySeverity: critical | warning | info — drives panel tint (7.16c)
   title     String
   body      String
   section   String? // dashboard section that raised it, for click-through (e.g. "nexus")

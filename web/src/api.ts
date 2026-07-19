@@ -475,8 +475,14 @@ export interface ComplianceConfig {
 // ── Notifications feed (notifications.routes.ts) ──────────────────────────────
 // The bell's alerts. Recorded whenever the gateway raises one, independently of whether email or a
 // webhook is configured — those gate delivery, not whether an alert is noticed at all.
+export type NotificationSeverity = 'critical' | 'warning' | 'info';
 export interface NotificationRow {
-  id: string; type: string; title: string; body: string;
+  id: string;
+  /** NotifyEventType — keyBanned | breakerOpened | adminLockout | budgetThreshold | tierExhausted. */
+  type: string;
+  /** How loud it is (7.16c) — drives the icon tint. Older rows without one read as 'info'. */
+  severity: NotificationSeverity;
+  title: string; body: string;
   /** The section that raised it, for click-through. Null for an alert with no obvious home. */
   section: string | null;
   read: boolean;

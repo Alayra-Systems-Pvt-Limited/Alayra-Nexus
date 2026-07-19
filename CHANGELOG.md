@@ -9,6 +9,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Changed
+- **Notifications now have severity, and the panel is built around it (Phase 7.16c).** Every alert
+  carries a severity — a dead key or a sign-in lockout is `critical`, a cooling breaker or a budget
+  at 80% is `warning`, and a budget alert escalates from warning at 80% to critical at 100%. The
+  bell panel is rebuilt around it: each event gets its own icon in a severity-tinted ring, the feed
+  is grouped by day (Today / Yesterday / date), an **All / Unread** filter sits in the header, the
+  badge turns red when any unread alert is critical and pops when the count climbs, and unread rows
+  carry an accent bar. One additive `severity` column (defaulting to `info`, so every existing row
+  stays valid); no alert is produced or delivered any differently.
+
 ### Added
 - **A stepped, workspace-aware first-run wizard, and password reveal everywhere (Phase 7.16b).**
   Claiming a gateway is now a three-step wizard — prove you installed it, create your account, name

@@ -30,10 +30,17 @@
 export const NOTIFY_EVENTS = ['keyBanned', 'breakerOpened', 'adminLockout', 'budgetThreshold', 'tierExhausted'] as const;
 export type NotifyEventType = (typeof NOTIFY_EVENTS)[number];
 
+/** How loud an alert is (Phase 7.16c) — drives the panel's icon tint and ordering. `critical` is a
+ *  thing actively broken or under attack (a dead key, a lockout, a 503); `warning` is a thing
+ *  heading that way (a cooling breaker, a budget at 80%); `info` is neutral. A property of the
+ *  occurrence, not just the type, because a budget alert is a warning at 80% and critical at 100%. */
+export type NotifySeverity = 'critical' | 'warning' | 'info';
+
 /** A fully-formed alert, ready to coalesce and deliver. `dedupeKey` identifies the
  *  logical occurrence so a flapping source produces one message per window, not a flood. */
 export interface NotifyMessage {
   type:      NotifyEventType;
+  severity:  NotifySeverity;
   dedupeKey: string;
   title:     string;
   body:      string;
@@ -120,6 +127,7 @@ export function normalizeNotificationConfig(raw: unknown): NotificationConfig {
 export function keyBannedMessage(provider: string, maskedKey: string): NotifyMessage {
   return {
     type: 'keyBanned',
+    severity: 'critical',
     dedupeKey: `keyBanned:${provider}:${maskedKey}`,
     title: `Alayra Nexus: a ${provider} key was auto-banned`,
     body: `A provider key for "${provider}" (${maskedKey}) was automatically banned after repeated authentication failures. That credential is dead — traffic is silently degrading until you replace it in the Pools tab.`,
@@ -129,6 +137,7 @@ export function keyBannedMessage(provider: string, maskedKey: string): NotifyMes
 export function breakerOpenedMessage(provider: string, maskedKey: string, cooldownSeconds: number): NotifyMessage {
   return {
     type: 'breakerOpened',
+    severity: 'warning',
     dedupeKey: `breakerOpened:${provider}:${maskedKey}`,
     title: `Alayra Nexus: circuit breaker opened for ${provider}`,
     body: `The circuit breaker opened for a "${provider}" key (${maskedKey}) after repeated server-side failures. It will be skipped for about ${cooldownSeconds}s while it cools down. If this recurs, the upstream is likely having an outage.`,
@@ -138,6 +147,7 @@ export function breakerOpenedMessage(provider: string, maskedKey: string, cooldo
 export function adminLockoutMessage(source: string): NotifyMessage {
   return {
     type: 'adminLockout',
+    severity: 'critical',
     dedupeKey: `adminLockout:${source}`,
     title: 'Alayra Nexus: admin login locked out',
     body: `Admin sign-in was locked out after repeated failed attempts from "${source}". If that was not you, someone is trying to guess the admin password.`,
@@ -168,6 +178,7 @@ export function budgetThresholdMessage(a: {
   const cap   = a.budgetUsd.toFixed(2);
   return {
     type: 'budgetThreshold',
+    severity: a.pct >= 100 ? 'critical' : 'warning',
     dedupeKey: `budgetThreshold:${a.teamId}:${a.windowId}:${a.pct}`,
     title: `Alayra Nexus: team "${a.teamName}" reached ${a.pct}% of its ${a.period} budget`,
     body: a.pct >= 100
@@ -181,6 +192,7 @@ export function budgetThresholdMessage(a: {
 export function tierExhaustedMessage(capability: string, isolated: boolean): NotifyMessage {
   return {
     type: 'tierExhausted',
+    severity: 'critical',
     dedupeKey: `tierExhausted:${capability}:${isolated ? 'isolated' : 'shared'}`,
     title: `Alayra Nexus: no capacity left for "${capability}" requests`,
     body: isolated

@@ -37,7 +37,7 @@ import { sectionFor, type NotifyMessage } from '../lib/notify';
 const FEED_CLAIM_PREFIX = 'nexus:notify:feed:';
 
 export interface NotificationRow {
-  id: string; type: string; title: string; body: string;
+  id: string; type: string; severity: string; title: string; body: string;
   section: string | null; read: boolean; createdAt: string;
 }
 
@@ -55,6 +55,7 @@ export async function recordNotification(msg: NotifyMessage, windowSeconds: numb
       data: {
         id:        randomUUID(),
         type:      msg.type,
+        severity:  msg.severity,
         title:     msg.title,
         body:      msg.body,
         section:   sectionFor(msg.type),
@@ -86,7 +87,7 @@ export async function listNotifications(opts: { limit?: number; unreadOnly?: boo
   ]);
   return {
     notifications: rows.map((n) => ({
-      id: n.id, type: n.type, title: n.title, body: n.body,
+      id: n.id, type: n.type, severity: n.severity, title: n.title, body: n.body,
       section: n.section, read: n.readAt !== null, createdAt: n.createdAt.toISOString(),
     })),
     unreadCount,

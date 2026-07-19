@@ -1,33 +1,63 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { useLocation } from 'preact-iso';
-import { Bell, CheckCheck } from 'lucide-preact';
+import { Bell, CheckCheck, KeyRound, Zap, ShieldAlert, Wallet, Layers, BellOff, type LucideIcon } from 'lucide-preact';
 import { POST, type NotificationsFeed, type NotificationRow } from '../api';
 import { useApi } from '../hooks/useApi';
 import { relativeTime } from '../lib/format';
+import { clsx } from 'clsx';
 import s from './shell.module.css';
 
 /**
- * The live notifications bell (Phase 7.11). Until now this was a styled placeholder with a hardcoded
- * count, because alerts were email/webhook only and were never written down — there was nothing to
- * read. They are now recorded whenever raised, regardless of whether a delivery channel is set up,
- * which is what makes this feed real on a default install rather than permanently empty.
+ * The live notifications bell (Phase 7.11; restyled with severity in 7.16c). Alerts are recorded
+ * whenever raised, regardless of whether a delivery channel is set up, which is what makes this feed
+ * real on a default install rather than permanently empty.
  *
- * Selecting an alert marks it read and jumps to the section that raised it: an alert saying a key
- * died is only useful if it lands you where you can replace it.
+ * Each alert now carries a severity that tints its icon — a dead key (critical) reads differently
+ * from a cooling breaker (warning) at a glance — and the feed is grouped by day and filterable to
+ * unread. Selecting an alert marks it read and jumps to the section that raised it.
  */
 
 const POLL_MS = 60_000;
 
-// A quiet re-read rather than a socket: alerts are coalesced to at most one per window per source,
-// so a minute of latency on a badge is imperceptible and costs one small query.
+// Per-event icon, so the eye can triage the feed without reading every title.
+const ICONS: Record<string, LucideIcon> = {
+  keyBanned:       KeyRound,
+  breakerOpened:   Zap,
+  adminLockout:    ShieldAlert,
+  budgetThreshold: Wallet,
+  tierExhausted:   Layers,
+};
+
+// Day bucket for grouping. Compared on local midnight so "Today"/"Yesterday" match the operator's
+// clock, not UTC.
+function dayBucket(iso: string, now: Date): string {
+  const d = new Date(iso);
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOf(now) - startOf(d)) / 86_400_000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function groupByDay(rows: NotificationRow[], now: Date): { label: string; items: NotificationRow[] }[] {
+  const groups: { label: string; items: NotificationRow[] }[] = [];
+  for (const n of rows) {
+    const label = dayBucket(n.createdAt, now);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(n);
+    else groups.push({ label, items: [n] });
+  }
+  return groups;
+}
+
 export function NotificationsBell() {
   const [open, setOpen] = useState(false);
+  const [tab, setTab]   = useState<'all' | 'unread'>('all');
+  const [bump, setBump] = useState(false); // fires the badge pop when the unread count climbs
   const { data, reload } = useApi<NotificationsFeed>('/admin/notifications?limit=20');
   const { route } = useLocation();
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // `reload` is a fresh closure each render, so poll through a ref — depending on it directly would
-  // tear down and rebuild the interval on every render and it would never fire.
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
   useEffect(() => {
@@ -35,7 +65,6 @@ export function NotificationsBell() {
     return () => clearInterval(t);
   }, []);
 
-  // Close on an outside click or Escape — a panel that traps you is worse than no panel.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -52,11 +81,20 @@ export function NotificationsBell() {
 
   const feed   = data?.notifications ?? [];
   const unread = data?.unreadCount ?? 0;
+  const hasCriticalUnread = feed.some((n) => !n.read && n.severity === 'critical');
+
+  // Pop the badge when a poll brings the unread count *up* — a new alert deserves a beat of motion.
+  const prevUnread = useRef(unread);
+  useEffect(() => {
+    if (unread > prevUnread.current) { setBump(true); const t = setTimeout(() => setBump(false), 400); return () => clearTimeout(t); }
+    prevUnread.current = unread;
+  }, [unread]);
+
+  const shown  = tab === 'unread' ? feed.filter((n) => !n.read) : feed;
+  const groups = groupByDay(shown, new Date());
 
   const openAlert = async (n: NotificationRow) => {
     setOpen(false);
-    // Read state is a convenience, not a transaction: if marking fails the navigation still happens
-    // and the badge simply corrects itself on the next poll.
     if (!n.read) { await POST(`/admin/notifications/${n.id}/read`).catch(() => {}); reload(); }
     if (n.section) route(`/${n.section}`);
   };
@@ -77,7 +115,11 @@ export function NotificationsBell() {
         onClick={() => setOpen((v) => !v)}
       >
         <Bell size={17} />
-        {unread > 0 && <span class={s.bellCount}>{unread > 99 ? '99+' : unread}</span>}
+        {unread > 0 && (
+          <span class={clsx(s.bellCount, hasCriticalUnread && s.bellCountCritical, bump && s.bellCountBump)}>
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
       </button>
 
       {open && (
@@ -91,26 +133,55 @@ export function NotificationsBell() {
             )}
           </div>
 
-          {feed.length === 0 ? (
-            <p class={s.bellEmpty}>
-              Nothing to report. Alerts about banned keys, open circuit breakers, budgets and sign-in
-              lockouts appear here.
-            </p>
+          <div class={s.bellTabs} role="tablist">
+            <button type="button" role="tab" aria-selected={tab === 'all'}
+              class={clsx(s.bellTab, tab === 'all' && s.bellTabOn)} onClick={() => setTab('all')}>All</button>
+            <button type="button" role="tab" aria-selected={tab === 'unread'}
+              class={clsx(s.bellTab, tab === 'unread' && s.bellTabOn)} onClick={() => setTab('unread')}>
+              Unread{unread > 0 ? ` (${unread > 99 ? '99+' : unread})` : ''}
+            </button>
+          </div>
+
+          {shown.length === 0 ? (
+            <div class={s.bellEmptyWrap}>
+              <BellOff size={22} class={s.bellEmptyIcon} />
+              <p class={s.bellEmpty}>
+                {tab === 'unread'
+                  ? 'You’re all caught up.'
+                  : 'Nothing to report. Alerts about banned keys, open circuit breakers, budgets and sign-in lockouts appear here.'}
+              </p>
+            </div>
           ) : (
-            <ul class={s.bellList}>
-              {feed.map((n) => (
-                <li key={n.id}>
-                  <button type="button" class={`${s.bellItem} ${n.read ? '' : s.bellUnread}`} onClick={() => openAlert(n)}>
-                    <span class={s.bellItemTop}>
-                      {!n.read && <span class={s.bellDot} aria-hidden="true" />}
-                      <span class={s.bellItemTitle}>{n.title}</span>
-                      <span class={s.bellWhen} title={n.createdAt}>{relativeTime(n.createdAt)}</span>
-                    </span>
-                    <span class={s.bellBody}>{n.body}</span>
-                  </button>
-                </li>
+            <div class={s.bellList}>
+              {groups.map((g) => (
+                <div key={g.label} class={s.bellGroup}>
+                  <div class={s.bellGroupLabel}>{g.label}</div>
+                  <ul class={s.bellGroupItems}>
+                    {g.items.map((n) => {
+                      const Icon = ICONS[n.type] ?? Bell;
+                      return (
+                        <li key={n.id}>
+                          <button
+                            type="button"
+                            class={clsx(s.bellItem, !n.read && s.bellUnread)}
+                            onClick={() => openAlert(n)}
+                          >
+                            <span class={clsx(s.bellIcon, s[`sev_${n.severity}`])}><Icon size={15} /></span>
+                            <span class={s.bellItemMain}>
+                              <span class={s.bellItemTop}>
+                                <span class={s.bellItemTitle}>{n.title}</span>
+                                <span class={s.bellWhen} title={n.createdAt}>{relativeTime(n.createdAt)}</span>
+                              </span>
+                              <span class={s.bellBody}>{n.body}</span>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </div>
       )}
