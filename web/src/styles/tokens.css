@@ -82,6 +82,9 @@
 
   --sidebar-w: 232px;
   --topbar-h:  56px;
+  /* The content column grows with the viewport up to this cap, so a wide monitor is used rather
+     than framed by empty gutters (7.16d). Data-heavy pages fill it; reading-width panels self-cap. */
+  --content-max: 1520px;
 
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }

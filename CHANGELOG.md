@@ -10,6 +10,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 ## [Unreleased]
 
 ### Changed
+- **The dashboard uses the whole screen now (Phase 7.16d).** Content was capped at 1180px and
+  centered, so a wide monitor showed a narrow column framed by empty gutters. The cap is now a
+  `--content-max` token at 1520px that content grows into fluidly — data-heavy pages (Analytics,
+  Logs, Teams, Health) get the room, while reading-width panels (Settings) keep their own tighter
+  cap. Below the cap nothing changes; tables still scroll and charts still measure their container,
+  so no layout can break — the column just stops wasting the width it was given.
 - **Notifications now have severity, and the panel is built around it (Phase 7.16c).** Every alert
   carries a severity — a dead key or a sign-in lockout is `critical`, a cooling breaker or a budget
   at 80% is `warning`, and a budget alert escalates from warning at 80% to critical at 100%. The
