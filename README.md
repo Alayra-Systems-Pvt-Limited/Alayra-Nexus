@@ -13,6 +13,7 @@
 [![CI](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-6d28d9.svg?style=for-the-badge)](./LICENSE)
 [![Release](https://img.shields.io/github/v/release/Alayra-Systems-Pvt-Limited/Alayra-Nexus?style=for-the-badge&color=0e7490)](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/releases)
+[![Docker Pulls](https://img.shields.io/docker/pulls/alayrasystems/nexus?style=for-the-badge&logo=docker&logoColor=white&color=2496ed)](https://hub.docker.com/r/alayrasystems/nexus)
 [![Container](https://img.shields.io/badge/ghcr.io-alayra--nexus-2496ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/pkgs/container/alayra-nexus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3b82f6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-v5-22c55e.svg?style=for-the-badge)](https://fastify.dev/)
@@ -157,7 +158,8 @@ OpenAI-compatible URL.
 
 ### Option A — Published image (fastest, no clone)
 
-A multi-arch image (amd64 + arm64) is published to the GitHub Container Registry. If
+A multi-arch image (amd64 + arm64) is published to **Docker Hub** and the **GitHub Container
+Registry** from the same build, so the two are byte-identical — use whichever you prefer. If
 you already have Postgres and Redis, run the gateway with one command:
 
 ```bash
@@ -166,8 +168,13 @@ docker run -d --name alayra-nexus -p 3000:3000 \
   -e REDIS_URL="redis://host:6379" \
   -e MASTER_ENCRYPTION_KEY="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" \
   -e ADMIN_PASSWORD="change-me" \
-  ghcr.io/alayra-systems-pvt-limited/alayra-nexus:latest
+  alayrasystems/nexus:latest
 ```
+
+| Registry | Image |
+|---|---|
+| Docker Hub | `alayrasystems/nexus` |
+| GHCR | `ghcr.io/alayra-systems-pvt-limited/alayra-nexus` |
 
 Pin a version for production (e.g. `:1.3.0`) rather than `:latest`.
 

@@ -1,7 +1,12 @@
 name: Release
 
-# Publishes a multi-arch container image to the GitHub Container Registry on every
+# Publishes a multi-arch container image to the GitHub Container Registry and Docker Hub on every
 # version tag (e.g. v1.0.0). Can also be run manually from the Actions tab.
+#
+# Two registries on purpose: GHCR sits next to the source and needs no extra account, but exposes no
+# public pull counter. Docker Hub is where most people look first and is the only one that reports
+# pulls — which is why the README's pulls badge reads from there. One build, pushed to both, so the
+# digests are identical and neither can drift from the other.
 on:
   push:
     tags: ['v*.*.*']
@@ -13,7 +18,8 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/alayra-systems-pvt-limited/alayra-nexus
+  IMAGE:     ghcr.io/alayra-systems-pvt-limited/alayra-nexus
+  IMAGE_HUB: docker.io/alayrasystems/nexus
 
 jobs:
   image:
@@ -33,11 +39,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # A fork without these secrets will stop here rather than half-publishing; the GHCR push above
+      # needs no account beyond the repo's own token.
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Derive image tags & labels
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE }}
+          # Every tag pattern below is expanded once per image, so both registries get the same
+          # version / major.minor / latest set from a single build.
+          images: |
+            ${{ env.IMAGE }}
+            ${{ env.IMAGE_HUB }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
