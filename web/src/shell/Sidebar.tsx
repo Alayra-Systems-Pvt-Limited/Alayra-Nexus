@@ -18,7 +18,7 @@ function NavLink({ section, activeId }: { section: Section; activeId?: string })
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ open = false }: { open?: boolean }) {
   const { path } = useLocation();
   const activeId = sectionByPath(path)?.id;
   const workspace = SECTIONS.filter((x) => x.group === 'workspace');
@@ -31,7 +31,7 @@ export function Sidebar() {
   const name  = brand.companyName || 'Alayra Nexus';
 
   return (
-    <aside class={s.sidebar}>
+    <aside class={clsx(s.sidebar, open && s.sidebarOpen)}>
       <a href="/" class={s.brand} aria-label={`${name} — Overview`}>
         <img class={s.brandMark} src={brand.logoDataUri || '/logo.svg'} width="26" height="26" alt="" />
         <span>

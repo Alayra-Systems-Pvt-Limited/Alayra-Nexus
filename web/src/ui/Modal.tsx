@@ -15,6 +15,12 @@ interface Props {
  * A focus-trapping-free but keyboard-dismissable dialog. Escape and an overlay click both close it;
  * body scroll is locked while open. Deliberately minimal — it's the shell every form dialog (add
  * key, add provider, and the budgeting/settings dialogs to come) is poured into.
+ *
+ * NOTE (P7.17d): `backdrop-filter` makes an element a containing block for `position: fixed`
+ * descendants, so a dialog opened from inside a glass card had its "full-screen" overlay sized to
+ * that card rather than the viewport — on a phone, wider than the screen. The fix is on the CSS
+ * side (cards no longer carry the filter); a portal would have solved it too, but `preact/compat`
+ * rewrites event semantics app-wide once imported, which is far too broad a change for this.
  */
 export function Modal({ title, onClose, children, footer }: Props) {
   const titleId = useId();

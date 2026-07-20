@@ -25,9 +25,14 @@
 .iconBtn { padding: 8px; }
 
 /* ── Card / glass panel ── */
+/* Deliberately NO backdrop-filter here (P7.17d), unlike the other glass surfaces.
+   backdrop-filter makes an element a containing block for `position: fixed` descendants, and cards
+   are the one glass surface that contains dialogs — so a modal opened from inside a card had its
+   "full-screen" overlay sized to the card instead of the viewport: mis-centred on a desktop, and
+   wider than the screen on a phone. The blur was imperceptible here anyway (--surface is 3.5% white
+   over a smooth gradient), so the cost of dropping it is nil and the trap goes with it. */
 .card {
   background: var(--surface);
-  backdrop-filter: blur(var(--blur)); -webkit-backdrop-filter: blur(var(--blur));
   border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: var(--shadow-sm); padding: 20px;
 }
@@ -91,8 +96,12 @@
 .qr { display: block; border-radius: 4px; }
 
 /* ── Modal ── */
-.modalOverlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .5); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: nxFade .15s var(--ease); }
-.modal { width: 100%; max-width: 470px; max-height: 88vh; overflow-y: auto; background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); animation: nxRise .2s var(--ease); }
+/* grid-template-columns: minmax(0, 1fr) — without the 0 minimum the column takes its min-content
+   size from the dialog's contents, so a wide child (a long field row, the model picker) grew the
+   track past the viewport and the modal's `max-width: 100%` resolved against that oversized track
+   instead of the screen. */
+.modalOverlay { position: fixed; inset: 0; z-index: 50; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 24px; background: rgba(0, 0, 0, .5); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: nxFade .15s var(--ease); }
+.modal { width: 100%; min-width: 0; max-width: 470px; max-height: 88vh; overflow-y: auto; background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); animation: nxRise .2s var(--ease); }
 .modalHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface-solid); }
 .modalTitle { font-size: 15px; font-weight: 650; }
 .modalClose { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-sm); border: none; background: transparent; color: var(--muted); cursor: pointer; }
@@ -129,6 +138,15 @@
 .pwStrengthLabel { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
 
 .formRow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* Narrow screens (P7.17d): a two- or three-across field row is unusable at phone width, and a
+   dialog with 24px of overlay padding on each side loses most of its own width. */
+@media (max-width: 640px) {
+  .formRow { grid-template-columns: 1fr; }
+  .modalOverlay { padding: 12px; align-items: start; }
+  .modal { max-width: 100%; max-height: 92vh; }
+  .modalHead { padding: 14px; }
+}
 .formError { color: var(--red); font-size: 12.5px; margin-bottom: 12px; background: var(--red-bg); padding: 8px 11px; border-radius: var(--radius-sm); }
 .formNote { color: var(--muted); font-size: 12px; margin-bottom: 12px; line-height: 1.5; }
 

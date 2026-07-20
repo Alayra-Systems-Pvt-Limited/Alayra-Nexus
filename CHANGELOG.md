@@ -9,6 +9,20 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+- **The dashboard works on a phone (Phase 7.17d).** There was no responsive handling at all: a fixed
+  232px sidebar ate most of a small screen and three-across field rows were unusable. Below 820px the
+  sidebar is now a slide-in drawer opened from a hamburger in the top bar — dismissed by the scrim,
+  Escape, or simply following a link — and below 640px field rows stack one per line, dialogs take
+  the full width, and the page padding tightens. Nothing changes above the breakpoints.
+
+### Fixed
+- **Dialogs were being sized by whatever card opened them (Phase 7.17d).** `backdrop-filter` makes an
+  element a containing block for `position: fixed` descendants, and cards carried it — so a dialog's
+  "full-screen" overlay was really only as big as the card behind it. On a desktop that quietly
+  mis-centred every dialog; on a phone it pushed them wider than the screen. Cards no longer carry
+  the filter (it was imperceptible on them anyway), so overlays cover the viewport as intended.
+
 ### Changed
 - **Editing a key no longer makes you scroll sideways to read it (Phase 7.17c).** The masked
   credential was the dialog's *title*, where a full-length mask ran off the edge. It now sits in the

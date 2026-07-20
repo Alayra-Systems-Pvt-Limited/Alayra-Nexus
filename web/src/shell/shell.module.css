@@ -134,3 +134,57 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .bellCountBump { animation: none; } }
+
+/* ── Narrow screens (P7.17d) ──────────────────────────────────────────────────
+   232px of permanent navigation is most of a phone, so below the breakpoint the sidebar becomes a
+   drawer: off-canvas by default, slid in by the top bar's hamburger, dismissed by the scrim, Escape,
+   or following any link. Above the breakpoint none of these rules apply and the layout is untouched. */
+.menuBtn { display: none; }
+.navScrim { display: none; }
+
+@media (max-width: 820px) {
+  .shell { grid-template-columns: 1fr; }
+
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    /* Above the topbar (30) so it covers the full height, below the modal overlay (50) so a dialog
+       still wins. */
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: transform .22s var(--ease);
+  }
+  /* Both classes on the element, so this must out-specify the base rule rather than merely follow
+     it — equal specificity would leave the drawer at the mercy of stylesheet injection order. */
+  .sidebar.sidebarOpen { transform: translateX(0); box-shadow: var(--shadow); }
+
+  .navScrim {
+    display: block; position: fixed; inset: 0; z-index: 39;
+    background: rgba(0, 0, 0, .5);
+    animation: nxFadeIn .15s var(--ease);
+  }
+
+  .menuBtn {
+    display: inline-grid; place-items: center;
+    width: 34px; height: 34px; flex-shrink: 0;
+    border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--muted); cursor: pointer;
+  }
+  .menuBtn:hover { color: var(--text); }
+
+  .topbar { padding: 0 14px; gap: 10px; }
+  /* The name is the first thing worth dropping when the bar gets tight — the avatar still says who. */
+  .accountName { display: none; }
+}
+
+@keyframes nxFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 640px) {
+  .content { padding: 16px 14px; }
+  .bellPanel { width: calc(100vw - 24px); right: -6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar { transition: none; }
+  .navScrim { animation: none; }
+}

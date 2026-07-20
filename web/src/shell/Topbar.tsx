@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { LogOut } from 'lucide-preact';
+import { LogOut, Menu } from 'lucide-preact';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationsBell } from './NotificationsBell';
 import { POST, clearToken, getIdentity, type AdminRole } from '../api';
@@ -27,7 +27,7 @@ function signOut() {
 
 const ROLE_LABEL: Record<AdminRole, string> = { owner: 'Owner', admin: 'Admin', viewer: 'Viewer' };
 
-export function Topbar() {
+export function Topbar({ onMenu, navOpen = false }: { onMenu?: () => void; navOpen?: boolean }) {
   const identity = getIdentity();
   const name = identity?.name ?? 'API token';
   const initial = (identity?.name?.trim()[0] ?? '•').toUpperCase();
@@ -53,6 +53,16 @@ export function Topbar() {
 
   return (
     <header class={s.topbar}>
+      {/* Only rendered as a control on narrow screens — CSS hides it above the drawer breakpoint. */}
+      <button
+        type="button"
+        class={s.menuBtn}
+        onClick={onMenu}
+        aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+        aria-expanded={navOpen}
+      >
+        <Menu size={18} />
+      </button>
       {alive !== null && (alive
         ? <span class={s.livePill}><span class={s.pulse} />LIVE</span>
         : <span class={s.offlinePill}><span class={s.deadDot} />OFFLINE</span>)}
