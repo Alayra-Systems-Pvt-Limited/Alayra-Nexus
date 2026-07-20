@@ -51,7 +51,7 @@ export function Sidebar({ open = false }: { open?: boolean }) {
       </nav>
 
       <div class={s.navSpacer} />
-      <div class={s.navFoot}>Alayra Nexus™ · v1.3.0</div>
+      <div class={s.navFoot}>Alayra Nexus™ · v1.3.1</div>
     </aside>
   );
 }

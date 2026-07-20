@@ -32,7 +32,14 @@ LABEL org.opencontainers.image.title="Alayra Nexus" \
 # Production dependencies only. `prisma` is a runtime dependency (migrate deploy
 # runs at startup), so the CLI is present without pulling in dev tooling.
 COPY package*.json ./
-RUN npm ci --omit=dev
+# npm is deleted immediately after it has done its job. It is not needed at runtime — the start
+# command invokes Prisma's own entrypoint directly rather than going through npx — and the copy
+# bundled with Node vendors its own dependency tree, which is where every CVE reported against this
+# image has come from (sigstore, picomatch: ours by inheritance, not by choice, and unpatchable from
+# our package.json). A production container has no business shipping a package manager anyway.
+RUN npm ci --omit=dev \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+           /root/.npm /usr/local/share/.cache
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
@@ -57,5 +64,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
 # an immutable image.
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
-# Apply pending migrations, then start the server.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+# Apply pending migrations, then start the server. Prisma's CLI is invoked through its own build
+# entrypoint rather than `npx` so the image needs no package manager at runtime (see above).
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/server.js"]

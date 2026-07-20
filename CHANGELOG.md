@@ -7,6 +7,19 @@ All notable changes to Alayra Nexus™ are documented here. The format is based 
 The `model: "alayra-nexus-1"` routing contract is the public API surface covered by
 semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
+## [1.3.1] - 2026-07-20
+
+### Security
+- **The container no longer ships a package manager (and no longer ships its CVEs).** Docker Scout
+  reported two HIGH vulnerabilities against the 1.3.0 image — `sigstore` (CVE-2026-48815, signature
+  verification) and `picomatch` (CVE-2026-33671, ReDoS). Neither is a dependency of this project:
+  both are vendored inside the copy of **npm bundled with Node**, so they were inherited from the
+  base image and unpatchable from `package.json`. npm is not needed at runtime — the start command
+  now invokes Prisma's own entrypoint directly instead of going through `npx` — so it is deleted
+  once it has installed the production dependencies. The image reports **0 vulnerabilities**,
+  carries 135 packages instead of 317, and drops from 214 MB to 183 MB. A production container has
+  no business shipping a package manager in any case.
+
 ## [1.3.0] - 2026-07-20
 
 ### Added

@@ -176,7 +176,7 @@ docker run -d --name alayra-nexus -p 3000:3000 \
 | Docker Hub | `alayrasystems/nexus` |
 | GHCR | `ghcr.io/alayra-systems-pvt-limited/alayra-nexus` |
 
-Pin a version for production (e.g. `:1.3.0`) rather than `:latest`.
+Pin a version for production (e.g. `:1.3.1`) rather than `:latest`.
 
 ### Option B — Docker Compose (brings its own Postgres + Redis)
 
@@ -191,7 +191,7 @@ curl -O https://raw.githubusercontent.com/Alayra-Systems-Pvt-Limited/Alayra-Nexu
 cat > .env <<EOF
 MASTER_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 ADMIN_PASSWORD=change-me
-NEXUS_VERSION=1.3.0
+NEXUS_VERSION=1.3.1
 EOF
 
 docker compose up -d
