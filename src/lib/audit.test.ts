@@ -46,6 +46,9 @@ describe('shouldAutoAudit', () => {
 describe('deriveAction', () => {
   it('collapses path params into one stable slug', () => {
     expect(deriveAction('DELETE', '/admin/keys/:id')).toBe('keys.delete');
+    // 7.17b: removing a model used to ride the whole-registry PUT and log as `models.update`.
+    expect(deriveAction('DELETE', '/admin/models/:id')).toBe('models.delete');
+    expect(deriveAction('PUT', '/admin/models')).toBe('models.update');
     expect(deriveAction('POST', '/admin/keys/:id/ban')).toBe('keys.ban');
     expect(deriveAction('POST', '/admin/providers')).toBe('providers.create');
     expect(deriveAction('PUT', '/admin/settings/notifications')).toBe('settings.notifications');

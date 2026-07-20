@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { addModelsToRegistry } from './registry';
+import { addModelsToRegistry, removeModelFromRegistry } from './registry';
 import type { AiModel } from '../api';
 
 const get = vi.fn();
 const put = vi.fn();
+const del = vi.fn();
 vi.mock('../api', () => ({
   GET: (p: string) => get(p),
   PUT: (p: string, b?: unknown) => put(p, b),
+  DEL: (p: string) => del(p),
 }));
 
 // A stored registry entry with the operator-owned fields filled in, so tests can prove the merge
@@ -22,8 +24,25 @@ const stored = (over: Partial<AiModel>): AiModel => ({
 });
 
 beforeEach(() => {
-  get.mockReset(); put.mockReset();
+  get.mockReset(); put.mockReset(); del.mockReset();
   put.mockResolvedValue({});
+  del.mockResolvedValue({ success: true });
+});
+
+describe('removeModelFromRegistry', () => {
+  it('deletes through the dedicated endpoint, so the audit reads as a delete', async () => {
+    // It used to GET the registry and PUT it back minus one entry, which the audit trail recorded
+    // as `models.update` — a deletion that looked like an edit.
+    await removeModelFromRegistry('openrouter-gpt-4o');
+    expect(del).toHaveBeenCalledWith('/admin/models/openrouter-gpt-4o');
+    expect(put).not.toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('encodes an id containing slashes', async () => {
+    await removeModelFromRegistry('a/b');
+    expect(del).toHaveBeenCalledWith('/admin/models/a%2Fb');
+  });
 });
 
 describe('addModelsToRegistry', () => {

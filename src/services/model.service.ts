@@ -172,6 +172,33 @@ export async function updateModelRegistry(models: AiModel[]): Promise<void> {
   await redis.del(REGISTRY_CACHE_KEY);
 }
 
+/**
+ * Remove one model by id. Deleting used to go through the whole-registry PUT, which recorded the
+ * action in the audit trail as `models.update` — a delete that reads as an edit. Returns false when
+ * nothing matched, so the route can 404 honestly.
+ */
+export async function removeModelById(id: string): Promise<boolean> {
+  const registry = await getModelRegistry();
+  const kept = registry.filter((m) => m.id !== id);
+  if (kept.length === registry.length) return false;
+  await updateModelRegistry(kept);
+  return true;
+}
+
+/**
+ * Drop every model belonging to a provider slug, and report how many went. Called when the last
+ * pool for that provider is deleted: the registry is keyed by provider slug with no foreign key, so
+ * without this the models outlive their pool and reappear the moment a pool of the same provider is
+ * created again.
+ */
+export async function removeModelsForProvider(provider: string): Promise<number> {
+  const registry = await getModelRegistry();
+  const kept = registry.filter((m) => m.provider !== provider);
+  const removed = registry.length - kept.length;
+  if (removed > 0) await updateModelRegistry(kept);
+  return removed;
+}
+
 export async function getModelById(id: string): Promise<AiModel> {
   const registry = await getModelRegistry();
   const model = registry.find(m => m.id === id || m.modelString === id);

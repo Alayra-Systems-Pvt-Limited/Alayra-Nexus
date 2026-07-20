@@ -10,6 +10,19 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 ## [Unreleased]
 
 ### Fixed
+- **Deleting a pool now takes its models with it (Phase 7.17b).** The model registry is keyed by
+  provider slug with no foreign key back to the pool, so deleting a pool left its models behind —
+  they stayed in the Models list and came *back* the moment a pool of the same provider was created
+  again. A pool delete now clears that provider's models, but only when it was the last pool for
+  that provider (a sibling pool of the same type is still serving them).
+- **Removing a model is recorded as a deletion, not an edit (Phase 7.17b).** Deletion went through
+  the whole-registry `PUT`, so the audit trail logged `models.update` for what was plainly a delete.
+  There is now a dedicated `DELETE /admin/models/:id` — it records `models.delete`, 404s honestly on
+  an unknown id, and costs one round-trip instead of a read-modify-write of the entire registry.
+- **A slow or misconfigured model fetch now explains itself (Phase 7.17b).** The fetch timeout rose
+  from 8s to 15s (a full catalogue is large — OpenRouter alone answers with ~344 models), and every
+  failure now names the URL that was actually called and the model-id path it looked under, so a
+  pool pointed at the wrong endpoint is obvious instead of silently returning nothing.
 - **The notifications panel no longer opens behind the page (Phase 7.17a).** The top bar's
   `backdrop-filter` already made it a stacking context, but without a `z-index` it sat at the same
   level as the page content painted after it — so the bell's panel, which overflows the bar, was

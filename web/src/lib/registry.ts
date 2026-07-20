@@ -1,4 +1,4 @@
-import { GET, PUT, type AiModel } from '../api';
+import { GET, PUT, DEL, type AiModel } from '../api';
 
 // The "Fetch Models feeds the registry" bridge (P7.4b). Model selection now happens inside Nexus,
 // per provider, but routing still runs off the rich global registry — so adding/removing a model
@@ -82,10 +82,10 @@ export async function addModelsToRegistry(
   return { added: additions.length, updated };
 }
 
-/** Remove one model from the registry by its id, writing the trimmed registry back. */
+/** Remove one model from the registry. Goes through the dedicated DELETE so the audit trail records
+ *  a deletion as `models.delete` rather than the `models.update` a whole-registry PUT produced. */
 export async function removeModelFromRegistry(id: string): Promise<void> {
-  const { models } = await GET<{ models: AiModel[] }>('/admin/models');
-  await PUT('/admin/models', { models: models.filter((m) => m.id !== id) });
+  await DEL(`/admin/models/${encodeURIComponent(id)}`);
 }
 
 /** Replace one model (matched by id) with an edited copy, writing the registry back. */

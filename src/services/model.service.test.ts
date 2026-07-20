@@ -14,15 +14,27 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 // Importing model.service pulls in the prisma and redis clients; stub them so the
 // pure normalizeModel logic can be exercised without a database.
 import { vi } from 'vitest';
+
+// The registry lives in AppSettings; back it with an in-memory string so the read/modify/write
+// helpers can be exercised end to end. redis.get returns undefined → every read misses the cache
+// and falls through to this store, which is what makes the writes observable.
+const { store } = vi.hoisted(() => ({ store: { value: '[]' } }));
 vi.mock('../lib/prisma', () => ({ prisma: {} }));
 vi.mock('../lib/redis',  () => ({ redis: { get: vi.fn(), set: vi.fn(), del: vi.fn() } }));
+vi.mock('./settings.service', () => ({
+  getSetting: vi.fn(async () => store.value),
+  setSetting: vi.fn(async (_k: string, v: string) => { store.value = v; }),
+}));
 
-import { normalizeModel } from './model.service';
+import { normalizeModel, removeModelById, removeModelsForProvider, getModelRegistry } from './model.service';
+
+const seed = (models: Record<string, unknown>[]) => { store.value = JSON.stringify(models); };
+const model = (id: string, provider: string) => ({ id, modelString: id, provider, displayName: id });
 
 describe('normalizeModel — registry migration (Phase 6.1)', () => {
   it('gives every model at least the chat capability', () => {
@@ -71,5 +83,42 @@ describe('normalizeModel — registry migration (Phase 6.1)', () => {
 
   it('falls back the id to the model string when id is missing', () => {
     expect(normalizeModel({ modelString: 'gpt-4o' }).id).toBe('gpt-4o');
+  });
+});
+
+describe('removeModelById (Phase 7.17b)', () => {
+  beforeEach(() => { store.value = '[]'; });
+
+  it('removes exactly the named model and reports it', async () => {
+    seed([model('a', 'openai'), model('b', 'openrouter')]);
+    expect(await removeModelById('a')).toBe(true);
+    expect((await getModelRegistry()).map((m) => m.id)).toEqual(['b']);
+  });
+
+  it('reports false for an id that is not there, so the route can 404 honestly', async () => {
+    seed([model('a', 'openai')]);
+    expect(await removeModelById('nope')).toBe(false);
+    expect((await getModelRegistry())).toHaveLength(1);
+  });
+});
+
+describe('removeModelsForProvider (Phase 7.17b)', () => {
+  beforeEach(() => { store.value = '[]'; });
+
+  it('drops only the models of the named provider, and counts them', async () => {
+    // The bug this exists for: deleting a pool used to leave its models behind, so they reappeared
+    // the moment a pool of the same provider was created again.
+    seed([
+      model('or-1', 'openrouter'), model('or-2', 'openrouter'),
+      model('oa-1', 'openai'),
+    ]);
+    expect(await removeModelsForProvider('openrouter')).toBe(2);
+    expect((await getModelRegistry()).map((m) => m.id)).toEqual(['oa-1']);
+  });
+
+  it('is a no-op for a provider with nothing registered', async () => {
+    seed([model('oa-1', 'openai')]);
+    expect(await removeModelsForProvider('groq')).toBe(0);
+    expect((await getModelRegistry())).toHaveLength(1);
   });
 });

@@ -17,7 +17,7 @@
 // The model registry.
 import { FastifyInstance }      from 'fastify';
 import { z }                    from 'zod';
-import { getModelRegistry, updateModelRegistry, normalizeModel } from '../../services/model.service';
+import { getModelRegistry, updateModelRegistry, normalizeModel, removeModelById } from '../../services/model.service';
 import { getPricingCatalog }    from '../../services/pricingCatalog.service';
 import { CAPABILITIES }         from '../../lib/modelSelect';
 import { adminGuard, adminWriteGuard } from './guard';
@@ -79,6 +79,16 @@ export default async function adminModelsRoutes(fastify: FastifyInstance) {
       ids.add(m.id); pairs.add(pair);
     }
     await updateModelRegistry(parsed.data.models.map((m) => normalizeModel(m)));
+    return reply.send({ success: true });
+  });
+
+  // Removing one model is its own verb. It used to ride the whole-registry PUT above, which meant
+  // the audit trail recorded a deletion as `models.update`; this records `models.delete`, and costs
+  // one round-trip instead of a read-modify-write of the entire registry.
+  fastify.delete('/admin/models/:id', adminWriteGuard, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const removed = await removeModelById(id);
+    if (!removed) return reply.code(404).send({ error: 'Model not found' });
     return reply.send({ success: true });
   });
 }

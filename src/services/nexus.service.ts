@@ -586,6 +586,10 @@ export async function validateModel(
 // pointed at a huge array can't flood the dashboard.
 const MAX_FETCHED_MODELS = 500;
 
+// Long enough for a full provider catalogue over a slow hop (a 344-model OpenRouter payload is
+// several hundred KB), short enough that a dead endpoint still fails while the operator is watching.
+const FETCH_TIMEOUT_MS = 15_000;
+
 /**
  * Fetch a provider's live model list (Phase 7.4b). Calls the pool's `modelFetchUrl` (or the
  * conventional `<baseUrl>/models`) with a key, and reads the ids using the pool's `modelIdPath`.
@@ -619,14 +623,22 @@ export async function fetchProviderModels(
     const safeUrl = assertSafeUrl(url, await getSsrfPolicy());
     const res = await safeFetch(safeUrl, {
       headers: withExtraHeaders(provider.extraHeaders, providerAuthHeader(provider.authHeader, provider.authPrefix, apiKey)),
-      signal:  AbortSignal.timeout(8000),
+      // A full catalogue is big — OpenRouter alone answers with ~344 models — and a slow hop to the
+      // provider could exceed the old 8s and read as "no models" rather than "too slow".
+      signal:  AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    if (!res.ok) return { ok: false, models: [], error: `HTTP ${res.status}` };
+    // Name the URL that was actually called in every failure. A pool pointed at the wrong endpoint
+    // (or a stale modelIdPath) otherwise reports an unexplained empty list, and the operator has no
+    // way to see which of their three URL fields produced it.
+    if (!res.ok) return { ok: false, models: [], error: `HTTP ${res.status} from ${url}` };
     const json   = await res.json().catch(() => null);
     const models = extractModelMeta(json, provider.modelIdPath).slice(0, MAX_FETCHED_MODELS);
-    if (!models.length) return { ok: false, models: [], error: 'No models found at the configured model-id path' };
+    if (!models.length) {
+      return { ok: false, models: [], error: `No models found at "${provider.modelIdPath ?? 'data[].id'}" in the response from ${url}` };
+    }
     return { ok: true, models };
   } catch (err) {
-    return { ok: false, models: [], error: err instanceof Error ? err.message : 'Fetch failed' };
+    const why = err instanceof Error ? err.message : 'Fetch failed';
+    return { ok: false, models: [], error: `${why} (${url})` };
   }
 }

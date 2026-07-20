@@ -21,6 +21,7 @@ import { getSsrfPolicy } from '../../services/ssrf.service';
 import { prisma }              from '../../lib/prisma';
 import { randomUUID } from 'crypto';
 import { validateProviderCredentials, validateModel, fetchProviderModels } from '../../services/nexus.service';
+import { removeModelsForProvider } from '../../services/model.service';
 import { z }                   from 'zod';
 import { adminGuard, adminWriteGuard } from './guard';
 
@@ -91,7 +92,19 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
 
   fastify.delete('/admin/providers/:id', adminWriteGuard, async (request, reply) => {
     const { id } = request.params as { id: string };
+    // Read the row first: once it is gone we can no longer tell which provider slug it held, and
+    // that slug is the only thing tying the registry's models to this pool.
+    const pool = await prisma.nexusProvider.findUnique({ where: { id }, select: { provider: true } });
     await prisma.nexusProvider.delete({ where: { id } });
+
+    // The model registry is keyed by provider slug with no foreign key, so deleting a pool used to
+    // orphan its models — they stayed in the registry and reappeared the moment a pool of the same
+    // provider was created again. Clear them, but only when this was the LAST pool for that slug:
+    // a sibling pool of the same provider is still serving those models.
+    if (pool) {
+      const siblings = await prisma.nexusProvider.count({ where: { provider: pool.provider } });
+      if (siblings === 0) await removeModelsForProvider(pool.provider);
+    }
     return reply.send({ success: true });
   });
 
