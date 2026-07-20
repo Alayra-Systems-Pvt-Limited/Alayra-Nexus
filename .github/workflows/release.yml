@@ -49,7 +49,7 @@ jobs:
 
       - name: Derive image tags & labels
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           # Every tag pattern below is expanded once per image, so both registries get the same
           # version / major.minor / latest set from a single build.
