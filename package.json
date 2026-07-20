@@ -15,7 +15,8 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed": "tsx scripts/seed/seed.ts"
+    "seed": "tsx scripts/seed/seed.ts",
+    "demo:fixtures": "tsx scripts/demo/buildFixtures.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",
