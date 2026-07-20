@@ -54,8 +54,9 @@ export function Login({ onAuthed }: { onAuthed: () => void }) {
     e.preventDefault();
     if (!password || busy) return;
     setBusy(true); setError(null);
-    // finally guarantees the button re-enables even if `login` throws (network drop) — otherwise a
-    // single failed request would lock the form until reload.
+    // catch + finally: a thrown `login` (network drop) must both say so and re-enable the button.
+    // finally alone would silently re-enable and let the rejection escape unhandled, leaving the
+    // person staring at a form that just did nothing.
     try {
       const r = await login(password, needCode ? code : undefined, email);
       if (r.ok) { onAuthed(); return; }
@@ -69,6 +70,9 @@ export function Login({ onAuthed }: { onAuthed: () => void }) {
       setError(r.lockedOut && r.retryAfter
         ? `Too many attempts. Try again in ${r.retryAfter}s.`
         : (r.error ?? 'Invalid credentials.'));
+    } catch {
+      setHint(null);
+      setError('Could not reach the gateway. Check your connection and try again.');
     } finally {
       setBusy(false);
     }

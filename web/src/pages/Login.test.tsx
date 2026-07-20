@@ -93,7 +93,9 @@ describe('Login', () => {
     await waitFor(() => expect(screen.getByText(/try again in 900s/i)).toBeInTheDocument());
   });
 
-  it('re-enables the button when the sign-in request throws, rather than locking the form', async () => {
+  it('says so and re-enables the button when the sign-in request throws', async () => {
+    // A rejected request must be caught, not merely survived: the button re-enables AND the person
+    // is told why. Letting it escape would leave a silent no-op form and an unhandled rejection.
     loginFn.mockRejectedValue(new Error('network down'));
     render(<Login onAuthed={vi.fn()} />);
     await signInScreen();
@@ -101,8 +103,8 @@ describe('Login', () => {
     typePassword('s3cret');
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
-    // The finally block must re-enable the button so the user can retry.
-    await waitFor(() => expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled());
+    await waitFor(() => expect(screen.getByText(/could not reach the gateway/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled();
   });
 
   it('will not submit an empty password', async () => {
