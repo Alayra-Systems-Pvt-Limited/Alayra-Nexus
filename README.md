@@ -30,7 +30,9 @@ with full usage analytics and cost tracking built in.
 
 <br>
 
-### [**▶ Live demo**](https://alayra-systems-pvt-limited.github.io/Alayra-Nexus/demo/) · [Quick start](#quick-start) · [How it compares](#how-it-compares) · [Screens](#screens) · [Connect your tools](#connect-your-tools) · [API](#api-reference)
+[![Open the live demo](https://img.shields.io/badge/▶%20Live%20demo-open%20the%20dashboard-6d28d9?style=for-the-badge)](https://alayra-systems-pvt-limited.github.io/Alayra-Nexus/demo/)
+
+**[Quick start](#quick-start)** · [How it compares](#how-it-compares) · [Screens](#screens) · [Connect your tools](#connect-your-tools) · [API](#api-reference)
 
 <sub>The demo is the real dashboard, signed in as a viewer, reading a frozen snapshot of a gateway
 seeded with synthetic traffic. No sign-up, nothing to install, and nothing you do there is saved.</sub>
