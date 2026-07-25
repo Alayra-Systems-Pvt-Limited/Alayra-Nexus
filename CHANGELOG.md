@@ -23,6 +23,17 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   names the two settings that disagree. Groundwork for SQLite and in-memory operation; neither is
   available yet, and the boot says so plainly instead of half-starting.
 
+- **Redis is now optional.** Without `REDIS_URL` the gateway keeps counters, sessions, breaker state
+  and the response cache in process, and starts with no Redis at all. Everything a Redis deployment
+  does still works: rate-limit admission, the per-key Max Users cap, circuit-breaker escalation,
+  budget accumulation, the session index and sign-out. The six Lua scripts each gained a JavaScript
+  twin declared beside the Lua it stands in for, and a parity suite runs every scenario through both
+  a real Redis and the in-process store and fails if they disagree.
+  **The costs, unchanged from the plan:** a restart signs everyone out and resets rate-limit windows
+  and breaker state; one process only, since a second instance would keep its own separate counters.
+  Budgets are the exception — they re-derive from usage history, so spend stays correct. The Health
+  page and `/ready` name the store in use rather than reporting on a Redis that is not there.
+
 ### Fixed
 - **A malformed `SELECT version()` row no longer takes the whole Health response down.** The Postgres
   introspection read guarded a missing row but not a null column, so an unexpected shape raised a

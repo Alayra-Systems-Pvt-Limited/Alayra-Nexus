@@ -44,6 +44,19 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    # A throwaway Redis so the KV parity suite can run its real-Redis half. Without it that half
+    # skips, the twins are only ever checked against themselves, and a translation error in one of
+    # the six Lua scripts would ship silently — which is the entire failure mode the suite exists
+    # to prevent. It is emptied by the tests, so it must never be anything but disposable.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -53,6 +66,8 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npm test
+        env:
+          PARITY_REDIS_URL: redis://localhost:6379
 
   build:
     name: Build

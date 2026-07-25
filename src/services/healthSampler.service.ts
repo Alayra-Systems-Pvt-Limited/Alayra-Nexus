@@ -171,6 +171,7 @@ export async function runReadyChecks(): Promise<{ ready: boolean; status: Health
     loopP99Ms: last?.loopP99Ms ?? 0,
     heapUsedBytes: process.memoryUsage().heapUsed,
     heapLimitBytes: heapLimitBytes(),
+    kvLabel: KV_LABEL[resolveMode().kv],
   });
   const { status } = summarize(checks);
   // Only a dead dependency refuses traffic. "Degraded" still serves — pulling a slow-but-working
@@ -319,6 +320,7 @@ export async function getHealthOverview(now: number = Date.now()): Promise<Healt
     loopP99Ms: last?.loopP99Ms ?? 0,
     heapUsedBytes: last?.heapUsedBytes ?? process.memoryUsage().heapUsed,
     heapLimitBytes: heapLimitBytes(),
+    kvLabel: KV_LABEL[resolveMode().kv],
   });
   const { status, summary } = summarize(checks);
 

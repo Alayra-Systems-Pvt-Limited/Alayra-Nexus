@@ -15,11 +15,65 @@
  */
 
 import Redis from 'ioredis';
+import { MemoryKv } from './kv/memory';
 
 const REDIS_URL = process.env.REDIS_URL?.trim();
-if (!REDIS_URL) throw new Error('FATAL: REDIS_URL is not set');
 
-export const redis = new Redis(REDIS_URL);
+/**
+ * The key-value store, chosen once at import (S1).
+ *
+ * With REDIS_URL set this is ioredis, byte for byte what it always was. Without it, an in-process
+ * store answering the same commands — which is what makes running with no Redis a real option
+ * rather than a crash. `lib/mode.ts` decides what the gateway REPORTS; this decides what it USES,
+ * and both read the same variable so they cannot disagree.
+ *
+ * This used to throw on a missing REDIS_URL. It no longer needs to: `bootGuard.ts` already refuses,
+ * before this module is reached, any configuration the gateway cannot honour — and with a message
+ * that names the setting rather than the symptom.
+ *
+ * The exported name stays `redis`, deliberately. Eighteen modules import it and sixteen test files
+ * mock it as `vi.mock('../lib/redis', () => ({ redis: { … } }))`; renaming it would touch every one
+ * of them for no gain.
+ */
+export const redis = (REDIS_URL ? new Redis(REDIS_URL) : new MemoryKv()) as unknown as Redis;
+
+/**
+ * Every command this codebase actually issues, as a shape MemoryKv must satisfy.
+ *
+ * The cast above is unavoidable — ioredis's type is enormous and the memory store implements a
+ * deliberate subset — but a bare cast would also silence a genuinely missing method until it threw
+ * in production. This declaration is the guard: the assignment below is a compile error the moment
+ * MemoryKv stops covering something the gateway calls, or a signature drifts.
+ *
+ * Adding a Redis command anywhere in `src` means adding it here and to MemoryKv. That is the intent.
+ */
+interface UsedCommands {
+  get(key: string): Promise<string | null>;
+  mget(keys: string[]): Promise<(string | null)[]>;
+  set(key: string, value: string, ...opts: (string | number)[]): Promise<'OK' | null>;
+  del(...keys: (string | string[])[]): Promise<number>;
+  unlink(...keys: (string | string[])[]): Promise<number>;
+  exists(...keys: (string | string[])[]): Promise<number>;
+  incr(key: string): Promise<number>;
+  expire(key: string, seconds: number | string): Promise<number>;
+  ttl(key: string): Promise<number>;
+  sadd(key: string, ...members: (string | string[])[]): Promise<number>;
+  srem(key: string, ...members: (string | string[])[]): Promise<number>;
+  smembers(key: string): Promise<string[]>;
+  sismember(key: string, member: string): Promise<number>;
+  scan(cursor: string | number, ...args: (string | number)[]): Promise<[string, string[]]>;
+  eval(lua: string, numKeys: number | string, ...rest: (string | number)[]): Promise<unknown>;
+  multi(): { exec(): Promise<[Error | null, unknown][]> };
+  ping(): Promise<string>;
+  info(): Promise<string>;
+}
+
+// Never read at runtime; it exists so `tsc` proves the memory store covers the surface in use.
+const _memoryCoversEveryCommandWeUse: UsedCommands = new MemoryKv();
+void _memoryCoversEveryCommandWeUse;
+
+/** True when the in-process store is in use. Read by health reporting; nothing else should care. */
+export const usingMemoryKv = !REDIS_URL;
 
 // ── Error logging ─────────────────────────────────────────────────────────────
 // ioredis emits an `error` per reconnection attempt. Logging the full object each

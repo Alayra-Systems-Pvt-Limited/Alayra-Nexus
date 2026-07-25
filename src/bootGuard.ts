@@ -53,17 +53,17 @@ function check(): ResolvedMode {
   // — the operator learns what is supported and exactly which variables to set.
   if (!m.isImplemented) {
     die([
-      `Alayra Nexus runs on PostgreSQL and Redis. This environment resolves to ${describeMode(m)}.`,
+      `Alayra Nexus needs PostgreSQL for its durable store. This environment resolves to ${describeMode(m)}.`,
       '',
       ...m.reasons,
       '',
-      'Standalone mode (a local SQLite file with in-process counters) is in development and not',
-      'available in this build. To start the gateway, set both:',
+      'A SQLite database is in development and not available in this build. Redis is now optional —',
+      'without REDIS_URL the gateway keeps counters and sessions in memory — but a database is not.',
+      'Set:',
       '',
       '  DATABASE_URL=postgresql://user:password@host:5432/dbname',
-      '  REDIS_URL=redis://host:6379',
       '',
-      'The three-line Docker Compose quick start in the README brings both up for you.',
+      'The three-line Docker Compose quick start in the README brings one up for you.',
     ]);
   }
 

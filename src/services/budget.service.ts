@@ -15,6 +15,7 @@
  */
 
 import { redis }  from '../lib/redis';
+import { defineScript } from '../lib/kv/memory';
 import { prisma } from '../lib/prisma';
 
 // ── Team budget enforcement ───────────────────────────────────────────────────
@@ -88,12 +89,21 @@ export function budgetRedisKey(teamId: string, pk: string): string {
 // Add spend only if the window counter already exists. If it doesn't, the next
 // admission check seeds it from the TokenUsage sum — which includes this request
 // once the usage pipeline flushes — so a stale partial counter is never created.
-const ADD_SPEND_LUA = `
+export const ADD_SPEND_LUA = defineScript(`
 if redis.call('EXISTS', KEYS[1]) == 1 then
   return redis.call('INCRBYFLOAT', KEYS[1], ARGV[1])
 end
 return false
-`;
+`, ([budgetKey], [usd], kv) => {
+  // Two return shapes to honour exactly, and both are easy to get subtly wrong:
+  //
+  //   • INCRBYFLOAT answers a STRING in Redis, and the caller does parseFloat(String(res)).
+  //   • Lua `false` arrives in JS as NULL, and the caller tests `res == null`. Returning JS `false`
+  //     here would pass that test (`false == null` is false) and then parseFloat('false') → NaN,
+  //     silently corrupting the running spend total.
+  if (kv.exists(budgetKey) === 1) return kv.incrbyfloat(budgetKey, Number(usd));
+  return null;
+});
 
 /**
  * Current-period spend for a team, in USD. Redis-backed; on a miss the counter is

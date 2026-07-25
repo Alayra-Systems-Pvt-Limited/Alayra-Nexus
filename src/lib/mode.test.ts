@@ -152,17 +152,19 @@ describe('resolveMode — malformed input', () => {
 });
 
 describe('resolveMode — what is actually buildable today', () => {
-  // S0 resolves and reports; it swaps nothing. Anything other than Postgres + Redis needs the S1/S2
-  // substitutes, and must be flagged so the boot refuses instead of half-running.
-  it('marks Postgres + Redis as implemented', () => {
-    expect(resolveMode(env({ DATABASE_URL: PG, REDIS_URL: REDIS })).isImplemented).toBe(true);
+  // S1 shipped the in-memory KV, so either counter store works. SQLite is S2 and does not exist
+  // yet, so a resolution naming it must still be refused at boot rather than half-run.
+  it.each([
+    ['Postgres + Redis',  { DATABASE_URL: PG, REDIS_URL: REDIS }],
+    ['Postgres + memory', { DATABASE_URL: PG }],
+  ])('marks %s as implemented', (_label, e) => {
+    expect(resolveMode(env(e)).isImplemented).toBe(true);
   });
 
   it.each([
-    ['standalone',            {}],
-    ['SQLite + Redis',        { DATABASE_URL: FILE, REDIS_URL: REDIS }],
-    ['Postgres + memory',     { DATABASE_URL: PG }],
-  ])('marks %s as not yet implemented', (_label, e) => {
+    ['standalone (SQLite + memory)', {}],
+    ['SQLite + Redis',               { DATABASE_URL: FILE, REDIS_URL: REDIS }],
+  ])('marks %s as not yet implemented — the database is what is missing', (_label, e) => {
     expect(resolveMode(env(e)).isImplemented).toBe(false);
   });
 });

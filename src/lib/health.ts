@@ -243,12 +243,20 @@ export function evaluateChecks(args: {
   pgOk: boolean; pgMs: number | null;
   loopP99Ms: number;
   heapUsedBytes: number; heapLimitBytes: number;
+  /**
+   * What the KV actually is (S1). Left undefined the label stays "Redis PING", which is what every
+   * caller before standalone mode meant. With in-process counters there is no Redis to ping, and a
+   * check confidently reporting on one would be reporting on nothing — /ready is read by
+   * orchestrators, so a label there has to name the thing that was really probed.
+   */
+  kvLabel?: string;
 }): ReadyCheck[] {
   const heapPct = args.heapLimitBytes > 0 ? (args.heapUsedBytes / args.heapLimitBytes) * 100 : 0;
   const ms = (v: number | null) => (v === null ? 'no response' : `${v.toFixed(1)} ms`);
+  const kvCheckLabel = args.kvLabel && args.kvLabel !== 'Redis' ? `${args.kvLabel} read` : 'Redis PING';
   return [
     {
-      id: 'redis', label: 'Redis PING',
+      id: 'redis', label: kvCheckLabel,
       measured: ms(args.redisMs), threshold: `< ${THRESHOLDS.redisPingMs} ms`,
       status: probeStatus(args.redisOk, args.redisMs, THRESHOLDS.redisPingMs),
     },

@@ -34,7 +34,7 @@ import adminRoutes        from './routes/admin';
 import brandingRoutes     from './routes/branding.routes';
 import { startHealthSampler, runReadyChecks } from './services/healthSampler.service';
 import { prisma }         from './lib/prisma';
-import { redis }          from './lib/redis';
+import { redis, usingMemoryKv } from './lib/redis';
 import { deriveRateLimitKey } from './lib/rateLimitKey';
 import { ensureApiKey }    from './services/apiKey.service';
 import { reconcilePoolsToRegistry } from './services/model.service';
@@ -124,13 +124,20 @@ async function bootstrap() {
   });
 
   // ── Abuse guard (NOT a throughput cap — see note above) ──────────────
-  // Redis-backed so the limit is correct across horizontally-scaled instances
-  // (an in-memory store would under-count once you run more than one replica).
+  // Redis-backed when a Redis exists, so the limit stays correct across horizontally-scaled
+  // instances (an in-memory store under-counts the moment you run more than one replica). Without
+  // Redis there is only one process to count for, so the plugin's own store is exact — and running
+  // more than one replica in that mode is precisely what standalone mode says not to do.
   // Keyed per-credential (sha256 of the bearer token) so a single leaked or
   // runaway team key is isolated to its own bucket instead of throttling the
   // whole gateway; falls back to client IP for missing/malformed auth.
   await app.register(rateLimit, {
-    redis,
+    // Only when there is a real Redis. The plugin drives it through `defineCommand`, an ioredis
+    // facility for registering server-side Lua — not something an in-process store can offer, and
+    // handing it one crashes the boot with `defineCommand is not a function`. Omitting the option
+    // makes the plugin use its own in-process counter, which is the right store in that mode anyway:
+    // there is exactly one process, so a shared one would be indirection with no purpose.
+    ...(usingMemoryKv ? {} : { redis }),
     max:        ABUSE_RATE_LIMIT_MAX,
     timeWindow: ABUSE_RATE_LIMIT_WINDOW,
     skipOnError: true, // fail open: a Redis blip must never take the proxy down

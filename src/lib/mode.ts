@@ -162,9 +162,9 @@ export function resolveMode(env: NodeJS.ProcessEnv = process.env): ResolvedMode 
   // panel call a perfectly persistent file "not durable".
   const durable = kv !== 'memory';
 
-  // Only the original pairing is buildable today. SQLite lands in S2, the in-memory KV in S1; until
-  // then, resolving to anything else has to be an honest refusal rather than a broken boot.
-  const isImplemented = db === 'postgres' && kv === 'redis';
+  // The in-memory KV shipped in S1, so either KV is buildable. SQLite is S2 and is not, so a
+  // resolution naming it must still be an honest refusal rather than a broken boot.
+  const isImplemented = db === 'postgres';
 
   return { mode, db, kv, durable, isImplemented, reasons, errors };
 }

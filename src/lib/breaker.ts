@@ -15,6 +15,7 @@
  */
 
 import { redis } from './redis';
+import { defineScript } from './kv/memory';
 
 // ── Circuit breaker ───────────────────────────────────────────────────────────
 // Per-key resilience state, held entirely in Redis so it is atomic and correct
@@ -71,19 +72,27 @@ export function nextCooldown(currentSeconds: number, base = BASE_COOLDOWN_SECOND
 const OPEN_KEY_TTL_SECONDS = MAX_COOLDOWN_SECONDS * 4;
 
 // KEYS[1]=open KEYS[2]=probe | ARGV[1]=nowMs ARGV[2]=probeTtl
-const ACQUIRE_LUA = `
+export const ACQUIRE_LUA = defineScript(`
 local open = redis.call('GET', KEYS[1])
 if not open then return 'closed' end
 if tonumber(ARGV[1]) < tonumber(open) then return 'open' end
 local claimed = redis.call('SET', KEYS[2], '1', 'NX', 'EX', tonumber(ARGV[2]))
 if claimed then return 'probe' else return 'open' end
-`;
+`, ([openKeyName, probeKeyName], [nowMs, probeTtl], kv) => {
+  // Returns STRINGS, unlike every other script here — acquire() compares against 'probe'/'open'.
+  const open = kv.get(openKeyName);
+  if (open === null) return 'closed';
+  if (Number(nowMs) < Number(open)) return 'open';
+  // SET NX answers 'OK' or null. Exactly one caller in the half-open window wins the probe slot,
+  // and only because nothing can run between the read and the write.
+  return kv.set(probeKeyName, '1', 'NX', 'EX', Number(probeTtl)) ? 'probe' : 'open';
+});
 
 // KEYS[1]=strikes KEYS[2]=cooldown KEYS[3]=open KEYS[4]=probe
 // ARGV[1]=isProbe ARGV[2]=threshold ARGV[3]=strikeWindow ARGV[4]=base
 // ARGV[5]=cap ARGV[6]=nowMs ARGV[7]=openTtl
 // Returns the cooldown seconds if the breaker (re)opened, or 0 if it did not.
-const SERVER_FAILURE_LUA = `
+export const SERVER_FAILURE_LUA = defineScript(`
 redis.call('DEL', KEYS[4])
 local function trip()
   local cd = tonumber(redis.call('GET', KEYS[2]) or '0')
@@ -101,7 +110,28 @@ local strikes = redis.call('INCR', KEYS[1])
 if strikes == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3])) end
 if strikes >= tonumber(ARGV[2]) then return trip() end
 return 0
-`;
+`, ([strikesK, cooldownK, openK, probeK], [isProbe, threshold, strikeWindow, base, cap, nowMs, openTtl], kv) => {
+  kv.del(probeK);
+
+  const trip = (): number => {
+    const current = Number(kv.get(cooldownK) ?? '0');
+    let cd = current <= 0 ? Number(base) : current * 2;
+    if (cd > Number(cap)) cd = Number(cap);
+    kv.set(cooldownK, String(cd), 'EX', Number(openTtl));
+    // The open key holds the absolute reopen time, with a TTL well past it, so it survives INTO the
+    // half-open window rather than vanishing exactly when the probe logic needs it.
+    kv.set(openK, String(Number(nowMs) + cd * 1000), 'EX', Number(openTtl));
+    kv.del(strikesK);
+    return cd;
+  };
+
+  if (Number(isProbe) === 1) return trip();
+
+  const strikes = kv.incr(strikesK);
+  if (strikes === 1) kv.expire(strikesK, Number(strikeWindow));
+  if (strikes >= Number(threshold)) return trip();
+  return 0;
+});
 
 /**
  * Live routing gate for a key. Atomically decides whether the key is usable now
