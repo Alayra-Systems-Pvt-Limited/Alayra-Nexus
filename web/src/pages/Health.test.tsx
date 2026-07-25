@@ -216,3 +216,36 @@ describe('Health — Storage card', () => {
     expect(screen.queryByText('Storage')).not.toBeInTheDocument();
   });
 });
+
+// The dependency cards used to hardcode "Redis" and "PostgreSQL". Correct while those were the only
+// possible engines — and a confident lie the moment counters moved in-process, since the card would
+// report "Redis · Healthy" about a Redis that does not exist.
+describe('Health — dependency cards name the real engine', () => {
+  it('says Redis when it is Redis', async () => {
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('All systems operational')).toBeInTheDocument());
+    expect(screen.getByText('PING round-trip')).toBeInTheDocument();
+  });
+
+  it('names the in-process store instead of claiming a Redis', async () => {
+    get.mockImplementation((path: string) =>
+      path.startsWith('/admin/health/overview')
+        ? Promise.resolve(overview({
+            backend: {
+              mode: 'standalone', db: 'postgres', kv: 'memory',
+              dbLabel: 'PostgreSQL', kvLabel: 'In-process memory',
+              durable: false, summary: 'PostgreSQL + in-process memory (data is not durable)',
+              warning: 'Counters and sessions are held in memory.',
+            },
+          }))
+        : Promise.resolve(nexusOverview));
+
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument());
+
+    // The card is titled by the store actually in use, and does not claim a PING it never sent.
+    expect(screen.getAllByText('In-process memory').length).toBeGreaterThan(0);
+    expect(screen.getByText('read round-trip')).toBeInTheDocument();
+    expect(screen.queryByText('PING round-trip')).not.toBeInTheDocument();
+  });
+});

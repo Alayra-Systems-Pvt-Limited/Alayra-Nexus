@@ -46,6 +46,12 @@ export function ServerTab() {
   const sampledAgo = d.sampledAt ? Math.max(0, Math.round((Date.now() - new Date(d.sampledAt).getTime()) / 1000)) : null;
   const collecting = d.window.samples < d.window.capacity;
 
+  // The KV card's identity comes from the server, so a gateway holding counters in process is never
+  // labelled as a Redis it does not have. Redis-only figures (version, uptime, clients, ops/s) are
+  // simply absent from that store's INFO and already render as "—" rather than invented zeros.
+  const isRedis = (d.backend?.kv ?? 'redis') === 'redis';
+  const kvName  = d.backend?.kvLabel ?? 'Redis';
+
   const borderFor = (st: HealthStatus) => (st === 'down' ? s.critBorder : st === 'degraded' ? s.warnBorder : '');
   const bigTone   = (st: HealthStatus) => (st === 'down' ? s.critText : st === 'degraded' ? s.warnText : '');
 
@@ -133,15 +139,19 @@ export function ServerTab() {
         <div class={`${s.dep} ${borderFor(redisStatus)}`}>
           <div class={s.depHead}>
             <span class={s.depIco}><Zap size={13} /></span>
-            <span class={s.depName}>Redis</span>
+            {/* Named from the backend the gateway reports, not hardcoded: with counters held in
+                process there is no Redis, and a card confidently titled "Redis · Healthy" would be
+                reporting on something that does not exist. Falls back to "Redis" for a gateway too
+                old to send `backend`. */}
+            <span class={s.depName}>{kvName}</span>
             <StatusPill status={redisStatus} />
           </div>
           <div class={s.depMain}>
             <div>
               <span class={`${s.depBig} ${bigTone(redisStatus)}`}>{fmtMs(d.redis.pingMs)}</span>
-              <span class={s.depLbl}>PING round-trip</span>
+              <span class={s.depLbl}>{isRedis ? 'PING round-trip' : 'read round-trip'}</span>
             </div>
-            <Sparkline points={d.series.map((x) => x.redisMs)} tone={redisStatus === 'healthy' ? 'ok' : 'warn'} label="Redis ping latency per minute, last hour" />
+            <Sparkline points={d.series.map((x) => x.redisMs)} tone={redisStatus === 'healthy' ? 'ok' : 'warn'} label={`${kvName} latency per minute, last hour`} />
           </div>
           <div class={s.chips}>
             <span class={s.chip}>p95 <b>{fmtMs(d.redis.p95Ms)}</b></span>
@@ -158,7 +168,7 @@ export function ServerTab() {
         <div class={`${s.dep} ${borderFor(pgStatus)}`}>
           <div class={s.depHead}>
             <span class={s.depIco}><Database size={13} /></span>
-            <span class={s.depName}>PostgreSQL</span>
+            <span class={s.depName}>{d.backend?.dbLabel ?? 'PostgreSQL'}</span>
             <StatusPill status={pgStatus} />
           </div>
           <div class={s.depMain}>
