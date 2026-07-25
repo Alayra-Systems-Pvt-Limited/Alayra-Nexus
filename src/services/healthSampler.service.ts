@@ -31,6 +31,10 @@ import v8 from 'v8';
 import { redis }  from '../lib/redis';
 import { prisma } from '../lib/prisma';
 import {
+  resolveMode, describeMode, ephemeralWarning, DB_LABEL, KV_LABEL,
+  type NexusMode, type DbEngine, type KvEngine,
+} from '../lib/mode';
+import {
   RingBuffer, minuteStrip, minuteSeries, percentile, parseRedisInfo, parseCgroupLimit,
   evaluateChecks, summarize, hitRate,
   type HealthSample, type RedisInfoStats, type ReadyCheck, type HealthStatus,
@@ -221,7 +225,13 @@ async function readPgStats(): Promise<PgStats> {
   const blksRead = num(db?.blksRead), blksHit = num(db?.blksHit);
   const reads = (blksRead ?? 0) + (blksHit ?? 0);
   // "PostgreSQL 16.2 on x86_64…" → "16.2"
-  const version = versionRow[0]?.v.match(/PostgreSQL\s+([\d.]+)/)?.[1] ?? null;
+  //
+  // Both `?.`s are load-bearing. The first guards a missing row (the query is `.catch(() => [])`, so
+  // a failure arrives as an empty array); the second guards a row whose column is null or absent. It
+  // was `?.v.match(...)` — row-guarded but column-unguarded — which turns any unexpected shape from
+  // `SELECT version()` into a TypeError that takes the whole Health response down, rather than the
+  // "version —" the UI already knows how to render.
+  const version = versionRow[0]?.v?.match(/PostgreSQL\s+([\d.]+)/)?.[1] ?? null;
 
   return {
     version,
@@ -243,11 +253,36 @@ async function readRedisStats(): Promise<RedisInfoStats | null> {
   catch { return null; }
 }
 
+/**
+ * Which stores this gateway is running on (S0). Reported so an operator never has to infer it from
+ * environment variables they may not be able to see — and so a gateway whose counters live in memory
+ * says so in the dashboard rather than looking identical to a replicated production one.
+ *
+ * Admin-only, deliberately: the public /health and /ready stay `{ok, ts}` and a check list. "This
+ * gateway keeps its rate-limit windows in memory and runs one process" is a useful thing to know
+ * before attacking it, so it is not something an unauthenticated caller gets.
+ */
+export interface BackendInfo {
+  mode: NexusMode;
+  db:   DbEngine;
+  kv:   KvEngine;
+  /** Display names, resolved server-side so the dashboard never hardcodes an engine name. */
+  dbLabel: string;
+  kvLabel: string;
+  /** False when a restart would lose something (in-memory counters). */
+  durable: boolean;
+  /** One line naming the pair, e.g. "PostgreSQL + Redis". */
+  summary: string;
+  /** The caution to show alongside it, or null when there is nothing to caution about. */
+  warning: string | null;
+}
+
 export interface HealthOverview {
   status:  HealthStatus;
   summary: string;
   checks:  ReadyCheck[];
   ready:   boolean;
+  backend: BackendInfo;
   strip:   StripCell[];        // last 60 minutes, oldest first
   series:  MinutePoint[];      // per-minute aggregates for the sparklines
   window:  { minutes: number; samples: number; capacity: number };  // how much history exists yet
@@ -287,9 +322,18 @@ export async function getHealthOverview(now: number = Date.now()): Promise<Healt
   });
   const { status, summary } = summarize(checks);
 
+  const m = resolveMode();
+
   return {
     status, summary, checks,
     ready: !checks.some((c) => c.status === 'down'),
+    backend: {
+      mode: m.mode, db: m.db, kv: m.kv,
+      dbLabel: DB_LABEL[m.db], kvLabel: KV_LABEL[m.kv],
+      durable: m.durable,
+      summary: describeMode(m),
+      warning: ephemeralWarning(m),
+    },
     strip:  minuteStrip(all, WINDOW_MINUTES, now),
     series: minuteSeries(all, WINDOW_MINUTES, now),
     window: { minutes: WINDOW_MINUTES, samples: all.length, capacity: CAPACITY },

@@ -133,3 +133,70 @@ describe('getHealthOverview', () => {
     expect(o.redis.up).toBe(true); // the PING still proved it alive
   });
 });
+
+// The `backend` block (S0). The Health page reads this to tell an operator which stores the gateway
+// is on — a question they otherwise answer by guessing at environment variables. It is also the one
+// part of the overview derived from configuration rather than measurement, so it is worth asserting
+// that it reports the environment truthfully instead of a hardcoded pair.
+describe('getHealthOverview — backend block', () => {
+  const ENV = process.env;
+  beforeEach(() => {
+    process.env = { ...ENV };
+    // readPgStats runs several introspection queries; an empty result is the benign shape for all.
+    queryRaw.mockResolvedValue([] as never);
+  });
+  afterEach(() => { process.env = ENV; });
+
+  it('reports Postgres + Redis and no caution when both are configured', async () => {
+    process.env.DATABASE_URL = 'postgresql://u:p@h:5432/d';
+    process.env.REDIS_URL    = 'redis://h:6379';
+    delete process.env.NEXUS_MODE;
+
+    const { backend } = await getHealthOverview();
+    expect(backend).toMatchObject({
+      mode: 'server', db: 'postgres', kv: 'redis',
+      dbLabel: 'PostgreSQL', kvLabel: 'Redis',
+      durable: true, summary: 'PostgreSQL + Redis', warning: null,
+    });
+  });
+
+  it('reports an in-memory KV as not durable, with the reason', async () => {
+    process.env.DATABASE_URL = 'postgresql://u:p@h:5432/d';
+    delete process.env.REDIS_URL;
+    delete process.env.NEXUS_MODE;
+
+    const { backend } = await getHealthOverview();
+    expect(backend.kv).toBe('memory');
+    expect(backend.durable).toBe(false);
+    expect(backend.warning).toMatch(/signed out/i);
+  });
+
+  it('carries labels the dashboard can print without knowing any engine names', async () => {
+    process.env.DATABASE_URL = 'file:./nexus.db';
+    delete process.env.REDIS_URL;
+    delete process.env.NEXUS_MODE;
+
+    const { backend } = await getHealthOverview();
+    expect(backend.dbLabel).toBe('SQLite');
+    expect(backend.kvLabel).toBe('In-process memory');
+    expect(backend.summary).toContain('not durable');
+  });
+});
+
+// Found while writing the backend-block tests: readPgStats read `versionRow[0]?.v.match(...)`, which
+// guards a missing ROW but not a null COLUMN — so a version() answering with an unexpected shape
+// crashed the entire Health response instead of degrading to "version —".
+describe('getHealthOverview — malformed introspection rows', () => {
+  it('survives a version row whose column is null', async () => {
+    queryRaw.mockResolvedValue([{ v: null }] as never);
+    const o = await getHealthOverview();
+    expect(o.postgres.stats?.version).toBeNull();
+    expect(o.status).toBeDefined();
+  });
+
+  it('survives a version row missing the column entirely', async () => {
+    queryRaw.mockResolvedValue([{ somethingElse: 1 }] as never);
+    const o = await getHealthOverview();
+    expect(o.postgres.stats?.version).toBeNull();
+  });
+});

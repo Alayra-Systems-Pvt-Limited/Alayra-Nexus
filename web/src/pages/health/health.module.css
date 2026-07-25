@@ -133,3 +133,18 @@
 /* Collecting note (fresh process — the honest partial-history state) */
 .collecting { display: flex; gap: 8px; align-items: flex-start; margin-top: 2px; font-size: 11px;
               color: var(--muted); line-height: 1.5; }
+
+/* The Storage card's caution line (S0): shown when a restart would lose counters/sessions, or when
+   the database is a single local file. Warning-toned rather than critical — the gateway is working
+   as configured; the operator just needs to know what that configuration costs them. */
+.storageWarn {
+  margin: 10px 0 0;
+  padding: 8px 11px;
+  border-radius: var(--radius-sm);
+  /* Same yellow the warnBorder/warnText pair already uses, tinted for a block of prose rather than
+     a single value. --warn-bg/--warn-text do not exist in tokens.css. */
+  background: color-mix(in srgb, var(--yellow) 9%, transparent);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.5;
+}

@@ -2,39 +2,15 @@
   "generatedAt": "2026-07-20",
   "overview": {
     "stats": {
-      "totalRequests": 89575,
-      "totalCostUsd": 432.4709580000039,
-      "inputTokens7d": 6732794,
-      "outputTokens7d": 2454604,
+      "totalRequests": 88885,
+      "totalCostUsd": 428.7342720000037,
+      "inputTokens7d": 1908064,
+      "outputTokens7d": 693231,
       "activeKeys": 10,
       "activeModels": 10,
       "activeTeams": 5
     },
     "series7d": [
-      {
-        "date": "2026-07-16",
-        "tokens": 2437892,
-        "inputTokens": 1786719,
-        "outputTokens": 651173,
-        "requests": 1577,
-        "usd": 7.847775000000001
-      },
-      {
-        "date": "2026-07-17",
-        "tokens": 1812283,
-        "inputTokens": 1323363,
-        "outputTokens": 488920,
-        "requests": 1193,
-        "usd": 5.784508999999999
-      },
-      {
-        "date": "2026-07-18",
-        "tokens": 800972,
-        "inputTokens": 586559,
-        "outputTokens": 214413,
-        "requests": 514,
-        "usd": 2.597681
-      },
       {
         "date": "2026-07-19",
         "tokens": 824171,
@@ -66,70 +42,94 @@
         "tokens": 0,
         "usd": 0,
         "requests": 0
+      },
+      {
+        "date": "2026-07-23",
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "tokens": 0,
+        "usd": 0,
+        "requests": 0
+      },
+      {
+        "date": "2026-07-24",
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "tokens": 0,
+        "usd": 0,
+        "requests": 0
+      },
+      {
+        "date": "2026-07-25",
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "tokens": 0,
+        "usd": 0,
+        "requests": 0
       }
     ],
     "topModels": [
       {
         "model": "GPT-4o mini",
-        "tokens": 1945721,
-        "usd": 0.4572210000000004
+        "tokens": 592470,
+        "usd": 0.1365710000000001
       },
       {
         "model": "Claude Sonnet 4.5",
-        "tokens": 1757664,
-        "usd": 9.374301000000006
-      },
-      {
-        "model": "Claude Haiku 4.5",
-        "tokens": 1267006,
-        "usd": 2.246047000000002
+        "tokens": 496726,
+        "usd": 2.620767
       },
       {
         "model": "GPT-4o",
-        "tokens": 1176638,
-        "usd": 4.564319999999999
+        "tokens": 347230,
+        "usd": 1.36678
+      },
+      {
+        "model": "Claude Haiku 4.5",
+        "tokens": 328719,
+        "usd": 0.5835479999999997
       },
       {
         "model": "Gemini 2.0 Flash",
-        "tokens": 979190,
-        "usd": 0.1552340000000001
+        "tokens": 241864,
+        "usd": 0.038239
       }
     ],
     "topKeys": [
       {
-        "id": "0058ed25-559e-4cd3-8d73-d911d7e2c0c4",
-        "name": "research-notebooks",
-        "totalTokens": 1637857,
-        "requests": 1071,
-        "estimatedUsd": 5.410211
-      },
-      {
         "id": "123d561a-65bd-4402-86a2-9ff2d49012c8",
         "name": "platform-staging",
-        "totalTokens": 1610621,
-        "requests": 1043,
-        "estimatedUsd": 4.971840999999997
+        "totalTokens": 480886,
+        "requests": 312,
+        "estimatedUsd": 1.461120999999999
+      },
+      {
+        "id": "0058ed25-559e-4cd3-8d73-d911d7e2c0c4",
+        "name": "research-notebooks",
+        "totalTokens": 460524,
+        "requests": 306,
+        "estimatedUsd": 1.480961
       },
       {
         "id": "f33fb7f1-4cd2-40f0-8ea5-fe53de486586",
         "name": "platform-prod",
-        "totalTokens": 1562068,
-        "requests": 1009,
-        "estimatedUsd": 5.131343000000004
+        "totalTokens": 442516,
+        "requests": 289,
+        "estimatedUsd": 1.507584
       },
       {
         "id": "9c75a0cb-2aa4-43f2-a8d4-18e802ba9d09",
         "name": "support-bot",
-        "totalTokens": 1238106,
-        "requests": 811,
-        "estimatedUsd": 4.182408000000002
+        "totalTokens": 348002,
+        "requests": 226,
+        "estimatedUsd": 1.098947999999999
       },
       {
         "id": "3125f43c-7e76-4f44-9a6c-5687099bedbf",
         "name": "support-analytics",
-        "totalTokens": 1156667,
-        "requests": 746,
-        "estimatedUsd": 3.487721000000001
+        "totalTokens": 323982,
+        "requests": 212,
+        "estimatedUsd": 0.9048950000000001
       }
     ],
     "recentLogs": [
@@ -218,8 +218,8 @@
   "analytics": {
     "today": {
       "period": "today",
-      "since": "2026-07-22T00:00:00.000Z",
-      "until": "2026-07-22T07:11:25.478Z",
+      "since": "2026-07-25T00:00:00.000Z",
+      "until": "2026-07-25T06:14:09.665Z",
       "totals": {
         "requests": 0,
         "successes": 0,
@@ -237,7 +237,7 @@
       },
       "byDay": [
         {
-          "date": "2026-07-22",
+          "date": "2026-07-25",
           "requests": 0,
           "successes": 0,
           "errors": 0,
@@ -254,63 +254,33 @@
     },
     "7d": {
       "period": "7d",
-      "since": "2026-07-15T07:11:25.552Z",
-      "until": "2026-07-22T07:11:25.552Z",
+      "since": "2026-07-18T06:14:09.783Z",
+      "until": "2026-07-25T06:14:09.783Z",
       "totals": {
-        "requests": 5968,
-        "successes": 5705,
-        "errors": 263,
-        "successRate": 0.9559316353887399,
-        "inputTokens": 6732794,
-        "outputTokens": 2454604,
-        "totalTokens": 9187398,
-        "estimatedUsd": 29.10425399999995,
-        "avgLatencyMs": 1883,
-        "p95LatencyMs": 3962,
-        "cacheHits": 781,
-        "cacheHitRate": 0.136897458369851,
-        "cacheSavedUsd": 5.043794000000003
+        "requests": 1695,
+        "successes": 1610,
+        "errors": 85,
+        "successRate": 0.9498525073746312,
+        "inputTokens": 1908064,
+        "outputTokens": 693231,
+        "totalTokens": 2601295,
+        "estimatedUsd": 7.961536000000016,
+        "avgLatencyMs": 1874,
+        "p95LatencyMs": 3969,
+        "cacheHits": 233,
+        "cacheHitRate": 0.14472049689440994,
+        "cacheSavedUsd": 1.6072350000000004
       },
       "byDay": [
         {
-          "date": "2026-07-15",
-          "requests": 1462,
-          "successes": 1399,
-          "errors": 63,
-          "usd": 7.307185999999987,
-          "savedUsd": 1.1300690000000007,
-          "cacheHits": 182,
-          "avgLatencyMs": 1861
-        },
-        {
-          "date": "2026-07-16",
-          "requests": 1577,
-          "successes": 1520,
-          "errors": 57,
-          "usd": 7.847775000000001,
-          "savedUsd": 1.266021999999999,
-          "cacheHits": 208,
-          "avgLatencyMs": 1869
-        },
-        {
-          "date": "2026-07-17",
-          "requests": 1193,
-          "successes": 1138,
-          "errors": 55,
-          "usd": 5.784508999999999,
-          "savedUsd": 1.0008620000000001,
-          "cacheHits": 155,
-          "avgLatencyMs": 1943
-        },
-        {
           "date": "2026-07-18",
-          "requests": 514,
-          "successes": 484,
-          "errors": 30,
-          "usd": 2.597681,
-          "savedUsd": 0.521514,
-          "cacheHits": 72,
-          "avgLatencyMs": 1823
+          "requests": 473,
+          "successes": 446,
+          "errors": 27,
+          "usd": 2.3944329999999994,
+          "savedUsd": 0.481908,
+          "cacheHits": 69,
+          "avgLatencyMs": 1825
         },
         {
           "date": "2026-07-19",
@@ -351,190 +321,190 @@
           "savedUsd": 0,
           "cacheHits": 0,
           "avgLatencyMs": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "successes": 0,
+          "errors": 0,
+          "usd": 0,
+          "savedUsd": 0,
+          "cacheHits": 0,
+          "avgLatencyMs": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "successes": 0,
+          "errors": 0,
+          "usd": 0,
+          "savedUsd": 0,
+          "cacheHits": 0,
+          "avgLatencyMs": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "successes": 0,
+          "errors": 0,
+          "usd": 0,
+          "savedUsd": 0,
+          "cacheHits": 0,
+          "avgLatencyMs": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 1260,
-          "tokens": 1945721,
-          "usd": 0.45722100000000043
+          "requests": 383,
+          "tokens": 592470,
+          "usd": 0.13657100000000014
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 1144,
-          "tokens": 1757664,
-          "usd": 9.374301000000006
-        },
-        {
-          "model": "Claude Haiku 4.5",
-          "requests": 824,
-          "tokens": 1267006,
-          "usd": 2.246047000000002
+          "requests": 323,
+          "tokens": 496726,
+          "usd": 2.620767
         },
         {
           "model": "GPT-4o",
-          "requests": 767,
-          "tokens": 1176638,
-          "usd": 4.564319999999999
+          "requests": 225,
+          "tokens": 347230,
+          "usd": 1.36678
+        },
+        {
+          "model": "Claude Haiku 4.5",
+          "requests": 211,
+          "tokens": 328719,
+          "usd": 0.5835479999999997
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 640,
-          "tokens": 979190,
-          "usd": 0.15523400000000015
+          "requests": 164,
+          "tokens": 241864,
+          "usd": 0.038238999999999995
         },
         {
           "model": "o3-mini",
-          "requests": 347,
-          "tokens": 552325,
-          "usd": 0.9408769999999995
+          "requests": 100,
+          "tokens": 161339,
+          "usd": 0.26781699999999997
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 311,
-          "tokens": 486488,
-          "usd": 0.27184199999999986
+          "requests": 95,
+          "tokens": 145768,
+          "usd": 0.083333
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 290,
-          "tokens": 431662,
-          "usd": 0.8605349999999998
+          "requests": 84,
+          "tokens": 122422,
+          "usd": 0.23719899999999988
         }
       ],
       "byProvider": [
         {
           "provider": "openai",
-          "requests": 2374,
-          "errors": 100,
-          "tokens": 3674684,
-          "usd": 5.962418000000001
+          "requests": 708,
+          "errors": 29,
+          "tokens": 1101039,
+          "usd": 1.7711679999999992
         },
         {
           "provider": "anthropic",
-          "requests": 2221,
-          "errors": 96,
-          "tokens": 3409774,
-          "usd": 21.82445799999999
+          "requests": 604,
+          "errors": 30,
+          "tokens": 930367,
+          "usd": 5.823240000000001
         },
         {
           "provider": "google",
-          "requests": 930,
-          "errors": 50,
-          "tokens": 1410852,
-          "usd": 1.015769
+          "requests": 248,
+          "errors": 21,
+          "tokens": 364286,
+          "usd": 0.27543799999999985
         },
         {
           "provider": "groq",
-          "requests": 311,
-          "errors": 15,
-          "tokens": 486488,
-          "usd": 0.27184199999999986
+          "requests": 95,
+          "errors": 4,
+          "tokens": 145768,
+          "usd": 0.083333
         },
         {
           "provider": "openrouter",
-          "requests": 132,
-          "errors": 2,
-          "tokens": 205600,
-          "usd": 0.02976699999999999
+          "requests": 40,
+          "errors": 1,
+          "tokens": 59835,
+          "usd": 0.008357000000000002
         }
       ],
       "byModality": [
         {
           "unit": "token",
-          "requests": 5705,
-          "quantity": 9187398,
-          "tokens": 9187398,
-          "usd": 29.10425399999995
+          "requests": 1610,
+          "quantity": 2601295,
+          "tokens": 2601295,
+          "usd": 7.961536000000016
         }
       ],
       "byOutcome": [
         {
           "outcome": "success",
-          "requests": 5705
+          "requests": 1610
         },
         {
           "outcome": "client_error",
-          "requests": 126
-        },
-        {
-          "outcome": "upstream_error",
-          "requests": 64
-        },
-        {
-          "outcome": "no_capacity",
           "requests": 40
         },
         {
-          "outcome": "budget_blocked",
+          "outcome": "no_capacity",
+          "requests": 17
+        },
+        {
+          "outcome": "upstream_error",
           "requests": 17
         },
         {
           "outcome": "blocked",
-          "requests": 16
+          "requests": 6
+        },
+        {
+          "outcome": "budget_blocked",
+          "requests": 5
         }
       ]
     },
     "30d": {
       "period": "30d",
-      "since": "2026-06-22T07:11:25.584Z",
-      "until": "2026-07-22T07:11:25.584Z",
+      "since": "2026-06-25T06:14:09.792Z",
+      "until": "2026-07-25T06:14:09.793Z",
       "totals": {
-        "requests": 33718,
-        "successes": 32217,
-        "errors": 1501,
-        "successRate": 0.9554837178954861,
-        "inputTokens": 38086272,
-        "outputTokens": 13852312,
-        "totalTokens": 51938584,
-        "estimatedUsd": 162.18544500000067,
-        "avgLatencyMs": 1892,
-        "p95LatencyMs": 3964,
-        "cacheHits": 4529,
-        "cacheHitRate": 0.14057795573765403,
-        "cacheSavedUsd": 27.415134000000013
+        "requests": 29569,
+        "successes": 28254,
+        "errors": 1315,
+        "successRate": 0.9555277486556867,
+        "inputTokens": 33430331,
+        "outputTokens": 12150103,
+        "totalTokens": 45580434,
+        "estimatedUsd": 142.69461399999983,
+        "avgLatencyMs": 1891,
+        "p95LatencyMs": 3962,
+        "cacheHits": 3964,
+        "cacheHitRate": 0.14029871876548453,
+        "cacheSavedUsd": 24.020081000000005
       },
       "byDay": [
         {
-          "date": "2026-06-22",
-          "requests": 1208,
-          "successes": 1149,
-          "errors": 59,
-          "usd": 5.689419999999996,
-          "savedUsd": 0.8820089999999996,
-          "cacheHits": 161,
-          "avgLatencyMs": 1896
-        },
-        {
-          "date": "2026-06-23",
-          "requests": 1358,
-          "successes": 1305,
-          "errors": 53,
-          "usd": 6.408140000000003,
-          "savedUsd": 0.9888509999999999,
-          "cacheHits": 183,
-          "avgLatencyMs": 1916
-        },
-        {
-          "date": "2026-06-24",
-          "requests": 1480,
-          "successes": 1410,
-          "errors": 70,
-          "usd": 6.858321000000001,
-          "savedUsd": 1.4290030000000002,
-          "cacheHits": 206,
-          "avgLatencyMs": 1879
-        },
-        {
           "date": "2026-06-25",
-          "requests": 1400,
-          "successes": 1344,
-          "errors": 56,
-          "usd": 6.331209999999999,
-          "savedUsd": 0.9775870000000002,
-          "cacheHits": 185,
-          "avgLatencyMs": 1909
+          "requests": 1297,
+          "successes": 1245,
+          "errors": 52,
+          "usd": 5.79626,
+          "savedUsd": 0.8823970000000001,
+          "cacheHits": 170,
+          "avgLatencyMs": 1915
         },
         {
           "date": "2026-06-26",
@@ -805,198 +775,198 @@
           "savedUsd": 0,
           "cacheHits": 0,
           "avgLatencyMs": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "successes": 0,
+          "errors": 0,
+          "usd": 0,
+          "savedUsd": 0,
+          "cacheHits": 0,
+          "avgLatencyMs": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "successes": 0,
+          "errors": 0,
+          "usd": 0,
+          "savedUsd": 0,
+          "cacheHits": 0,
+          "avgLatencyMs": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "successes": 0,
+          "errors": 0,
+          "usd": 0,
+          "savedUsd": 0,
+          "cacheHits": 0,
+          "avgLatencyMs": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 7289,
-          "tokens": 11246630,
-          "usd": 2.622421999999992
+          "requests": 6387,
+          "tokens": 9864066,
+          "usd": 2.2999970000000016
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 6609,
-          "tokens": 10220724,
-          "usd": 54.44430899999994
+          "requests": 5782,
+          "tokens": 8950410,
+          "usd": 47.57305799999999
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 4717,
-          "tokens": 7229700,
-          "usd": 12.937297999999998
+          "requests": 4107,
+          "tokens": 6279465,
+          "usd": 11.251105000000022
         },
         {
           "model": "GPT-4o",
-          "requests": 4143,
-          "tokens": 6384881,
-          "usd": 24.57839400000003
+          "requests": 3655,
+          "tokens": 5637525,
+          "usd": 21.686153000000015
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 3497,
-          "tokens": 5315867,
-          "usd": 0.8290020000000002
+          "requests": 3054,
+          "tokens": 4650874,
+          "usd": 0.7266690000000002
         },
         {
           "model": "o3-mini",
-          "requests": 2063,
-          "tokens": 3187370,
-          "usd": 5.386979000000004
+          "requests": 1818,
+          "tokens": 2816118,
+          "usd": 4.76700500000001
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 1707,
-          "tokens": 2659213,
-          "usd": 1.4833780000000016
+          "requests": 1508,
+          "tokens": 2360643,
+          "usd": 1.3184950000000024
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 1666,
-          "tokens": 2557283,
-          "usd": 4.925719999999996
+          "requests": 1473,
+          "tokens": 2262802,
+          "usd": 4.369022999999995
         }
       ],
       "byProvider": [
         {
           "provider": "openai",
-          "requests": 13495,
-          "errors": 573,
-          "tokens": 20818881,
-          "usd": 32.587795000000014
+          "requests": 11860,
+          "errors": 506,
+          "tokens": 18317709,
+          "usd": 28.753155000000074
         },
         {
           "provider": "anthropic",
-          "requests": 12663,
-          "errors": 588,
-          "tokens": 19523661,
-          "usd": 122.20560199999984
+          "requests": 11069,
+          "errors": 518,
+          "tokens": 17056652,
+          "usd": 107.3917929999999
         },
         {
           "provider": "google",
-          "requests": 5163,
-          "errors": 245,
-          "tokens": 7873150,
-          "usd": 5.754721999999998
+          "requests": 4527,
+          "errors": 207,
+          "tokens": 6913676,
+          "usd": 5.0956919999999934
         },
         {
           "provider": "groq",
-          "requests": 1707,
-          "errors": 67,
-          "tokens": 2659213,
-          "usd": 1.4833780000000016
+          "requests": 1508,
+          "errors": 59,
+          "tokens": 2360643,
+          "usd": 1.3184950000000024
         },
         {
           "provider": "openrouter",
-          "requests": 690,
-          "errors": 28,
-          "tokens": 1063679,
-          "usd": 0.15394800000000006
+          "requests": 605,
+          "errors": 25,
+          "tokens": 931754,
+          "usd": 0.1354789999999999
         }
       ],
       "byModality": [
         {
           "unit": "token",
-          "requests": 32217,
-          "quantity": 51938584,
-          "tokens": 51938584,
-          "usd": 162.18544500000067
+          "requests": 28254,
+          "quantity": 45580434,
+          "tokens": 45580434,
+          "usd": 142.69461399999983
         }
       ],
       "byOutcome": [
         {
           "outcome": "success",
-          "requests": 32217
+          "requests": 28254
         },
         {
           "outcome": "client_error",
-          "requests": 753
+          "requests": 652
         },
         {
           "outcome": "upstream_error",
-          "requests": 390
+          "requests": 350
         },
         {
           "outcome": "no_capacity",
-          "requests": 193
+          "requests": 164
         },
         {
           "outcome": "budget_blocked",
-          "requests": 101
+          "requests": 89
         },
         {
           "outcome": "blocked",
-          "requests": 64
+          "requests": 60
         }
       ]
     },
     "90d": {
       "period": "90d",
-      "since": "2026-04-23T07:11:25.665Z",
-      "until": "2026-07-22T07:11:25.665Z",
+      "since": "2026-04-26T06:14:09.896Z",
+      "until": "2026-07-25T06:14:09.896Z",
       "totals": {
-        "requests": 88885,
-        "successes": 84934,
-        "errors": 3951,
-        "successRate": 0.9555493052821061,
-        "inputTokens": 100333273,
-        "outputTokens": 36539772,
-        "totalTokens": 136873045,
-        "estimatedUsd": 428.7342720000037,
-        "avgLatencyMs": 1887,
-        "p95LatencyMs": 3965,
-        "cacheHits": 11857,
-        "cacheHitRate": 0.13960251489391762,
-        "cacheSavedUsd": 70.85685100000006
+        "requests": 86766,
+        "successes": 82924,
+        "errors": 3842,
+        "successRate": 0.9557199824816173,
+        "inputTokens": 97958933,
+        "outputTokens": 35682894,
+        "totalTokens": 133641827,
+        "estimatedUsd": 418.52362600000396,
+        "avgLatencyMs": 1886,
+        "p95LatencyMs": 3964,
+        "cacheHits": 11596,
+        "cacheHitRate": 0.13983888862090588,
+        "cacheSavedUsd": 69.379319
       },
       "byDay": [
         {
-          "date": "2026-04-23",
-          "requests": 958,
-          "successes": 916,
-          "errors": 42,
-          "usd": 5.054323000000002,
-          "savedUsd": 0.60429,
-          "cacheHits": 119,
-          "avgLatencyMs": 1950
-        },
-        {
-          "date": "2026-04-24",
-          "requests": 816,
-          "successes": 765,
-          "errors": 51,
-          "usd": 3.525206000000002,
-          "savedUsd": 0.6331039999999999,
-          "cacheHits": 96,
-          "avgLatencyMs": 1917
-        },
-        {
-          "date": "2026-04-25",
-          "requests": 317,
-          "successes": 303,
-          "errors": 14,
-          "usd": 1.4956300000000007,
-          "savedUsd": 0.222709,
-          "cacheHits": 42,
-          "avgLatencyMs": 1941
-        },
-        {
           "date": "2026-04-26",
-          "requests": 332,
-          "successes": 310,
-          "errors": 22,
-          "usd": 1.7740140000000009,
-          "savedUsd": 0.252788,
-          "cacheHits": 45,
-          "avgLatencyMs": 1855
+          "requests": 304,
+          "successes": 284,
+          "errors": 20,
+          "usd": 1.6385269999999998,
+          "savedUsd": 0.23535899999999993,
+          "cacheHits": 41,
+          "avgLatencyMs": 1854
         },
         {
           "date": "2026-04-27",
           "requests": 1048,
           "successes": 1005,
           "errors": 43,
-          "usd": 5.3313140000000026,
-          "savedUsd": 0.9785450000000001,
+          "usd": 5.331314000000002,
+          "savedUsd": 0.9785450000000002,
           "cacheHits": 136,
           "avgLatencyMs": 1877
         },
@@ -1015,7 +985,7 @@
           "requests": 1038,
           "successes": 994,
           "errors": 44,
-          "usd": 4.7923670000000005,
+          "usd": 4.792367,
           "savedUsd": 0.8944000000000002,
           "cacheHits": 140,
           "avgLatencyMs": 1919
@@ -1025,8 +995,8 @@
           "requests": 1108,
           "successes": 1061,
           "errors": 47,
-          "usd": 5.536918000000008,
-          "savedUsd": 0.9986060000000003,
+          "usd": 5.53691800000001,
+          "savedUsd": 0.9986060000000004,
           "cacheHits": 155,
           "avgLatencyMs": 1879
         },
@@ -1036,7 +1006,7 @@
           "successes": 720,
           "errors": 29,
           "usd": 3.4457370000000007,
-          "savedUsd": 0.857842,
+          "savedUsd": 0.8578419999999995,
           "cacheHits": 110,
           "avgLatencyMs": 1952
         },
@@ -1045,7 +1015,7 @@
           "requests": 332,
           "successes": 314,
           "errors": 18,
-          "usd": 1.6137139999999994,
+          "usd": 1.6137140000000014,
           "savedUsd": 0.28708200000000006,
           "cacheHits": 40,
           "avgLatencyMs": 1912
@@ -1065,7 +1035,7 @@
           "requests": 1011,
           "successes": 965,
           "errors": 46,
-          "usd": 4.9541410000000035,
+          "usd": 4.954141000000002,
           "savedUsd": 0.9135860000000002,
           "cacheHits": 143,
           "avgLatencyMs": 1862
@@ -1075,8 +1045,8 @@
           "requests": 1053,
           "successes": 1002,
           "errors": 51,
-          "usd": 4.975395999999989,
-          "savedUsd": 0.4942350000000003,
+          "usd": 4.975395999999991,
+          "savedUsd": 0.49423500000000026,
           "cacheHits": 125,
           "avgLatencyMs": 1945
         },
@@ -1085,7 +1055,7 @@
           "requests": 1196,
           "successes": 1148,
           "errors": 48,
-          "usd": 5.511926999999994,
+          "usd": 5.511926999999993,
           "savedUsd": 0.9459780000000002,
           "cacheHits": 171,
           "avgLatencyMs": 1821
@@ -1095,7 +1065,7 @@
           "requests": 1035,
           "successes": 986,
           "errors": 49,
-          "usd": 4.892658000000001,
+          "usd": 4.892658,
           "savedUsd": 0.8645090000000001,
           "cacheHits": 148,
           "avgLatencyMs": 1819
@@ -1105,7 +1075,7 @@
           "requests": 901,
           "successes": 858,
           "errors": 43,
-          "usd": 4.882735999999999,
+          "usd": 4.882736000000001,
           "savedUsd": 0.648714,
           "cacheHits": 108,
           "avgLatencyMs": 1895
@@ -1116,7 +1086,7 @@
           "successes": 355,
           "errors": 17,
           "usd": 1.7385280000000005,
-          "savedUsd": 0.31647800000000004,
+          "savedUsd": 0.3164779999999999,
           "cacheHits": 62,
           "avgLatencyMs": 1794
         },
@@ -1125,8 +1095,8 @@
           "requests": 347,
           "successes": 329,
           "errors": 18,
-          "usd": 1.701243,
-          "savedUsd": 0.43819199999999997,
+          "usd": 1.7012430000000007,
+          "savedUsd": 0.43819199999999986,
           "cacheHits": 52,
           "avgLatencyMs": 1805
         },
@@ -1135,7 +1105,7 @@
           "requests": 1135,
           "successes": 1085,
           "errors": 50,
-          "usd": 5.709898000000004,
+          "usd": 5.709897999999993,
           "savedUsd": 0.7026979999999996,
           "cacheHits": 157,
           "avgLatencyMs": 1869
@@ -1145,8 +1115,8 @@
           "requests": 1117,
           "successes": 1063,
           "errors": 54,
-          "usd": 5.380184000000003,
-          "savedUsd": 0.9642599999999998,
+          "usd": 5.380184000000001,
+          "savedUsd": 0.9642599999999999,
           "cacheHits": 156,
           "avgLatencyMs": 1865
         },
@@ -1155,8 +1125,8 @@
           "requests": 1133,
           "successes": 1077,
           "errors": 56,
-          "usd": 5.214840999999999,
-          "savedUsd": 0.9722500000000001,
+          "usd": 5.214841,
+          "savedUsd": 0.9722499999999996,
           "cacheHits": 156,
           "avgLatencyMs": 1796
         },
@@ -1165,7 +1135,7 @@
           "requests": 1093,
           "successes": 1039,
           "errors": 54,
-          "usd": 5.329772999999994,
+          "usd": 5.329772999999997,
           "savedUsd": 0.7107350000000006,
           "cacheHits": 127,
           "avgLatencyMs": 1949
@@ -1175,7 +1145,7 @@
           "requests": 843,
           "successes": 803,
           "errors": 40,
-          "usd": 3.580602999999998,
+          "usd": 3.5806029999999978,
           "savedUsd": 0.7350619999999997,
           "cacheHits": 113,
           "avgLatencyMs": 1799
@@ -1186,7 +1156,7 @@
           "successes": 313,
           "errors": 22,
           "usd": 1.436624,
-          "savedUsd": 0.2974369999999999,
+          "savedUsd": 0.297437,
           "cacheHits": 41,
           "avgLatencyMs": 1896
         },
@@ -1195,8 +1165,8 @@
           "requests": 384,
           "successes": 371,
           "errors": 13,
-          "usd": 2.2668230000000005,
-          "savedUsd": 0.19666000000000006,
+          "usd": 2.2668230000000023,
+          "savedUsd": 0.19666000000000003,
           "cacheHits": 40,
           "avgLatencyMs": 1948
         },
@@ -1205,8 +1175,8 @@
           "requests": 1278,
           "successes": 1221,
           "errors": 57,
-          "usd": 6.019775000000004,
-          "savedUsd": 0.9513439999999997,
+          "usd": 6.019774999999999,
+          "savedUsd": 0.951344,
           "cacheHits": 170,
           "avgLatencyMs": 1871
         },
@@ -1225,7 +1195,7 @@
           "requests": 1251,
           "successes": 1183,
           "errors": 68,
-          "usd": 6.3552130000000115,
+          "usd": 6.355213000000012,
           "savedUsd": 1.0094030000000005,
           "cacheHits": 160,
           "avgLatencyMs": 1893
@@ -1235,7 +1205,7 @@
           "requests": 1123,
           "successes": 1085,
           "errors": 38,
-          "usd": 5.712267000000002,
+          "usd": 5.7122670000000015,
           "savedUsd": 0.8211900000000004,
           "cacheHits": 130,
           "avgLatencyMs": 1923
@@ -1245,7 +1215,7 @@
           "requests": 981,
           "successes": 938,
           "errors": 43,
-          "usd": 5.101586000000007,
+          "usd": 5.101586000000008,
           "savedUsd": 0.77371,
           "cacheHits": 127,
           "avgLatencyMs": 1923
@@ -1255,8 +1225,8 @@
           "requests": 362,
           "successes": 349,
           "errors": 13,
-          "usd": 1.6657430000000002,
-          "savedUsd": 0.28955099999999995,
+          "usd": 1.6657430000000004,
+          "savedUsd": 0.289551,
           "cacheHits": 41,
           "avgLatencyMs": 2042
         },
@@ -1265,8 +1235,8 @@
           "requests": 347,
           "successes": 328,
           "errors": 19,
-          "usd": 1.8915910000000005,
-          "savedUsd": 0.32486599999999993,
+          "usd": 1.8915909999999998,
+          "savedUsd": 0.3248660000000001,
           "cacheHits": 45,
           "avgLatencyMs": 1866
         },
@@ -1275,8 +1245,8 @@
           "requests": 1300,
           "successes": 1248,
           "errors": 52,
-          "usd": 5.883081000000002,
-          "savedUsd": 0.9173219999999997,
+          "usd": 5.883081000000006,
+          "savedUsd": 0.9173219999999996,
           "cacheHits": 175,
           "avgLatencyMs": 1884
         },
@@ -1285,7 +1255,7 @@
           "requests": 1263,
           "successes": 1208,
           "errors": 55,
-          "usd": 6.424899000000004,
+          "usd": 6.424899000000003,
           "savedUsd": 0.8061350000000002,
           "cacheHits": 155,
           "avgLatencyMs": 1876
@@ -1295,7 +1265,7 @@
           "requests": 1315,
           "successes": 1259,
           "errors": 56,
-          "usd": 6.127405999999991,
+          "usd": 6.127405999999989,
           "savedUsd": 0.9899690000000003,
           "cacheHits": 180,
           "avgLatencyMs": 1898
@@ -1305,7 +1275,7 @@
           "requests": 1220,
           "successes": 1178,
           "errors": 42,
-          "usd": 5.2083520000000005,
+          "usd": 5.208352000000001,
           "savedUsd": 1.0088490000000003,
           "cacheHits": 166,
           "avgLatencyMs": 1846
@@ -1315,8 +1285,8 @@
           "requests": 1011,
           "successes": 974,
           "errors": 37,
-          "usd": 4.815050999999993,
-          "savedUsd": 0.9158090000000003,
+          "usd": 4.815051000000003,
+          "savedUsd": 0.9158090000000004,
           "cacheHits": 144,
           "avgLatencyMs": 1871
         },
@@ -1325,8 +1295,8 @@
           "requests": 420,
           "successes": 401,
           "errors": 19,
-          "usd": 2.1255610000000007,
-          "savedUsd": 0.2861350000000001,
+          "usd": 2.125561000000001,
+          "savedUsd": 0.286135,
           "cacheHits": 59,
           "avgLatencyMs": 1895
         },
@@ -1335,8 +1305,8 @@
           "requests": 420,
           "successes": 402,
           "errors": 18,
-          "usd": 1.7922290000000007,
-          "savedUsd": 0.25067900000000004,
+          "usd": 1.7922289999999998,
+          "savedUsd": 0.250679,
           "cacheHits": 48,
           "avgLatencyMs": 1829
         },
@@ -1345,8 +1315,8 @@
           "requests": 1230,
           "successes": 1176,
           "errors": 54,
-          "usd": 5.817421,
-          "savedUsd": 1.1412060000000002,
+          "usd": 5.81742100000001,
+          "savedUsd": 1.1412060000000004,
           "cacheHits": 161,
           "avgLatencyMs": 1903
         },
@@ -1365,8 +1335,8 @@
           "requests": 1263,
           "successes": 1203,
           "errors": 60,
-          "usd": 6.1546410000000025,
-          "savedUsd": 0.8808469999999997,
+          "usd": 6.154641000000005,
+          "savedUsd": 0.8808470000000002,
           "cacheHits": 155,
           "avgLatencyMs": 1883
         },
@@ -1375,8 +1345,8 @@
           "requests": 1163,
           "successes": 1108,
           "errors": 55,
-          "usd": 6.003410999999996,
-          "savedUsd": 0.9145139999999994,
+          "usd": 6.003410999999995,
+          "savedUsd": 0.9145139999999993,
           "cacheHits": 160,
           "avgLatencyMs": 1867
         },
@@ -1385,8 +1355,8 @@
           "requests": 974,
           "successes": 929,
           "errors": 45,
-          "usd": 4.645655999999996,
-          "savedUsd": 0.8400930000000005,
+          "usd": 4.645655999999994,
+          "savedUsd": 0.8400930000000001,
           "cacheHits": 151,
           "avgLatencyMs": 1860
         },
@@ -1395,7 +1365,7 @@
           "requests": 399,
           "successes": 381,
           "errors": 18,
-          "usd": 2.0137719999999995,
+          "usd": 2.013771999999999,
           "savedUsd": 0.295631,
           "cacheHits": 59,
           "avgLatencyMs": 1947
@@ -1405,8 +1375,8 @@
           "requests": 445,
           "successes": 426,
           "errors": 19,
-          "usd": 2.4432419999999984,
-          "savedUsd": 0.44989,
+          "usd": 2.443242000000001,
+          "savedUsd": 0.44989000000000007,
           "cacheHits": 62,
           "avgLatencyMs": 1810
         },
@@ -1415,8 +1385,8 @@
           "requests": 1181,
           "successes": 1133,
           "errors": 48,
-          "usd": 5.658772,
-          "savedUsd": 0.8874410000000004,
+          "usd": 5.658772000000001,
+          "savedUsd": 0.887441,
           "cacheHits": 157,
           "avgLatencyMs": 1917
         },
@@ -1425,7 +1395,7 @@
           "requests": 1312,
           "successes": 1264,
           "errors": 48,
-          "usd": 6.397593999999998,
+          "usd": 6.397593999999999,
           "savedUsd": 0.924285,
           "cacheHits": 179,
           "avgLatencyMs": 1897
@@ -1435,7 +1405,7 @@
           "requests": 1412,
           "successes": 1352,
           "errors": 60,
-          "usd": 7.035835000000002,
+          "usd": 7.035835000000003,
           "savedUsd": 1.0470030000000001,
           "cacheHits": 201,
           "avgLatencyMs": 1868
@@ -1445,8 +1415,8 @@
           "requests": 1345,
           "successes": 1286,
           "errors": 59,
-          "usd": 6.182373000000002,
-          "savedUsd": 1.109628,
+          "usd": 6.182372999999993,
+          "savedUsd": 1.1096280000000003,
           "cacheHits": 170,
           "avgLatencyMs": 1930
         },
@@ -1455,8 +1425,8 @@
           "requests": 1026,
           "successes": 985,
           "errors": 41,
-          "usd": 5.565679000000003,
-          "savedUsd": 0.850087,
+          "usd": 5.565678999999997,
+          "savedUsd": 0.8500870000000005,
           "cacheHits": 134,
           "avgLatencyMs": 1848
         },
@@ -1465,7 +1435,7 @@
           "requests": 447,
           "successes": 428,
           "errors": 19,
-          "usd": 2.303444000000002,
+          "usd": 2.3034440000000003,
           "savedUsd": 0.32796500000000006,
           "cacheHits": 63,
           "avgLatencyMs": 1895
@@ -1475,8 +1445,8 @@
           "requests": 404,
           "successes": 387,
           "errors": 17,
-          "usd": 1.6128209999999987,
-          "savedUsd": 0.23396300000000003,
+          "usd": 1.612821000000001,
+          "savedUsd": 0.23396300000000006,
           "cacheHits": 58,
           "avgLatencyMs": 1939
         },
@@ -1485,8 +1455,8 @@
           "requests": 1312,
           "successes": 1261,
           "errors": 51,
-          "usd": 5.530208999999998,
-          "savedUsd": 1.1274410000000001,
+          "usd": 5.5302089999999975,
+          "savedUsd": 1.1274410000000004,
           "cacheHits": 168,
           "avgLatencyMs": 1920
         },
@@ -1495,7 +1465,7 @@
           "requests": 1425,
           "successes": 1360,
           "errors": 65,
-          "usd": 6.845663999999999,
+          "usd": 6.845663999999995,
           "savedUsd": 0.9292419999999996,
           "cacheHits": 184,
           "avgLatencyMs": 1865
@@ -1505,8 +1475,8 @@
           "requests": 1465,
           "successes": 1391,
           "errors": 74,
-          "usd": 7.47066399999999,
-          "savedUsd": 1.1108320000000005,
+          "usd": 7.470663999999989,
+          "savedUsd": 1.1108319999999996,
           "cacheHits": 183,
           "avgLatencyMs": 1858
         },
@@ -1515,7 +1485,7 @@
           "requests": 1400,
           "successes": 1328,
           "errors": 72,
-          "usd": 6.461550999999995,
+          "usd": 6.461550999999996,
           "savedUsd": 1.3139899999999995,
           "cacheHits": 191,
           "avgLatencyMs": 1877
@@ -1525,8 +1495,8 @@
           "requests": 1023,
           "successes": 972,
           "errors": 51,
-          "usd": 4.158736000000005,
-          "savedUsd": 0.8139929999999997,
+          "usd": 4.158736000000001,
+          "savedUsd": 0.8139930000000003,
           "cacheHits": 142,
           "avgLatencyMs": 1852
         },
@@ -1535,8 +1505,8 @@
           "requests": 432,
           "successes": 416,
           "errors": 16,
-          "usd": 2.3682769999999986,
-          "savedUsd": 0.328054,
+          "usd": 2.3682770000000004,
+          "savedUsd": 0.3280539999999999,
           "cacheHits": 56,
           "avgLatencyMs": 1909
         },
@@ -1545,8 +1515,8 @@
           "requests": 481,
           "successes": 458,
           "errors": 23,
-          "usd": 2.343692,
-          "savedUsd": 0.38069200000000014,
+          "usd": 2.343691999999999,
+          "savedUsd": 0.3806920000000002,
           "cacheHits": 62,
           "avgLatencyMs": 1882
         },
@@ -1555,8 +1525,8 @@
           "requests": 1360,
           "successes": 1296,
           "errors": 64,
-          "usd": 6.354972999999996,
-          "savedUsd": 1.0145820000000003,
+          "usd": 6.354973000000013,
+          "savedUsd": 1.0145819999999997,
           "cacheHits": 182,
           "avgLatencyMs": 1885
         },
@@ -1566,7 +1536,7 @@
           "successes": 1305,
           "errors": 53,
           "usd": 6.408140000000003,
-          "savedUsd": 0.9888510000000001,
+          "savedUsd": 0.988851,
           "cacheHits": 183,
           "avgLatencyMs": 1916
         },
@@ -1575,7 +1545,7 @@
           "requests": 1480,
           "successes": 1410,
           "errors": 70,
-          "usd": 6.858321000000001,
+          "usd": 6.858321,
           "savedUsd": 1.4290030000000002,
           "cacheHits": 206,
           "avgLatencyMs": 1879
@@ -1595,8 +1565,8 @@
           "requests": 1148,
           "successes": 1095,
           "errors": 53,
-          "usd": 4.839943,
-          "savedUsd": 1.0130320000000004,
+          "usd": 4.8399429999999946,
+          "savedUsd": 1.013032,
           "cacheHits": 140,
           "avgLatencyMs": 1892
         },
@@ -1606,7 +1576,7 @@
           "successes": 437,
           "errors": 20,
           "usd": 2.2595640000000006,
-          "savedUsd": 0.420716,
+          "savedUsd": 0.42071600000000003,
           "cacheHits": 57,
           "avgLatencyMs": 1975
         },
@@ -1645,7 +1615,7 @@
           "requests": 1637,
           "successes": 1551,
           "errors": 86,
-          "usd": 7.832175999999994,
+          "usd": 7.832175999999993,
           "savedUsd": 0.9511930000000004,
           "cacheHits": 211,
           "avgLatencyMs": 1921
@@ -1675,8 +1645,8 @@
           "requests": 469,
           "successes": 449,
           "errors": 20,
-          "usd": 2.062620999999999,
-          "savedUsd": 0.356619,
+          "usd": 2.0626209999999983,
+          "savedUsd": 0.3566190000000001,
           "cacheHits": 65,
           "avgLatencyMs": 1873
         },
@@ -1685,8 +1655,8 @@
           "requests": 527,
           "successes": 493,
           "errors": 34,
-          "usd": 2.723847000000001,
-          "savedUsd": 0.48063700000000004,
+          "usd": 2.7238470000000015,
+          "savedUsd": 0.480637,
           "cacheHits": 68,
           "avgLatencyMs": 1897
         },
@@ -1695,7 +1665,7 @@
           "requests": 1412,
           "successes": 1356,
           "errors": 56,
-          "usd": 7.3060059999999964,
+          "usd": 7.306005999999997,
           "savedUsd": 1.1305500000000002,
           "cacheHits": 197,
           "avgLatencyMs": 1878
@@ -1715,7 +1685,7 @@
           "requests": 1455,
           "successes": 1394,
           "errors": 61,
-          "usd": 7.404267000000011,
+          "usd": 7.404267000000012,
           "savedUsd": 1.120194,
           "cacheHits": 178,
           "avgLatencyMs": 1932
@@ -1725,7 +1695,7 @@
           "requests": 1574,
           "successes": 1509,
           "errors": 65,
-          "usd": 7.3419519999999885,
+          "usd": 7.341951999999988,
           "savedUsd": 1.4285419999999993,
           "cacheHits": 252,
           "avgLatencyMs": 1818
@@ -1735,7 +1705,7 @@
           "requests": 1205,
           "successes": 1161,
           "errors": 44,
-          "usd": 5.982282000000001,
+          "usd": 5.9822820000000005,
           "savedUsd": 1.11668,
           "cacheHits": 180,
           "avgLatencyMs": 1863
@@ -1745,8 +1715,8 @@
           "requests": 457,
           "successes": 443,
           "errors": 14,
-          "usd": 1.7922619999999996,
-          "savedUsd": 0.351644,
+          "usd": 1.7922620000000016,
+          "savedUsd": 0.3516439999999999,
           "cacheHits": 57,
           "avgLatencyMs": 1932
         },
@@ -1755,8 +1725,8 @@
           "requests": 554,
           "successes": 527,
           "errors": 27,
-          "usd": 2.7216490000000015,
-          "savedUsd": 0.47775200000000007,
+          "usd": 2.721648999999999,
+          "savedUsd": 0.477752,
           "cacheHits": 78,
           "avgLatencyMs": 1827
         },
@@ -1765,7 +1735,7 @@
           "requests": 1702,
           "successes": 1615,
           "errors": 87,
-          "usd": 7.989275999999995,
+          "usd": 7.9892759999999985,
           "savedUsd": 1.5181569999999986,
           "cacheHits": 241,
           "avgLatencyMs": 1847
@@ -1775,8 +1745,8 @@
           "requests": 1519,
           "successes": 1455,
           "errors": 64,
-          "usd": 7.560252000000012,
-          "savedUsd": 1.2793120000000002,
+          "usd": 7.56025200000001,
+          "savedUsd": 1.2793119999999998,
           "cacheHits": 211,
           "avgLatencyMs": 1888
         },
@@ -1785,7 +1755,7 @@
           "requests": 1647,
           "successes": 1574,
           "errors": 73,
-          "usd": 8.244951999999984,
+          "usd": 8.244951999999993,
           "savedUsd": 1.4751359999999998,
           "cacheHits": 210,
           "avgLatencyMs": 1859
@@ -1795,7 +1765,7 @@
           "requests": 1577,
           "successes": 1520,
           "errors": 57,
-          "usd": 7.847775000000003,
+          "usd": 7.847775000000004,
           "savedUsd": 1.2660219999999989,
           "cacheHits": 208,
           "avgLatencyMs": 1869
@@ -1826,7 +1796,7 @@
           "successes": 513,
           "errors": 26,
           "usd": 2.502364999999998,
-          "savedUsd": 0.375163,
+          "savedUsd": 0.3751629999999999,
           "cacheHits": 70,
           "avgLatencyMs": 1928
         },
@@ -1835,8 +1805,8 @@
           "requests": 683,
           "successes": 651,
           "errors": 32,
-          "usd": 3.0647379999999997,
-          "savedUsd": 0.7501639999999996,
+          "usd": 3.064737999999998,
+          "savedUsd": 0.7501639999999998,
           "cacheHits": 94,
           "avgLatencyMs": 1867
         },
@@ -1859,128 +1829,158 @@
           "savedUsd": 0,
           "cacheHits": 0,
           "avgLatencyMs": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "successes": 0,
+          "errors": 0,
+          "usd": 0,
+          "savedUsd": 0,
+          "cacheHits": 0,
+          "avgLatencyMs": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "successes": 0,
+          "errors": 0,
+          "usd": 0,
+          "savedUsd": 0,
+          "cacheHits": 0,
+          "avgLatencyMs": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "successes": 0,
+          "errors": 0,
+          "usd": 0,
+          "savedUsd": 0,
+          "cacheHits": 0,
+          "avgLatencyMs": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 19483,
-          "tokens": 29875666,
-          "usd": 6.974763000000001
+          "requests": 19034,
+          "tokens": 29197596,
+          "usd": 6.814472999999968
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 17510,
-          "tokens": 27060990,
-          "usd": 144.64361399999996
+          "requests": 17095,
+          "tokens": 26433413,
+          "usd": 141.2162670000003
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 12452,
-          "tokens": 19251085,
-          "usd": 34.50730299999995
+          "requests": 12147,
+          "tokens": 18770671,
+          "usd": 33.644373999999985
         },
         {
           "model": "GPT-4o",
-          "requests": 10759,
-          "tokens": 16604921,
-          "usd": 64.20173599999987
+          "requests": 10499,
+          "tokens": 16203318,
+          "usd": 62.59223100000001
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 9119,
-          "tokens": 13982959,
-          "usd": 2.1762099999999993
+          "requests": 8865,
+          "tokens": 13599367,
+          "usd": 2.1178770000000045
         },
         {
           "model": "o3-mini",
-          "requests": 5239,
-          "tokens": 8054919,
-          "usd": 13.60858600000004
+          "requests": 5124,
+          "tokens": 7873633,
+          "usd": 13.32160100000002
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 4529,
-          "tokens": 6950035,
-          "usd": 13.295837999999987
+          "requests": 4431,
+          "tokens": 6794901,
+          "usd": 12.989013999999983
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 4435,
-          "tokens": 6875850,
-          "usd": 3.7954309999999936
+          "requests": 4337,
+          "tokens": 6740933,
+          "usd": 3.7205679999999983
         }
       ],
       "byProvider": [
         {
           "provider": "openai",
-          "requests": 35481,
-          "errors": 1613,
-          "tokens": 54535506,
-          "usd": 84.78508499999982
+          "requests": 34657,
+          "errors": 1574,
+          "tokens": 53274547,
+          "usd": 82.72830500000045
         },
         {
           "provider": "anthropic",
-          "requests": 33514,
-          "errors": 1450,
-          "tokens": 51770181,
-          "usd": 324.2712370000003
+          "requests": 32712,
+          "errors": 1411,
+          "tokens": 50535146,
+          "usd": 316.56600099999963
         },
         {
           "provider": "google",
-          "requests": 13648,
-          "errors": 620,
-          "tokens": 20932994,
-          "usd": 15.472048000000012
+          "requests": 13296,
+          "errors": 601,
+          "tokens": 20394268,
+          "usd": 15.106890999999978
         },
         {
           "provider": "groq",
-          "requests": 4435,
-          "errors": 182,
-          "tokens": 6875850,
-          "usd": 3.795430999999999
+          "requests": 4337,
+          "errors": 172,
+          "tokens": 6740933,
+          "usd": 3.7205679999999974
         },
         {
           "provider": "openrouter",
-          "requests": 1807,
-          "errors": 86,
-          "tokens": 2758514,
-          "usd": 0.4104709999999997
+          "requests": 1764,
+          "errors": 84,
+          "tokens": 2696933,
+          "usd": 0.4018609999999995
         }
       ],
       "byModality": [
         {
           "unit": "token",
-          "requests": 84934,
-          "quantity": 136873045,
-          "tokens": 136873045,
-          "usd": 428.73427200000066
+          "requests": 82924,
+          "quantity": 133641827,
+          "tokens": 133641827,
+          "usd": 418.523626000005
         }
       ],
       "byOutcome": [
         {
           "outcome": "success",
-          "requests": 84934
+          "requests": 82924
         },
         {
           "outcome": "client_error",
-          "requests": 1968
+          "requests": 1903
         },
         {
           "outcome": "upstream_error",
-          "requests": 1038
+          "requests": 1014
         },
         {
           "outcome": "no_capacity",
-          "requests": 500
+          "requests": 492
         },
         {
           "outcome": "budget_blocked",
-          "requests": 270
+          "requests": 261
         },
         {
           "outcome": "blocked",
-          "requests": 175
+          "requests": 172
         }
       ]
     }
@@ -2629,8 +2629,8 @@
         "keyCount": 2
       },
       "period": "today",
-      "since": "2026-07-22T00:00:00.000Z",
-      "until": "2026-07-22T07:11:25.939Z",
+      "since": "2026-07-25T00:00:00.000Z",
+      "until": "2026-07-25T06:14:10.095Z",
       "totals": {
         "requests": 0,
         "successes": 0,
@@ -2642,7 +2642,7 @@
       },
       "byDay": [
         {
-          "date": "2026-07-22",
+          "date": "2026-07-25",
           "requests": 0,
           "usd": 0,
           "tokens": 0
@@ -2683,41 +2683,23 @@
         "keyCount": 2
       },
       "period": "7d",
-      "since": "2026-07-15T07:11:25.999Z",
-      "until": "2026-07-22T07:11:25.999Z",
+      "since": "2026-07-18T06:14:10.108Z",
+      "until": "2026-07-25T06:14:10.108Z",
       "totals": {
-        "requests": 2052,
-        "successes": 1961,
-        "errors": 91,
-        "successRate": 0.9556530214424951,
-        "totalTokens": 3172689,
-        "estimatedUsd": 10.103183999999986,
-        "avgLatencyMs": 1903
+        "requests": 601,
+        "successes": 573,
+        "errors": 28,
+        "successRate": 0.9534109816971714,
+        "totalTokens": 923402,
+        "estimatedUsd": 2.9687050000000013,
+        "avgLatencyMs": 1916
       },
       "byDay": [
         {
-          "date": "2026-07-15",
-          "requests": 501,
-          "usd": 2.262725999999999,
-          "tokens": 781292
-        },
-        {
-          "date": "2026-07-16",
-          "requests": 537,
-          "usd": 2.6530250000000017,
-          "tokens": 836839
-        },
-        {
-          "date": "2026-07-17",
-          "requests": 401,
-          "usd": 2.196125999999998,
-          "tokens": 613877
-        },
-        {
           "date": "2026-07-18",
-          "requests": 189,
-          "usd": 1.0470429999999993,
-          "tokens": 289997
+          "requests": 177,
+          "usd": 1.0244409999999995,
+          "tokens": 272718
         },
         {
           "date": "2026-07-19",
@@ -2742,56 +2724,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 447,
-          "tokens": 682723,
-          "usd": 0.16012000000000004
+          "requests": 135,
+          "tokens": 209760,
+          "usd": 0.05070999999999996
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 407,
-          "tokens": 620208,
-          "usd": 3.2524740000000003
-        },
-        {
-          "model": "Claude Haiku 4.5",
-          "requests": 266,
-          "tokens": 420431,
-          "usd": 0.7739969999999994
+          "requests": 123,
+          "tokens": 183337,
+          "usd": 0.9396059999999996
         },
         {
           "model": "GPT-4o",
-          "requests": 266,
-          "tokens": 415328,
-          "usd": 1.58943
+          "requests": 84,
+          "tokens": 127834,
+          "usd": 0.489904
+        },
+        {
+          "model": "Claude Haiku 4.5",
+          "requests": 68,
+          "tokens": 108005,
+          "usd": 0.208611
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 205,
-          "tokens": 319728,
-          "usd": 0.04805499999999998
+          "requests": 56,
+          "tokens": 86283,
+          "usd": 0.013578999999999999
         },
         {
           "model": "o3-mini",
-          "requests": 138,
-          "tokens": 219194,
-          "usd": 0.37813499999999994
+          "requests": 40,
+          "tokens": 65020,
+          "usd": 0.11446099999999998
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 97,
-          "tokens": 147834,
-          "usd": 0.082191
+          "requests": 29,
+          "tokens": 42977,
+          "usd": 0.026322
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 95,
-          "tokens": 139945,
-          "usd": 0.27654900000000004
+          "requests": 28,
+          "tokens": 40926,
+          "usd": 0.080443
         }
       ],
       "members": [
@@ -2799,18 +2799,18 @@
           "id": "f33fb7f1-4cd2-40f0-8ea5-fe53de486586",
           "name": "platform-prod",
           "maskedKey": "nxs-SE••••936c",
-          "requests": 1009,
-          "tokens": 1562068,
-          "usd": 5.131343000000005,
+          "requests": 289,
+          "tokens": 442516,
+          "usd": 1.5075840000000003,
           "lastUsedAt": "2026-07-20T12:36:32.000Z"
         },
         {
           "id": "123d561a-65bd-4402-86a2-9ff2d49012c8",
           "name": "platform-staging",
           "maskedKey": "nxs-SE••••aae1",
-          "requests": 1043,
-          "tokens": 1610621,
-          "usd": 4.971841000000007,
+          "requests": 312,
+          "tokens": 480886,
+          "usd": 1.4611209999999988,
           "lastUsedAt": "2026-07-20T12:33:22.000Z"
         }
       ]
@@ -2828,41 +2828,23 @@
         "keyCount": 2
       },
       "period": "30d",
-      "since": "2026-06-22T07:11:26.032Z",
-      "until": "2026-07-22T07:11:26.032Z",
+      "since": "2026-06-25T06:14:10.117Z",
+      "until": "2026-07-25T06:14:10.117Z",
       "totals": {
-        "requests": 11636,
-        "successes": 11102,
-        "errors": 534,
-        "successRate": 0.9541079408731523,
-        "totalTokens": 17894672,
-        "estimatedUsd": 57.01643900000004,
-        "avgLatencyMs": 1904
+        "requests": 10181,
+        "successes": 9714,
+        "errors": 467,
+        "successRate": 0.9541302426087811,
+        "totalTokens": 15679632,
+        "estimatedUsd": 50.40591000000004,
+        "avgLatencyMs": 1910
       },
       "byDay": [
         {
-          "date": "2026-06-22",
-          "requests": 442,
-          "usd": 1.9427180000000006,
-          "tokens": 659439
-        },
-        {
-          "date": "2026-06-23",
-          "requests": 473,
-          "usd": 2.2104399999999997,
-          "tokens": 724594
-        },
-        {
-          "date": "2026-06-24",
-          "requests": 503,
-          "usd": 2.3266860000000014,
-          "tokens": 769759
-        },
-        {
           "date": "2026-06-25",
-          "requests": 477,
-          "usd": 2.250502000000003,
-          "tokens": 744314
+          "requests": 440,
+          "usd": 2.1198170000000007,
+          "tokens": 683066
         },
         {
           "date": "2026-06-26",
@@ -3025,56 +3007,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 2516,
-          "tokens": 3840781,
-          "usd": 0.8928490000000001
+          "requests": 2206,
+          "tokens": 3369017,
+          "usd": 0.7841570000000004
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 2291,
-          "tokens": 3536672,
-          "usd": 18.934733999999988
+          "requests": 1999,
+          "tokens": 3081780,
+          "usd": 16.498355999999976
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 1591,
-          "tokens": 2457139,
-          "usd": 4.424732000000003
+          "requests": 1392,
+          "tokens": 2145709,
+          "usd": 3.8949809999999965
         },
         {
           "model": "GPT-4o",
-          "requests": 1445,
-          "tokens": 2229479,
-          "usd": 8.681156999999988
+          "requests": 1264,
+          "tokens": 1959723,
+          "usd": 7.622592999999995
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 1175,
-          "tokens": 1800353,
-          "usd": 0.2795139999999998
+          "requests": 1023,
+          "tokens": 1574532,
+          "usd": 0.245236
         },
         {
           "model": "o3-mini",
-          "requests": 751,
-          "tokens": 1150601,
-          "usd": 1.9380620000000002
+          "requests": 661,
+          "tokens": 1015122,
+          "usd": 1.7130660000000006
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 578,
-          "tokens": 881922,
-          "usd": 0.4892030000000001
+          "requests": 509,
+          "tokens": 777552,
+          "usd": 0.42966100000000024
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 576,
-          "tokens": 885594,
-          "usd": 1.6901340000000005
+          "requests": 497,
+          "tokens": 767627,
+          "usd": 1.4700050000000002
         }
       ],
       "members": [
@@ -3082,18 +3082,18 @@
           "id": "123d561a-65bd-4402-86a2-9ff2d49012c8",
           "name": "platform-staging",
           "maskedKey": "nxs-SE••••aae1",
-          "requests": 5797,
-          "tokens": 8926364,
-          "usd": 29.01551200000004,
+          "requests": 5076,
+          "tokens": 7841882,
+          "usd": 25.750582999999967,
           "lastUsedAt": "2026-07-20T12:33:22.000Z"
         },
         {
           "id": "f33fb7f1-4cd2-40f0-8ea5-fe53de486586",
           "name": "platform-prod",
           "maskedKey": "nxs-SE••••936c",
-          "requests": 5839,
-          "tokens": 8968308,
-          "usd": 28.000927000000026,
+          "requests": 5105,
+          "tokens": 7837750,
+          "usd": 24.65532699999997,
           "lastUsedAt": "2026-07-20T12:36:32.000Z"
         }
       ]
@@ -3111,46 +3111,28 @@
         "keyCount": 2
       },
       "period": "90d",
-      "since": "2026-04-23T07:11:26.077Z",
-      "until": "2026-07-22T07:11:26.077Z",
+      "since": "2026-04-26T06:14:10.184Z",
+      "until": "2026-07-25T06:14:10.184Z",
       "totals": {
-        "requests": 30343,
-        "successes": 28978,
-        "errors": 1365,
-        "successRate": 0.9550143360906964,
-        "totalTokens": 46715764,
-        "estimatedUsd": 148.35998800000067,
-        "avgLatencyMs": 1895
+        "requests": 29635,
+        "successes": 28312,
+        "errors": 1323,
+        "successRate": 0.955356841572465,
+        "totalTokens": 45644311,
+        "estimatedUsd": 144.92555600000065,
+        "avgLatencyMs": 1893
       },
       "byDay": [
         {
-          "date": "2026-04-23",
-          "requests": 300,
-          "usd": 1.6724419999999998,
-          "tokens": 464426
-        },
-        {
-          "date": "2026-04-24",
-          "requests": 300,
-          "usd": 1.2291710000000005,
-          "tokens": 440991
-        },
-        {
-          "date": "2026-04-25",
-          "requests": 100,
-          "usd": 0.49745300000000003,
-          "tokens": 152304
-        },
-        {
           "date": "2026-04-26",
-          "requests": 104,
-          "usd": 0.6810919999999999,
-          "tokens": 159468
+          "requests": 96,
+          "usd": 0.6457259999999999,
+          "tokens": 145736
         },
         {
           "date": "2026-04-27",
           "requests": 362,
-          "usd": 1.887751999999999,
+          "usd": 1.8877519999999988,
           "tokens": 556195
         },
         {
@@ -3174,13 +3156,13 @@
         {
           "date": "2026-05-01",
           "requests": 254,
-          "usd": 1.3172009999999996,
+          "usd": 1.317201,
           "tokens": 396695
         },
         {
           "date": "2026-05-02",
           "requests": 120,
-          "usd": 0.6539970000000003,
+          "usd": 0.653997,
           "tokens": 173413
         },
         {
@@ -3192,13 +3174,13 @@
         {
           "date": "2026-05-04",
           "requests": 341,
-          "usd": 1.508589000000001,
+          "usd": 1.5085890000000008,
           "tokens": 529721
         },
         {
           "date": "2026-05-05",
           "requests": 369,
-          "usd": 1.8468040000000008,
+          "usd": 1.8468040000000003,
           "tokens": 568947
         },
         {
@@ -3216,7 +3198,7 @@
         {
           "date": "2026-05-08",
           "requests": 316,
-          "usd": 1.700633000000001,
+          "usd": 1.7006330000000007,
           "tokens": 475945
         },
         {
@@ -3228,25 +3210,25 @@
         {
           "date": "2026-05-10",
           "requests": 131,
-          "usd": 0.4510860000000001,
+          "usd": 0.4510860000000002,
           "tokens": 193458
         },
         {
           "date": "2026-05-11",
           "requests": 408,
-          "usd": 2.012538000000001,
+          "usd": 2.0125380000000006,
           "tokens": 626990
         },
         {
           "date": "2026-05-12",
           "requests": 368,
-          "usd": 2.021049999999999,
+          "usd": 2.0210499999999993,
           "tokens": 574871
         },
         {
           "date": "2026-05-13",
           "requests": 388,
-          "usd": 1.5600779999999996,
+          "usd": 1.5600779999999999,
           "tokens": 595214
         },
         {
@@ -3288,19 +3270,19 @@
         {
           "date": "2026-05-20",
           "requests": 419,
-          "usd": 2.266689,
+          "usd": 2.2666890000000004,
           "tokens": 645664
         },
         {
           "date": "2026-05-21",
           "requests": 384,
-          "usd": 1.723412000000001,
+          "usd": 1.7234120000000008,
           "tokens": 602899
         },
         {
           "date": "2026-05-22",
           "requests": 343,
-          "usd": 1.6665449999999997,
+          "usd": 1.666545,
           "tokens": 527456
         },
         {
@@ -3312,19 +3294,19 @@
         {
           "date": "2026-05-24",
           "requests": 105,
-          "usd": 0.614812,
+          "usd": 0.6148120000000001,
           "tokens": 151749
         },
         {
           "date": "2026-05-25",
           "requests": 472,
-          "usd": 2.3869480000000007,
+          "usd": 2.386948000000001,
           "tokens": 732524
         },
         {
           "date": "2026-05-26",
           "requests": 459,
-          "usd": 2.415624,
+          "usd": 2.4156240000000007,
           "tokens": 704368
         },
         {
@@ -3336,7 +3318,7 @@
         {
           "date": "2026-05-28",
           "requests": 409,
-          "usd": 1.6830470000000002,
+          "usd": 1.6830470000000004,
           "tokens": 647207
         },
         {
@@ -3348,25 +3330,25 @@
         {
           "date": "2026-05-30",
           "requests": 150,
-          "usd": 0.6914660000000001,
+          "usd": 0.691466,
           "tokens": 237605
         },
         {
           "date": "2026-05-31",
           "requests": 133,
-          "usd": 0.572827,
+          "usd": 0.5728269999999999,
           "tokens": 215645
         },
         {
           "date": "2026-06-01",
           "requests": 408,
-          "usd": 1.9590599999999996,
+          "usd": 1.95906,
           "tokens": 612987
         },
         {
           "date": "2026-06-02",
           "requests": 450,
-          "usd": 2.293248,
+          "usd": 2.2932480000000006,
           "tokens": 682821
         },
         {
@@ -3378,61 +3360,61 @@
         {
           "date": "2026-06-04",
           "requests": 422,
-          "usd": 1.994527999999999,
+          "usd": 1.9945279999999992,
           "tokens": 658134
         },
         {
           "date": "2026-06-05",
           "requests": 323,
-          "usd": 1.5224289999999998,
+          "usd": 1.522429000000001,
           "tokens": 490586
         },
         {
           "date": "2026-06-06",
           "requests": 133,
-          "usd": 0.5912979999999999,
+          "usd": 0.5912979999999997,
           "tokens": 205491
         },
         {
           "date": "2026-06-07",
           "requests": 145,
-          "usd": 0.716258,
+          "usd": 0.7162580000000002,
           "tokens": 233959
         },
         {
           "date": "2026-06-08",
           "requests": 379,
-          "usd": 1.8967599999999996,
+          "usd": 1.8967599999999993,
           "tokens": 592513
         },
         {
           "date": "2026-06-09",
           "requests": 465,
-          "usd": 2.329009000000001,
+          "usd": 2.3290090000000014,
           "tokens": 718476
         },
         {
           "date": "2026-06-10",
           "requests": 472,
-          "usd": 2.399031000000001,
+          "usd": 2.3990310000000004,
           "tokens": 732603
         },
         {
           "date": "2026-06-11",
           "requests": 454,
-          "usd": 2.224514000000002,
+          "usd": 2.2245140000000014,
           "tokens": 695621
         },
         {
           "date": "2026-06-12",
           "requests": 339,
-          "usd": 1.863623,
+          "usd": 1.8636230000000003,
           "tokens": 537634
         },
         {
           "date": "2026-06-13",
           "requests": 140,
-          "usd": 0.7116600000000003,
+          "usd": 0.7116600000000001,
           "tokens": 222922
         },
         {
@@ -3444,7 +3426,7 @@
         {
           "date": "2026-06-15",
           "requests": 444,
-          "usd": 1.5935059999999999,
+          "usd": 1.593506,
           "tokens": 677075
         },
         {
@@ -3474,25 +3456,25 @@
         {
           "date": "2026-06-20",
           "requests": 146,
-          "usd": 0.8522689999999997,
+          "usd": 0.8522689999999998,
           "tokens": 226000
         },
         {
           "date": "2026-06-21",
           "requests": 176,
-          "usd": 0.9916920000000004,
+          "usd": 0.991692,
           "tokens": 272827
         },
         {
           "date": "2026-06-22",
           "requests": 487,
-          "usd": 2.170162000000001,
+          "usd": 2.170161999999999,
           "tokens": 726512
         },
         {
           "date": "2026-06-23",
           "requests": 473,
-          "usd": 2.2104399999999997,
+          "usd": 2.2104399999999993,
           "tokens": 724594
         },
         {
@@ -3588,19 +3570,19 @@
         {
           "date": "2026-07-09",
           "requests": 543,
-          "usd": 2.6038240000000004,
+          "usd": 2.6038239999999995,
           "tokens": 818537
         },
         {
           "date": "2026-07-10",
           "requests": 413,
-          "usd": 2.0492969999999993,
+          "usd": 2.049297,
           "tokens": 649412
         },
         {
           "date": "2026-07-11",
           "requests": 166,
-          "usd": 0.6670330000000009,
+          "usd": 0.667033000000001,
           "tokens": 257577
         },
         {
@@ -3612,13 +3594,13 @@
         {
           "date": "2026-07-13",
           "requests": 602,
-          "usd": 2.851332000000001,
+          "usd": 2.8513320000000006,
           "tokens": 904992
         },
         {
           "date": "2026-07-14",
           "requests": 524,
-          "usd": 2.6463549999999993,
+          "usd": 2.646355,
           "tokens": 808232
         },
         {
@@ -3668,56 +3650,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 6624,
-          "tokens": 10153746,
-          "usd": 2.380935999999998
+          "requests": 6471,
+          "tokens": 9933752,
+          "usd": 2.326823999999999
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 5984,
-          "tokens": 9234004,
-          "usd": 49.55548799999998
+          "requests": 5861,
+          "tokens": 9046887,
+          "usd": 48.554865000000014
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 4163,
-          "tokens": 6469521,
-          "usd": 11.66184600000002
+          "requests": 4049,
+          "tokens": 6288837,
+          "usd": 11.335879999999992
         },
         {
           "model": "GPT-4o",
-          "requests": 3747,
-          "tokens": 5778749,
-          "usd": 22.247549000000035
+          "requests": 3661,
+          "tokens": 5639540,
+          "usd": 21.704215000000058
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 3137,
-          "tokens": 4804410,
-          "usd": 0.7485979999999985
+          "requests": 3051,
+          "tokens": 4675867,
+          "usd": 0.7293849999999992
         },
         {
           "model": "o3-mini",
-          "requests": 1801,
-          "tokens": 2757417,
-          "usd": 4.684720000000002
+          "requests": 1762,
+          "tokens": 2697264,
+          "usd": 4.590443999999991
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 1535,
-          "tokens": 2362259,
-          "usd": 4.511438999999997
+          "requests": 1504,
+          "tokens": 2313638,
+          "usd": 4.412838999999996
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 1482,
-          "tokens": 2288658,
-          "usd": 1.2568559999999998
+          "requests": 1449,
+          "tokens": 2243859,
+          "usd": 1.2322450000000007
         }
       ],
       "members": [
@@ -3725,18 +3725,18 @@
           "id": "123d561a-65bd-4402-86a2-9ff2d49012c8",
           "name": "platform-staging",
           "maskedKey": "nxs-SE••••aae1",
-          "requests": 15126,
-          "tokens": 23296766,
-          "usd": 74.29628799999998,
+          "requests": 14781,
+          "tokens": 22771797,
+          "usd": 72.662054,
           "lastUsedAt": "2026-07-20T12:33:22.000Z"
         },
         {
           "id": "f33fb7f1-4cd2-40f0-8ea5-fe53de486586",
           "name": "platform-prod",
           "maskedKey": "nxs-SE••••936c",
-          "requests": 15217,
-          "tokens": 23418998,
-          "usd": 74.06370000000001,
+          "requests": 14854,
+          "tokens": 22872514,
+          "usd": 72.26350200000012,
           "lastUsedAt": "2026-07-20T12:36:32.000Z"
         }
       ]
@@ -3754,8 +3754,8 @@
         "keyCount": 2
       },
       "period": "today",
-      "since": "2026-07-22T00:00:00.000Z",
-      "until": "2026-07-22T07:11:26.173Z",
+      "since": "2026-07-25T00:00:00.000Z",
+      "until": "2026-07-25T06:14:10.298Z",
       "totals": {
         "requests": 0,
         "successes": 0,
@@ -3767,7 +3767,7 @@
       },
       "byDay": [
         {
-          "date": "2026-07-22",
+          "date": "2026-07-25",
           "requests": 0,
           "usd": 0,
           "tokens": 0
@@ -3808,41 +3808,23 @@
         "keyCount": 2
       },
       "period": "7d",
-      "since": "2026-07-15T07:11:26.179Z",
-      "until": "2026-07-22T07:11:26.179Z",
+      "since": "2026-07-18T06:14:10.309Z",
+      "until": "2026-07-25T06:14:10.309Z",
       "totals": {
-        "requests": 1557,
-        "successes": 1491,
-        "errors": 66,
-        "successRate": 0.9576107899807321,
-        "totalTokens": 2394773,
-        "estimatedUsd": 7.670128999999996,
-        "avgLatencyMs": 1885
+        "requests": 438,
+        "successes": 411,
+        "errors": 27,
+        "successRate": 0.9383561643835616,
+        "totalTokens": 671984,
+        "estimatedUsd": 2.003843000000001,
+        "avgLatencyMs": 1844
       },
       "byDay": [
         {
-          "date": "2026-07-15",
-          "requests": 387,
-          "usd": 1.9968749999999993,
-          "tokens": 598864
-        },
-        {
-          "date": "2026-07-16",
-          "requests": 440,
-          "usd": 2.181575,
-          "tokens": 680424
-        },
-        {
-          "date": "2026-07-17",
-          "requests": 284,
-          "usd": 1.4443589999999997,
-          "tokens": 431351
-        },
-        {
           "date": "2026-07-18",
-          "requests": 134,
-          "usd": 0.6213359999999999,
-          "tokens": 203877
+          "requests": 126,
+          "usd": 0.577859,
+          "tokens": 191727
         },
         {
           "date": "2026-07-19",
@@ -3867,56 +3849,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 324,
-          "tokens": 507774,
-          "usd": 0.12428099999999996
+          "requests": 95,
+          "tokens": 146739,
+          "usd": 0.035511
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 270,
-          "tokens": 421306,
-          "usd": 2.346222
-        },
-        {
-          "model": "Claude Haiku 4.5",
-          "requests": 228,
-          "tokens": 351296,
-          "usd": 0.625922
+          "requests": 80,
+          "tokens": 126427,
+          "usd": 0.6848759999999998
         },
         {
           "model": "GPT-4o",
-          "requests": 213,
-          "tokens": 326399,
-          "usd": 1.272963999999999
+          "requests": 63,
+          "tokens": 98857,
+          "usd": 0.3633660000000001
+        },
+        {
+          "model": "Claude Haiku 4.5",
+          "requests": 58,
+          "tokens": 88752,
+          "usd": 0.15112699999999998
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 177,
-          "tokens": 265476,
-          "usd": 0.043925
-        },
-        {
-          "model": "Llama 3.3 70B",
-          "requests": 85,
-          "tokens": 133986,
-          "usd": 0.077555
+          "requests": 44,
+          "tokens": 61352,
+          "usd": 0.009807000000000001
         },
         {
           "model": "o3-mini",
-          "requests": 85,
-          "tokens": 140318,
-          "usd": 0.23722199999999996
+          "requests": 29,
+          "tokens": 48394,
+          "usd": 0.07911699999999998
+        },
+        {
+          "model": "Llama 3.3 70B",
+          "requests": 26,
+          "tokens": 43139,
+          "usd": 0.023528000000000004
         },
         {
           "model": "Claude Opus 4.1",
-          "requests": 79,
-          "tokens": 111336,
-          "usd": 2.738625
+          "requests": 20,
+          "tokens": 27203,
+          "usd": 0.6132749999999999
         }
       ],
       "members": [
@@ -3924,18 +3924,18 @@
           "id": "9c75a0cb-2aa4-43f2-a8d4-18e802ba9d09",
           "name": "support-bot",
           "maskedKey": "nxs-SE••••ae8e",
-          "requests": 811,
-          "tokens": 1238106,
-          "usd": 4.182407999999999,
+          "requests": 226,
+          "tokens": 348002,
+          "usd": 1.0989479999999996,
           "lastUsedAt": "2026-07-20T12:38:09.000Z"
         },
         {
           "id": "3125f43c-7e76-4f44-9a6c-5687099bedbf",
           "name": "support-analytics",
           "maskedKey": "nxs-SE••••3e11",
-          "requests": 746,
-          "tokens": 1156667,
-          "usd": 3.487721000000001,
+          "requests": 212,
+          "tokens": 323982,
+          "usd": 0.9048950000000001,
           "lastUsedAt": "2026-07-20T12:36:31.000Z"
         }
       ]
@@ -3953,41 +3953,23 @@
         "keyCount": 2
       },
       "period": "30d",
-      "since": "2026-06-22T07:11:26.194Z",
-      "until": "2026-07-22T07:11:26.194Z",
+      "since": "2026-06-25T06:14:10.316Z",
+      "until": "2026-07-25T06:14:10.316Z",
       "totals": {
-        "requests": 8675,
-        "successes": 8313,
-        "errors": 362,
-        "successRate": 0.958270893371758,
-        "totalTokens": 13375456,
-        "estimatedUsd": 42.0844630000001,
-        "avgLatencyMs": 1882
+        "requests": 7638,
+        "successes": 7321,
+        "errors": 317,
+        "successRate": 0.958496988740508,
+        "totalTokens": 11783925,
+        "estimatedUsd": 36.74096899999998,
+        "avgLatencyMs": 1880
       },
       "byDay": [
         {
-          "date": "2026-06-22",
-          "requests": 284,
-          "usd": 1.5913829999999989,
-          "tokens": 430046
-        },
-        {
-          "date": "2026-06-23",
-          "requests": 352,
-          "usd": 1.6809069999999995,
-          "tokens": 536533
-        },
-        {
-          "date": "2026-06-24",
-          "requests": 373,
-          "usd": 1.8741959999999982,
-          "tokens": 584083
-        },
-        {
           "date": "2026-06-25",
-          "requests": 375,
-          "usd": 1.6108610000000003,
-          "tokens": 566358
+          "requests": 347,
+          "usd": 1.4138529999999998,
+          "tokens": 525489
         },
         {
           "date": "2026-06-26",
@@ -4150,76 +4132,94 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 1793,
-          "tokens": 2789629,
-          "usd": 0.6603849999999993
+          "requests": 1580,
+          "tokens": 2455473,
+          "usd": 0.5838650000000003
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 1650,
-          "tokens": 2574230,
-          "usd": 13.728618000000015
+          "requests": 1428,
+          "tokens": 2239180,
+          "usd": 11.924667000000014
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 1280,
-          "tokens": 1947481,
-          "usd": 3.4998210000000003
+          "requests": 1117,
+          "tokens": 1697739,
+          "usd": 3.0525800000000016
         },
         {
           "model": "GPT-4o",
-          "requests": 1071,
-          "tokens": 1644245,
-          "usd": 6.185759000000001
+          "requests": 955,
+          "tokens": 1465833,
+          "usd": 5.5067730000000035
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 967,
-          "tokens": 1470632,
-          "usd": 0.22629700000000003
+          "requests": 859,
+          "tokens": 1311179,
+          "usd": 0.20123799999999997
         },
         {
           "model": "o3-mini",
-          "requests": 524,
-          "tokens": 817142,
-          "usd": 1.4038159999999982
+          "requests": 469,
+          "tokens": 733827,
+          "usd": 1.256128000000001
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 427,
-          "tokens": 639247,
-          "usd": 1.2443770000000012
+          "requests": 379,
+          "tokens": 567960,
+          "usd": 1.1117379999999997
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 426,
-          "tokens": 667038,
-          "usd": 0.3763509999999999
+          "requests": 377,
+          "tokens": 593382,
+          "usd": 0.33576100000000014
         }
       ],
       "members": [
         {
-          "id": "3125f43c-7e76-4f44-9a6c-5687099bedbf",
-          "name": "support-analytics",
-          "maskedKey": "nxs-SE••••3e11",
-          "requests": 4285,
-          "tokens": 6568962,
-          "usd": 21.13574400000001,
-          "lastUsedAt": "2026-07-20T12:36:31.000Z"
-        },
-        {
           "id": "9c75a0cb-2aa4-43f2-a8d4-18e802ba9d09",
           "name": "support-bot",
           "maskedKey": "nxs-SE••••ae8e",
-          "requests": 4390,
-          "tokens": 6806494,
-          "usd": 20.948718999999958,
+          "requests": 3900,
+          "tokens": 6052685,
+          "usd": 18.62880099999997,
           "lastUsedAt": "2026-07-20T12:38:09.000Z"
+        },
+        {
+          "id": "3125f43c-7e76-4f44-9a6c-5687099bedbf",
+          "name": "support-analytics",
+          "maskedKey": "nxs-SE••••3e11",
+          "requests": 3738,
+          "tokens": 5731240,
+          "usd": 18.11216799999996,
+          "lastUsedAt": "2026-07-20T12:36:31.000Z"
         }
       ]
     },
@@ -4236,46 +4236,28 @@
         "keyCount": 2
       },
       "period": "90d",
-      "since": "2026-04-23T07:11:26.237Z",
-      "until": "2026-07-22T07:11:26.237Z",
+      "since": "2026-04-26T06:14:10.358Z",
+      "until": "2026-07-25T06:14:10.358Z",
       "totals": {
-        "requests": 23006,
-        "successes": 22038,
-        "errors": 968,
-        "successRate": 0.9579240198209162,
-        "totalTokens": 35492344,
-        "estimatedUsd": 111.19274000000006,
-        "avgLatencyMs": 1878
+        "requests": 22463,
+        "successes": 21522,
+        "errors": 941,
+        "successRate": 0.9581088901749544,
+        "totalTokens": 34666930,
+        "estimatedUsd": 108.5386320000001,
+        "avgLatencyMs": 1877
       },
       "byDay": [
         {
-          "date": "2026-04-23",
-          "requests": 246,
-          "usd": 1.0893470000000003,
-          "tokens": 380272
-        },
-        {
-          "date": "2026-04-24",
-          "requests": 201,
-          "usd": 1.0341760000000002,
-          "tokens": 296140
-        },
-        {
-          "date": "2026-04-25",
-          "requests": 89,
-          "usd": 0.515007,
-          "tokens": 138830
-        },
-        {
           "date": "2026-04-26",
-          "requests": 94,
-          "usd": 0.402983,
-          "tokens": 141192
+          "requests": 87,
+          "usd": 0.387405,
+          "tokens": 131020
         },
         {
           "date": "2026-04-27",
           "requests": 261,
-          "usd": 1.1145789999999995,
+          "usd": 1.1145790000000004,
           "tokens": 403540
         },
         {
@@ -4317,55 +4299,55 @@
         {
           "date": "2026-05-04",
           "requests": 247,
-          "usd": 1.2999509999999994,
+          "usd": 1.2999510000000005,
           "tokens": 376507
         },
         {
           "date": "2026-05-05",
           "requests": 240,
-          "usd": 1.1113000000000006,
+          "usd": 1.1113000000000004,
           "tokens": 369807
         },
         {
           "date": "2026-05-06",
           "requests": 322,
-          "usd": 1.555824,
+          "usd": 1.5558239999999994,
           "tokens": 504551
         },
         {
           "date": "2026-05-07",
           "requests": 243,
-          "usd": 1.1466289999999992,
+          "usd": 1.1466290000000006,
           "tokens": 366807
         },
         {
           "date": "2026-05-08",
           "requests": 240,
-          "usd": 1.1390160000000005,
+          "usd": 1.1390160000000003,
           "tokens": 374182
         },
         {
           "date": "2026-05-09",
           "requests": 99,
-          "usd": 0.42696500000000004,
+          "usd": 0.426965,
           "tokens": 155855
         },
         {
           "date": "2026-05-10",
           "requests": 93,
-          "usd": 0.5631510000000001,
+          "usd": 0.563151,
           "tokens": 144991
         },
         {
           "date": "2026-05-11",
           "requests": 279,
-          "usd": 1.4495570000000009,
+          "usd": 1.449557000000001,
           "tokens": 428947
         },
         {
           "date": "2026-05-12",
           "requests": 270,
-          "usd": 1.1421299999999992,
+          "usd": 1.1421299999999996,
           "tokens": 410915
         },
         {
@@ -4401,7 +4383,7 @@
         {
           "date": "2026-05-18",
           "requests": 348,
-          "usd": 1.7253610000000008,
+          "usd": 1.7253610000000006,
           "tokens": 526501
         },
         {
@@ -4413,7 +4395,7 @@
         {
           "date": "2026-05-20",
           "requests": 316,
-          "usd": 1.5184619999999984,
+          "usd": 1.5184619999999989,
           "tokens": 501109
         },
         {
@@ -4449,13 +4431,13 @@
         {
           "date": "2026-05-26",
           "requests": 295,
-          "usd": 1.3433840000000006,
+          "usd": 1.3433840000000001,
           "tokens": 470479
         },
         {
           "date": "2026-05-27",
           "requests": 357,
-          "usd": 1.14249,
+          "usd": 1.1424900000000004,
           "tokens": 549901
         },
         {
@@ -4467,25 +4449,25 @@
         {
           "date": "2026-05-29",
           "requests": 261,
-          "usd": 1.377669000000001,
+          "usd": 1.3776689999999996,
           "tokens": 413896
         },
         {
           "date": "2026-05-30",
           "requests": 101,
-          "usd": 0.5711580000000003,
+          "usd": 0.571158,
           "tokens": 153101
         },
         {
           "date": "2026-05-31",
           "requests": 105,
-          "usd": 0.4677750000000002,
+          "usd": 0.4677750000000001,
           "tokens": 160627
         },
         {
           "date": "2026-06-01",
           "requests": 303,
-          "usd": 1.3996350000000006,
+          "usd": 1.3996350000000004,
           "tokens": 458634
         },
         {
@@ -4497,19 +4479,19 @@
         {
           "date": "2026-06-03",
           "requests": 368,
-          "usd": 1.8368690000000003,
+          "usd": 1.8368689999999999,
           "tokens": 560324
         },
         {
           "date": "2026-06-04",
           "requests": 273,
-          "usd": 1.418913,
+          "usd": 1.4189130000000003,
           "tokens": 414390
         },
         {
           "date": "2026-06-05",
           "requests": 249,
-          "usd": 1.2935220000000007,
+          "usd": 1.293522000000001,
           "tokens": 385306
         },
         {
@@ -4521,13 +4503,13 @@
         {
           "date": "2026-06-07",
           "requests": 117,
-          "usd": 0.7674650000000003,
+          "usd": 0.7674650000000001,
           "tokens": 182506
         },
         {
           "date": "2026-06-08",
           "requests": 327,
-          "usd": 1.6685659999999993,
+          "usd": 1.6685660000000004,
           "tokens": 507052
         },
         {
@@ -4545,7 +4527,7 @@
         {
           "date": "2026-06-11",
           "requests": 360,
-          "usd": 1.6631529999999992,
+          "usd": 1.663152999999999,
           "tokens": 556745
         },
         {
@@ -4793,56 +4775,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 4967,
-          "tokens": 7621612,
-          "usd": 1.781085000000002
+          "requests": 4842,
+          "tokens": 7431724,
+          "usd": 1.7359539999999951
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 4468,
-          "tokens": 6950884,
-          "usd": 37.17582600000006
+          "requests": 4354,
+          "tokens": 6780013,
+          "usd": 36.222770999999995
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 3315,
-          "tokens": 5123090,
-          "usd": 9.227669000000038
+          "requests": 3249,
+          "tokens": 5015864,
+          "usd": 9.027098000000022
         },
         {
           "model": "GPT-4o",
-          "requests": 2770,
-          "tokens": 4299577,
-          "usd": 16.45133400000001
+          "requests": 2704,
+          "tokens": 4200852,
+          "usd": 16.048612000000002
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 2394,
-          "tokens": 3668067,
-          "usd": 0.5675770000000004
+          "requests": 2323,
+          "tokens": 3561129,
+          "usd": 0.5517740000000013
         },
         {
           "model": "o3-mini",
-          "requests": 1362,
-          "tokens": 2084293,
-          "usd": 3.5594970000000052
+          "requests": 1334,
+          "tokens": 2041952,
+          "usd": 3.489777000000002
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 1187,
-          "tokens": 1817926,
-          "usd": 3.4640159999999978
+          "requests": 1163,
+          "tokens": 1779867,
+          "usd": 3.3865089999999993
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 1135,
-          "tokens": 1769256,
-          "usd": 0.9886199999999999
+          "requests": 1119,
+          "tokens": 1747355,
+          "usd": 0.9744499999999988
         }
       ],
       "members": [
@@ -4850,18 +4850,18 @@
           "id": "3125f43c-7e76-4f44-9a6c-5687099bedbf",
           "name": "support-analytics",
           "maskedKey": "nxs-SE••••3e11",
-          "requests": 11559,
-          "tokens": 17824591,
-          "usd": 56.37145099999979,
+          "requests": 11281,
+          "tokens": 17394224,
+          "usd": 54.85831699999992,
           "lastUsedAt": "2026-07-20T12:36:31.000Z"
         },
         {
           "id": "9c75a0cb-2aa4-43f2-a8d4-18e802ba9d09",
           "name": "support-bot",
           "maskedKey": "nxs-SE••••ae8e",
-          "requests": 11447,
-          "tokens": 17667753,
-          "usd": 54.82128900000037,
+          "requests": 11182,
+          "tokens": 17272706,
+          "usd": 53.68031500000006,
           "lastUsedAt": "2026-07-20T12:38:09.000Z"
         }
       ]
@@ -4879,8 +4879,8 @@
         "keyCount": 1
       },
       "period": "today",
-      "since": "2026-07-22T00:00:00.000Z",
-      "until": "2026-07-22T07:11:26.314Z",
+      "since": "2026-07-25T00:00:00.000Z",
+      "until": "2026-07-25T06:14:10.445Z",
       "totals": {
         "requests": 0,
         "successes": 0,
@@ -4892,7 +4892,7 @@
       },
       "byDay": [
         {
-          "date": "2026-07-22",
+          "date": "2026-07-25",
           "requests": 0,
           "usd": 0,
           "tokens": 0
@@ -4924,41 +4924,23 @@
         "keyCount": 1
       },
       "period": "7d",
-      "since": "2026-07-15T07:11:26.322Z",
-      "until": "2026-07-22T07:11:26.322Z",
+      "since": "2026-07-18T06:14:10.452Z",
+      "until": "2026-07-25T06:14:10.452Z",
       "totals": {
-        "requests": 1071,
-        "successes": 1020,
-        "errors": 51,
-        "successRate": 0.9523809523809523,
-        "totalTokens": 1637857,
-        "estimatedUsd": 5.410211,
-        "avgLatencyMs": 1851
+        "requests": 306,
+        "successes": 286,
+        "errors": 20,
+        "successRate": 0.934640522875817,
+        "totalTokens": 460524,
+        "estimatedUsd": 1.480961,
+        "avgLatencyMs": 1837
       },
       "byDay": [
         {
-          "date": "2026-07-15",
-          "requests": 253,
-          "usd": 1.3431020000000007,
-          "tokens": 396398
-        },
-        {
-          "date": "2026-07-16",
-          "requests": 267,
-          "usd": 1.4025600000000003,
-          "tokens": 408870
-        },
-        {
-          "date": "2026-07-17",
-          "requests": 238,
-          "usd": 1.112394,
-          "tokens": 359431
-        },
-        {
           "date": "2026-07-18",
-          "requests": 85,
-          "usd": 0.42273900000000003,
-          "tokens": 137763
+          "requests": 78,
+          "usd": 0.351545,
+          "tokens": 125129
         },
         {
           "date": "2026-07-19",
@@ -4983,56 +4965,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
-          "model": "Claude Sonnet 4.5",
-          "requests": 217,
-          "tokens": 337506,
-          "usd": 1.7671620000000001
+          "model": "GPT-4o mini",
+          "requests": 70,
+          "tokens": 107840,
+          "usd": 0.02099
         },
         {
-          "model": "GPT-4o mini",
-          "requests": 212,
-          "tokens": 320605,
-          "usd": 0.06946700000000003
+          "model": "Claude Sonnet 4.5",
+          "requests": 54,
+          "tokens": 88020,
+          "usd": 0.48118800000000006
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 146,
-          "tokens": 224819,
-          "usd": 0.3734920000000001
+          "requests": 43,
+          "tokens": 65819,
+          "usd": 0.100929
         },
         {
           "model": "GPT-4o",
-          "requests": 135,
-          "tokens": 199226,
-          "usd": 0.799957
+          "requests": 35,
+          "tokens": 51438,
+          "usd": 0.22818500000000003
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 117,
-          "tokens": 178268,
-          "usd": 0.027575000000000006
+          "requests": 27,
+          "tokens": 39782,
+          "usd": 0.006367000000000001
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 64,
-          "tokens": 96284,
-          "usd": 0.19312400000000005
-        },
-        {
-          "model": "Llama 3.3 70B",
-          "requests": 61,
-          "tokens": 94409,
-          "usd": 0.051197
+          "requests": 21,
+          "tokens": 28038,
+          "usd": 0.049463
         },
         {
           "model": "o3-mini",
-          "requests": 52,
-          "tokens": 82471,
-          "usd": 0.133654
+          "requests": 19,
+          "tokens": 29558,
+          "usd": 0.047806
+        },
+        {
+          "model": "Llama 3.3 70B",
+          "requests": 17,
+          "tokens": 22308,
+          "usd": 0.012172
         }
       ],
       "members": [
@@ -5040,9 +5040,9 @@
           "id": "0058ed25-559e-4cd3-8d73-d911d7e2c0c4",
           "name": "research-notebooks",
           "maskedKey": "nxs-SE••••8adf",
-          "requests": 1071,
-          "tokens": 1637857,
-          "usd": 5.410211,
+          "requests": 306,
+          "tokens": 460524,
+          "usd": 1.480961,
           "lastUsedAt": "2026-07-20T12:34:28.000Z"
         }
       ]
@@ -5060,41 +5060,23 @@
         "keyCount": 1
       },
       "period": "30d",
-      "since": "2026-06-22T07:11:26.335Z",
-      "until": "2026-07-22T07:11:26.335Z",
+      "since": "2026-06-25T06:14:10.462Z",
+      "until": "2026-07-25T06:14:10.462Z",
       "totals": {
-        "requests": 5956,
-        "successes": 5681,
-        "errors": 275,
-        "successRate": 0.9538280725319006,
-        "totalTokens": 9182291,
-        "estimatedUsd": 28.420256000000016,
-        "avgLatencyMs": 1887
+        "requests": 5245,
+        "successes": 5001,
+        "errors": 244,
+        "successRate": 0.9534795042897998,
+        "totalTokens": 8089386,
+        "estimatedUsd": 24.791530999999967,
+        "avgLatencyMs": 1885
       },
       "byDay": [
         {
-          "date": "2026-06-22",
-          "requests": 204,
-          "usd": 0.9985100000000003,
-          "tokens": 315290
-        },
-        {
-          "date": "2026-06-23",
-          "requests": 224,
-          "usd": 1.236481,
-          "tokens": 346979
-        },
-        {
-          "date": "2026-06-24",
-          "requests": 264,
-          "usd": 1.2482059999999997,
-          "tokens": 400870
-        },
-        {
           "date": "2026-06-25",
-          "requests": 268,
-          "usd": 1.136467,
-          "tokens": 427626
+          "requests": 249,
+          "usd": 0.9909390000000003,
+          "tokens": 397860
         },
         {
           "date": "2026-06-26",
@@ -5257,56 +5239,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 1332,
-          "tokens": 2039879,
-          "usd": 0.4651519999999995
+          "requests": 1160,
+          "tokens": 1777939,
+          "usd": 0.40363400000000055
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 1172,
-          "tokens": 1823044,
-          "usd": 9.62454900000002
+          "requests": 1035,
+          "tokens": 1608098,
+          "usd": 8.422005000000004
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 803,
-          "tokens": 1242582,
-          "usd": 2.188980999999999
+          "requests": 707,
+          "tokens": 1097603,
+          "usd": 1.9146859999999997
         },
         {
           "model": "GPT-4o",
-          "requests": 729,
-          "tokens": 1118973,
-          "usd": 4.341027000000001
+          "requests": 653,
+          "tokens": 1001082,
+          "usd": 3.8938159999999966
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 629,
-          "tokens": 944851,
-          "usd": 0.14908200000000002
+          "requests": 545,
+          "tokens": 819743,
+          "usd": 0.13032
         },
         {
           "model": "o3-mini",
-          "requests": 325,
-          "tokens": 509910,
-          "usd": 0.8269460000000005
+          "requests": 293,
+          "tokens": 458508,
+          "usd": 0.7504300000000002
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 306,
-          "tokens": 469412,
-          "usd": 0.9201520000000003
+          "requests": 279,
+          "tokens": 428452,
+          "usd": 0.8406079999999998
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 306,
-          "tokens": 476267,
-          "usd": 0.25946300000000005
+          "requests": 272,
+          "tokens": 424835,
+          "usd": 0.23165100000000008
         }
       ],
       "members": [
@@ -5314,9 +5314,9 @@
           "id": "0058ed25-559e-4cd3-8d73-d911d7e2c0c4",
           "name": "research-notebooks",
           "maskedKey": "nxs-SE••••8adf",
-          "requests": 5956,
-          "tokens": 9182291,
-          "usd": 28.420256000000016,
+          "requests": 5245,
+          "tokens": 8089386,
+          "usd": 24.791530999999967,
           "lastUsedAt": "2026-07-20T12:34:28.000Z"
         }
       ]
@@ -5334,46 +5334,28 @@
         "keyCount": 1
       },
       "period": "90d",
-      "since": "2026-04-23T07:11:26.368Z",
-      "until": "2026-07-22T07:11:26.368Z",
+      "since": "2026-04-26T06:14:10.499Z",
+      "until": "2026-07-25T06:14:10.499Z",
       "totals": {
-        "requests": 15842,
-        "successes": 15109,
-        "errors": 733,
-        "successRate": 0.9537305895720237,
-        "totalTokens": 24340061,
-        "estimatedUsd": 75.39944000000014,
-        "avgLatencyMs": 1885
+        "requests": 15464,
+        "successes": 14746,
+        "errors": 718,
+        "successRate": 0.9535695809622349,
+        "totalTokens": 23756719,
+        "estimatedUsd": 73.59733899999993,
+        "avgLatencyMs": 1884
       },
       "byDay": [
         {
-          "date": "2026-04-23",
-          "requests": 188,
-          "usd": 1.0064129999999998,
-          "tokens": 286495
-        },
-        {
-          "date": "2026-04-24",
-          "requests": 131,
-          "usd": 0.46626000000000006,
-          "tokens": 209620
-        },
-        {
-          "date": "2026-04-25",
-          "requests": 54,
-          "usd": 0.255528,
-          "tokens": 78935
-        },
-        {
           "date": "2026-04-26",
-          "requests": 60,
-          "usd": 0.35846399999999995,
-          "tokens": 89382
+          "requests": 55,
+          "usd": 0.284564,
+          "tokens": 81090
         },
         {
           "date": "2026-04-27",
           "requests": 205,
-          "usd": 1.0589559999999998,
+          "usd": 1.0589559999999996,
           "tokens": 315694
         },
         {
@@ -5403,7 +5385,7 @@
         {
           "date": "2026-05-02",
           "requests": 49,
-          "usd": 0.17905400000000002,
+          "usd": 0.17905400000000005,
           "tokens": 76009
         },
         {
@@ -5433,37 +5415,37 @@
         {
           "date": "2026-05-07",
           "requests": 220,
-          "usd": 0.9292239999999998,
+          "usd": 0.9292239999999997,
           "tokens": 327515
         },
         {
           "date": "2026-05-08",
           "requests": 144,
-          "usd": 0.8225240000000003,
+          "usd": 0.8225239999999999,
           "tokens": 217909
         },
         {
           "date": "2026-05-09",
           "requests": 69,
-          "usd": 0.205955,
+          "usd": 0.20595500000000003,
           "tokens": 106183
         },
         {
           "date": "2026-05-10",
           "requests": 60,
-          "usd": 0.3348,
+          "usd": 0.33480000000000004,
           "tokens": 93648
         },
         {
           "date": "2026-05-11",
           "requests": 197,
-          "usd": 0.9550890000000001,
+          "usd": 0.955089,
           "tokens": 300831
         },
         {
           "date": "2026-05-12",
           "requests": 201,
-          "usd": 0.967923,
+          "usd": 0.9679229999999999,
           "tokens": 304715
         },
         {
@@ -5511,13 +5493,13 @@
         {
           "date": "2026-05-20",
           "requests": 233,
-          "usd": 1.2942720000000005,
+          "usd": 1.294272000000001,
           "tokens": 347531
         },
         {
           "date": "2026-05-21",
           "requests": 209,
-          "usd": 0.955711,
+          "usd": 0.9557110000000001,
           "tokens": 328615
         },
         {
@@ -5547,13 +5529,13 @@
         {
           "date": "2026-05-26",
           "requests": 216,
-          "usd": 1.0098579999999993,
+          "usd": 1.0098579999999995,
           "tokens": 325830
         },
         {
           "date": "2026-05-27",
           "requests": 232,
-          "usd": 1.4157579999999996,
+          "usd": 1.4157579999999998,
           "tokens": 365341
         },
         {
@@ -5571,25 +5553,25 @@
         {
           "date": "2026-05-30",
           "requests": 72,
-          "usd": 0.450458,
+          "usd": 0.4504580000000001,
           "tokens": 112444
         },
         {
           "date": "2026-05-31",
           "requests": 85,
-          "usd": 0.3018899999999999,
+          "usd": 0.3018899999999998,
           "tokens": 124782
         },
         {
           "date": "2026-06-01",
           "requests": 221,
-          "usd": 1.0291150000000002,
+          "usd": 1.029115,
           "tokens": 349231
         },
         {
           "date": "2026-06-02",
           "requests": 209,
-          "usd": 0.8467509999999997,
+          "usd": 0.8467509999999998,
           "tokens": 328932
         },
         {
@@ -5613,7 +5595,7 @@
         {
           "date": "2026-06-06",
           "requests": 81,
-          "usd": 0.373682,
+          "usd": 0.37368200000000007,
           "tokens": 124267
         },
         {
@@ -5625,7 +5607,7 @@
         {
           "date": "2026-06-08",
           "requests": 222,
-          "usd": 0.8508799999999997,
+          "usd": 0.8508800000000002,
           "tokens": 339796
         },
         {
@@ -5637,7 +5619,7 @@
         {
           "date": "2026-06-10",
           "requests": 244,
-          "usd": 1.1554229999999999,
+          "usd": 1.155423,
           "tokens": 349769
         },
         {
@@ -5877,7 +5859,7 @@
         {
           "date": "2026-07-20",
           "requests": 130,
-          "usd": 0.631467,
+          "usd": 0.6314669999999999,
           "tokens": 187454
         },
         {
@@ -5891,56 +5873,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 3506,
-          "tokens": 5338510,
-          "usd": 1.2307319999999993
+          "requests": 3428,
+          "tokens": 5218936,
+          "usd": 1.2021170000000005
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 3136,
-          "tokens": 4827918,
-          "usd": 25.55915999999998
+          "requests": 3065,
+          "tokens": 4718687,
+          "usd": 24.996974999999967
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 2186,
-          "tokens": 3375107,
-          "usd": 6.001576999999998
+          "requests": 2138,
+          "tokens": 3303574,
+          "usd": 5.869994999999998
         },
         {
           "model": "GPT-4o",
-          "requests": 1908,
-          "tokens": 2920670,
-          "usd": 11.490018999999995
+          "requests": 1851,
+          "tokens": 2830765,
+          "usd": 11.117607999999997
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 1631,
-          "tokens": 2503109,
-          "usd": 0.38910100000000014
+          "requests": 1587,
+          "tokens": 2433501,
+          "usd": 0.3777860000000003
         },
         {
           "model": "o3-mini",
-          "requests": 927,
-          "tokens": 1453337,
-          "usd": 2.3860239999999986
+          "requests": 907,
+          "tokens": 1419223,
+          "usd": 2.327803000000004
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 837,
-          "tokens": 1260948,
-          "usd": 2.4591780000000005
+          "requests": 816,
+          "tokens": 1227836,
+          "usd": 2.4053460000000038
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 791,
-          "tokens": 1231567,
-          "usd": 0.6789749999999994
+          "requests": 774,
+          "tokens": 1207798,
+          "usd": 0.6658059999999997
         }
       ],
       "members": [
@@ -5948,9 +5948,9 @@
           "id": "0058ed25-559e-4cd3-8d73-d911d7e2c0c4",
           "name": "research-notebooks",
           "maskedKey": "nxs-SE••••8adf",
-          "requests": 15842,
-          "tokens": 24340061,
-          "usd": 75.39944000000014,
+          "requests": 15464,
+          "tokens": 23756719,
+          "usd": 73.59733899999993,
           "lastUsedAt": "2026-07-20T12:34:28.000Z"
         }
       ]
@@ -5968,8 +5968,8 @@
         "keyCount": 2
       },
       "period": "today",
-      "since": "2026-07-22T00:00:00.000Z",
-      "until": "2026-07-22T07:11:26.431Z",
+      "since": "2026-07-25T00:00:00.000Z",
+      "until": "2026-07-25T06:14:10.585Z",
       "totals": {
         "requests": 0,
         "successes": 0,
@@ -5981,7 +5981,7 @@
       },
       "byDay": [
         {
-          "date": "2026-07-22",
+          "date": "2026-07-25",
           "requests": 0,
           "usd": 0,
           "tokens": 0
@@ -6022,23 +6022,288 @@
         "keyCount": 2
       },
       "period": "7d",
-      "since": "2026-07-15T07:11:26.436Z",
-      "until": "2026-07-22T07:11:26.436Z",
+      "since": "2026-07-18T06:14:10.591Z",
+      "until": "2026-07-25T06:14:10.591Z",
       "totals": {
-        "requests": 831,
-        "successes": 794,
-        "errors": 37,
-        "successRate": 0.9554753309265944,
-        "totalTokens": 1274628,
-        "estimatedUsd": 3.9453279999999973,
+        "requests": 226,
+        "successes": 219,
+        "errors": 7,
+        "successRate": 0.9690265486725663,
+        "totalTokens": 356509,
+        "estimatedUsd": 0.9797659999999999,
+        "avgLatencyMs": 1849
+      },
+      "byDay": [
+        {
+          "date": "2026-07-18",
+          "requests": 62,
+          "usd": 0.240936,
+          "tokens": 104380
+        },
+        {
+          "date": "2026-07-19",
+          "requests": 73,
+          "usd": 0.2766459999999999,
+          "tokens": 108613
+        },
+        {
+          "date": "2026-07-20",
+          "requests": 91,
+          "usd": 0.46218400000000004,
+          "tokens": 143516
+        },
+        {
+          "date": "2026-07-21",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-22",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        }
+      ],
+      "byModel": [
+        {
+          "model": "GPT-4o mini",
+          "requests": 54,
+          "tokens": 84229,
+          "usd": 0.018963999999999998
+        },
+        {
+          "model": "Claude Sonnet 4.5",
+          "requests": 43,
+          "tokens": 65317,
+          "usd": 0.342855
+        },
+        {
+          "model": "GPT-4o",
+          "requests": 31,
+          "tokens": 50931,
+          "usd": 0.20375800000000005
+        },
+        {
+          "model": "Claude Haiku 4.5",
+          "requests": 26,
+          "tokens": 42187,
+          "usd": 0.07637100000000001
+        },
+        {
+          "model": "Gemini 2.0 Flash",
+          "requests": 24,
+          "tokens": 34810,
+          "usd": 0.005655
+        },
+        {
+          "model": "Llama 3.3 70B",
+          "requests": 17,
+          "tokens": 29336,
+          "usd": 0.01604
+        },
+        {
+          "model": "Gemini 1.5 Pro",
+          "requests": 12,
+          "tokens": 19047,
+          "usd": 0.034979
+        },
+        {
+          "model": "Claude Opus 4.1",
+          "requests": 8,
+          "tokens": 13596,
+          "usd": 0.268935
+        }
+      ],
+      "members": [
+        {
+          "id": "ad1e0ab2-c1d0-44dd-886e-b3e07b181ca5",
+          "name": "ios-prod",
+          "maskedKey": "nxs-SE••••5616",
+          "requests": 126,
+          "tokens": 197492,
+          "usd": 0.5207050000000002,
+          "lastUsedAt": "2026-07-20T12:36:35.000Z"
+        },
+        {
+          "id": "359b1376-309e-4059-90cb-412eaf860219",
+          "name": "android-prod",
+          "maskedKey": "nxs-SE••••23a0",
+          "requests": 100,
+          "tokens": 159017,
+          "usd": 0.45906099999999994,
+          "lastUsedAt": "2026-07-20T12:38:48.000Z"
+        }
+      ]
+    },
+    "6c0e7927-8a70-4e99-a525-109e44ec2cfb:30d": {
+      "team": {
+        "id": "6c0e7927-8a70-4e99-a525-109e44ec2cfb",
+        "name": "Mobile App",
+        "status": "active",
+        "assignedTier": null,
+        "overBudgetAction": "block",
+        "budgetUsd": 600,
+        "budgetPeriod": "monthly",
+        "budgetSpendUsd": 15.625403,
+        "keyCount": 2
+      },
+      "period": "30d",
+      "since": "2026-06-25T06:14:10.597Z",
+      "until": "2026-07-25T06:14:10.597Z",
+      "totals": {
+        "requests": 4140,
+        "successes": 3949,
+        "errors": 191,
+        "successRate": 0.9538647342995169,
+        "totalTokens": 6388925,
+        "estimatedUsd": 19.946220999999948,
         "avgLatencyMs": 1875
       },
       "byDay": [
         {
+          "date": "2026-06-25",
+          "requests": 172,
+          "usd": 0.8892829999999997,
+          "tokens": 266075
+        },
+        {
+          "date": "2026-06-26",
+          "requests": 161,
+          "usd": 0.6242099999999999,
+          "tokens": 241429
+        },
+        {
+          "date": "2026-06-27",
+          "requests": 63,
+          "usd": 0.3375540000000001,
+          "tokens": 100621
+        },
+        {
+          "date": "2026-06-28",
+          "requests": 73,
+          "usd": 0.538545,
+          "tokens": 105693
+        },
+        {
+          "date": "2026-06-29",
+          "requests": 225,
+          "usd": 0.9829270000000001,
+          "tokens": 356847
+        },
+        {
+          "date": "2026-06-30",
+          "requests": 210,
+          "usd": 0.9482989999999998,
+          "tokens": 326788
+        },
+        {
+          "date": "2026-07-01",
+          "requests": 254,
+          "usd": 1.2205120000000007,
+          "tokens": 399481
+        },
+        {
+          "date": "2026-07-02",
+          "requests": 210,
+          "usd": 1.2932049999999997,
+          "tokens": 322789
+        },
+        {
+          "date": "2026-07-03",
+          "requests": 190,
+          "usd": 0.7708939999999995,
+          "tokens": 292909
+        },
+        {
+          "date": "2026-07-04",
+          "requests": 67,
+          "usd": 0.3317379999999999,
+          "tokens": 102363
+        },
+        {
+          "date": "2026-07-05",
+          "requests": 80,
+          "usd": 0.4539329999999998,
+          "tokens": 123134
+        },
+        {
+          "date": "2026-07-06",
+          "requests": 181,
+          "usd": 1.0490899999999996,
+          "tokens": 282324
+        },
+        {
+          "date": "2026-07-07",
+          "requests": 217,
+          "usd": 0.7892870000000007,
+          "tokens": 314815
+        },
+        {
+          "date": "2026-07-08",
+          "requests": 199,
+          "usd": 0.9864530000000002,
+          "tokens": 301451
+        },
+        {
+          "date": "2026-07-09",
+          "requests": 227,
+          "usd": 1.2049010000000002,
+          "tokens": 360453
+        },
+        {
+          "date": "2026-07-10",
+          "requests": 160,
+          "usd": 0.8615739999999998,
+          "tokens": 254494
+        },
+        {
+          "date": "2026-07-11",
+          "requests": 54,
+          "usd": 0.235042,
+          "tokens": 91911
+        },
+        {
+          "date": "2026-07-12",
+          "requests": 63,
+          "usd": 0.2967060000000001,
+          "tokens": 95869
+        },
+        {
+          "date": "2026-07-13",
+          "requests": 246,
+          "usd": 0.8833679999999998,
+          "tokens": 382218
+        },
+        {
+          "date": "2026-07-14",
+          "requests": 231,
+          "usd": 1.2166730000000006,
+          "tokens": 351111
+        },
+        {
           "date": "2026-07-15",
-          "requests": 215,
-          "usd": 1.2417799999999999,
-          "tokens": 328521
+          "requests": 241,
+          "usd": 1.3284789999999997,
+          "tokens": 370043
         },
         {
           "date": "2026-07-16",
@@ -6081,56 +6346,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 179,
-          "tokens": 281309,
-          "usd": 0.067137
+          "requests": 913,
+          "tokens": 1447518,
+          "usd": 0.3354310000000001
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 155,
-          "tokens": 234238,
-          "usd": 1.250493000000001
+          "requests": 856,
+          "tokens": 1317205,
+          "usd": 7.0733520000000025
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 122,
-          "tokens": 178347,
-          "usd": 0.30750800000000006
+          "requests": 563,
+          "tokens": 842468,
+          "usd": 1.5065620000000004
         },
         {
           "model": "GPT-4o",
-          "requests": 98,
-          "tokens": 149183,
-          "usd": 0.58918
+          "requests": 508,
+          "tokens": 779632,
+          "usd": 3.039044999999998
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 94,
-          "tokens": 142857,
-          "usd": 0.023976
+          "requests": 404,
+          "tokens": 601787,
+          "usd": 0.09410400000000006
         },
         {
           "model": "o3-mini",
-          "requests": 47,
-          "tokens": 69015,
-          "usd": 0.118744
+          "requests": 239,
+          "tokens": 361736,
+          "usd": 0.623331
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 46,
-          "tokens": 76632,
-          "usd": 0.03981
+          "requests": 215,
+          "tokens": 351299,
+          "usd": 0.1960369999999999
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 42,
-          "tokens": 64199,
-          "usd": 0.12219399999999998
+          "requests": 200,
+          "tokens": 315686,
+          "usd": 0.5911179999999999
         }
       ],
       "members": [
@@ -6138,23 +6421,23 @@
           "id": "ad1e0ab2-c1d0-44dd-886e-b3e07b181ca5",
           "name": "ios-prod",
           "maskedKey": "nxs-SE••••5616",
-          "requests": 444,
-          "tokens": 679990,
-          "usd": 2.1978769999999983,
+          "requests": 2096,
+          "tokens": 3246310,
+          "usd": 10.156482000000002,
           "lastUsedAt": "2026-07-20T12:36:35.000Z"
         },
         {
           "id": "359b1376-309e-4059-90cb-412eaf860219",
           "name": "android-prod",
           "maskedKey": "nxs-SE••••23a0",
-          "requests": 387,
-          "tokens": 594638,
-          "usd": 1.7474510000000012,
+          "requests": 2044,
+          "tokens": 3142615,
+          "usd": 9.789739000000003,
           "lastUsedAt": "2026-07-20T12:38:48.000Z"
         }
       ]
     },
-    "6c0e7927-8a70-4e99-a525-109e44ec2cfb:30d": {
+    "6c0e7927-8a70-4e99-a525-109e44ec2cfb:90d": {
       "team": {
         "id": "6c0e7927-8a70-4e99-a525-109e44ec2cfb",
         "name": "Mobile App",
@@ -6166,24 +6449,366 @@
         "budgetSpendUsd": 15.625403,
         "keyCount": 2
       },
-      "period": "30d",
-      "since": "2026-06-22T07:11:26.447Z",
-      "until": "2026-07-22T07:11:26.447Z",
+      "period": "90d",
+      "since": "2026-04-26T06:14:10.628Z",
+      "until": "2026-07-25T06:14:10.628Z",
       "totals": {
-        "requests": 4735,
-        "successes": 4519,
-        "errors": 216,
-        "successRate": 0.9543822597676874,
-        "totalTokens": 7305971,
-        "estimatedUsd": 22.374423999999973,
-        "avgLatencyMs": 1892
+        "requests": 12157,
+        "successes": 11598,
+        "errors": 559,
+        "successRate": 0.954018261084149,
+        "totalTokens": 18683554,
+        "estimatedUsd": 58.20487099999978,
+        "avgLatencyMs": 1874
       },
       "byDay": [
         {
+          "date": "2026-04-26",
+          "requests": 37,
+          "usd": 0.199426,
+          "tokens": 60104
+        },
+        {
+          "date": "2026-04-27",
+          "requests": 143,
+          "usd": 0.6921569999999997,
+          "tokens": 223219
+        },
+        {
+          "date": "2026-04-28",
+          "requests": 173,
+          "usd": 0.9953179999999999,
+          "tokens": 253623
+        },
+        {
+          "date": "2026-04-29",
+          "requests": 151,
+          "usd": 0.7895220000000002,
+          "tokens": 232607
+        },
+        {
+          "date": "2026-04-30",
+          "requests": 165,
+          "usd": 0.737176,
+          "tokens": 249952
+        },
+        {
+          "date": "2026-05-01",
+          "requests": 102,
+          "usd": 0.40978899999999974,
+          "tokens": 162731
+        },
+        {
+          "date": "2026-05-02",
+          "requests": 45,
+          "usd": 0.12127899999999998,
+          "tokens": 67709
+        },
+        {
+          "date": "2026-05-03",
+          "requests": 44,
+          "usd": 0.23195700000000002,
+          "tokens": 68766
+        },
+        {
+          "date": "2026-05-04",
+          "requests": 153,
+          "usd": 0.6240739999999996,
+          "tokens": 239901
+        },
+        {
+          "date": "2026-05-05",
+          "requests": 156,
+          "usd": 0.904352,
+          "tokens": 238112
+        },
+        {
+          "date": "2026-05-06",
+          "requests": 170,
+          "usd": 0.684323,
+          "tokens": 254680
+        },
+        {
+          "date": "2026-05-07",
+          "requests": 149,
+          "usd": 0.6989300000000002,
+          "tokens": 237226
+        },
+        {
+          "date": "2026-05-08",
+          "requests": 127,
+          "usd": 0.8936280000000001,
+          "tokens": 192870
+        },
+        {
+          "date": "2026-05-09",
+          "requests": 45,
+          "usd": 0.274505,
+          "tokens": 68168
+        },
+        {
+          "date": "2026-05-10",
+          "requests": 37,
+          "usd": 0.25228199999999995,
+          "tokens": 55350
+        },
+        {
+          "date": "2026-05-11",
+          "requests": 162,
+          "usd": 0.8364700000000004,
+          "tokens": 238557
+        },
+        {
+          "date": "2026-05-12",
+          "requests": 177,
+          "usd": 0.7709989999999999,
+          "tokens": 273968
+        },
+        {
+          "date": "2026-05-13",
+          "requests": 159,
+          "usd": 0.8800809999999997,
+          "tokens": 238836
+        },
+        {
+          "date": "2026-05-14",
+          "requests": 141,
+          "usd": 0.7998589999999999,
+          "tokens": 213678
+        },
+        {
+          "date": "2026-05-15",
+          "requests": 107,
+          "usd": 0.313514,
+          "tokens": 156116
+        },
+        {
+          "date": "2026-05-16",
+          "requests": 43,
+          "usd": 0.27877,
+          "tokens": 61692
+        },
+        {
+          "date": "2026-05-17",
+          "requests": 59,
+          "usd": 0.193992,
+          "tokens": 94776
+        },
+        {
+          "date": "2026-05-18",
+          "requests": 171,
+          "usd": 0.8509679999999995,
+          "tokens": 264057
+        },
+        {
+          "date": "2026-05-19",
+          "requests": 176,
+          "usd": 1.0483270000000005,
+          "tokens": 273041
+        },
+        {
+          "date": "2026-05-20",
+          "requests": 180,
+          "usd": 0.9130979999999992,
+          "tokens": 273870
+        },
+        {
+          "date": "2026-05-21",
+          "requests": 154,
+          "usd": 0.8973859999999999,
+          "tokens": 233704
+        },
+        {
+          "date": "2026-05-22",
+          "requests": 130,
+          "usd": 0.5443409999999997,
+          "tokens": 197661
+        },
+        {
+          "date": "2026-05-23",
+          "requests": 56,
+          "usd": 0.24402199999999996,
+          "tokens": 91015
+        },
+        {
+          "date": "2026-05-24",
+          "requests": 48,
+          "usd": 0.21749500000000002,
+          "tokens": 72811
+        },
+        {
+          "date": "2026-05-25",
+          "requests": 179,
+          "usd": 0.647897,
+          "tokens": 275484
+        },
+        {
+          "date": "2026-05-26",
+          "requests": 198,
+          "usd": 1.0082310000000003,
+          "tokens": 287764
+        },
+        {
+          "date": "2026-05-27",
+          "requests": 193,
+          "usd": 0.8136529999999998,
+          "tokens": 285563
+        },
+        {
+          "date": "2026-05-28",
+          "requests": 167,
+          "usd": 0.4984089999999999,
+          "tokens": 245707
+        },
+        {
+          "date": "2026-05-29",
+          "requests": 130,
+          "usd": 0.4105549999999999,
+          "tokens": 199535
+        },
+        {
+          "date": "2026-05-30",
+          "requests": 61,
+          "usd": 0.23327499999999993,
+          "tokens": 88595
+        },
+        {
+          "date": "2026-05-31",
+          "requests": 58,
+          "usd": 0.33148500000000003,
+          "tokens": 93415
+        },
+        {
+          "date": "2026-06-01",
+          "requests": 203,
+          "usd": 0.9457880000000001,
+          "tokens": 316802
+        },
+        {
+          "date": "2026-06-02",
+          "requests": 162,
+          "usd": 0.7278639999999997,
+          "tokens": 260208
+        },
+        {
+          "date": "2026-06-03",
+          "requests": 154,
+          "usd": 0.7120279999999999,
+          "tokens": 242501
+        },
+        {
+          "date": "2026-06-04",
+          "requests": 180,
+          "usd": 0.979614,
+          "tokens": 282840
+        },
+        {
+          "date": "2026-06-05",
+          "requests": 148,
+          "usd": 0.5245259999999999,
+          "tokens": 230690
+        },
+        {
+          "date": "2026-06-06",
+          "requests": 50,
+          "usd": 0.200321,
+          "tokens": 76328
+        },
+        {
+          "date": "2026-06-07",
+          "requests": 51,
+          "usd": 0.232812,
+          "tokens": 73966
+        },
+        {
+          "date": "2026-06-08",
+          "requests": 171,
+          "usd": 0.847878,
+          "tokens": 258614
+        },
+        {
+          "date": "2026-06-09",
+          "requests": 188,
+          "usd": 0.8421640000000001,
+          "tokens": 293104
+        },
+        {
+          "date": "2026-06-10",
+          "requests": 202,
+          "usd": 1.1602440000000005,
+          "tokens": 309414
+        },
+        {
+          "date": "2026-06-11",
+          "requests": 178,
+          "usd": 0.7206399999999998,
+          "tokens": 279193
+        },
+        {
+          "date": "2026-06-12",
+          "requests": 145,
+          "usd": 0.8713640000000001,
+          "tokens": 222087
+        },
+        {
+          "date": "2026-06-13",
+          "requests": 79,
+          "usd": 0.321234,
+          "tokens": 116637
+        },
+        {
+          "date": "2026-06-14",
+          "requests": 51,
+          "usd": 0.29066299999999995,
+          "tokens": 83657
+        },
+        {
+          "date": "2026-06-15",
+          "requests": 169,
+          "usd": 0.8611409999999999,
+          "tokens": 268448
+        },
+        {
+          "date": "2026-06-16",
+          "requests": 177,
+          "usd": 0.942922,
+          "tokens": 266508
+        },
+        {
+          "date": "2026-06-17",
+          "requests": 210,
+          "usd": 0.998229,
+          "tokens": 317717
+        },
+        {
+          "date": "2026-06-18",
+          "requests": 184,
+          "usd": 0.9933700000000003,
+          "tokens": 289787
+        },
+        {
+          "date": "2026-06-19",
+          "requests": 133,
+          "usd": 0.7200239999999998,
+          "tokens": 203349
+        },
+        {
+          "date": "2026-06-20",
+          "requests": 57,
+          "usd": 0.314948,
+          "tokens": 86906
+        },
+        {
+          "date": "2026-06-21",
+          "requests": 57,
+          "usd": 0.306504,
+          "tokens": 93016
+        },
+        {
           "date": "2026-06-22",
-          "requests": 164,
-          "usd": 0.6118600000000001,
-          "tokens": 256844
+          "requests": 191,
+          "usd": 0.6864840000000004,
+          "tokens": 297792
         },
         {
           "date": "2026-06-23",
@@ -6364,646 +6989,21 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
-        }
-      ],
-      "byModel": [
-        {
-          "model": "GPT-4o mini",
-          "requests": 1048,
-          "tokens": 1653506,
-          "usd": 0.3856059999999997
-        },
-        {
-          "model": "Claude Sonnet 4.5",
-          "requests": 977,
-          "tokens": 1497537,
-          "usd": 8.039327999999996
-        },
-        {
-          "model": "Claude Haiku 4.5",
-          "requests": 665,
-          "tokens": 1006230,
-          "usd": 1.806275999999999
-        },
-        {
-          "model": "GPT-4o",
-          "requests": 572,
-          "tokens": 879176,
-          "usd": 3.4209979999999973
-        },
-        {
-          "model": "Gemini 2.0 Flash",
-          "requests": 456,
-          "tokens": 683771,
-          "usd": 0.10759500000000002
-        },
-        {
-          "model": "o3-mini",
-          "requests": 279,
-          "tokens": 422281,
-          "usd": 0.7238739999999995
-        },
-        {
-          "model": "Llama 3.3 70B",
-          "requests": 249,
-          "tokens": 402547,
-          "usd": 0.22329499999999997
-        },
-        {
-          "model": "Gemini 1.5 Pro",
-          "requests": 223,
-          "tokens": 352051,
-          "usd": 0.6542609999999999
-        }
-      ],
-      "members": [
-        {
-          "id": "ad1e0ab2-c1d0-44dd-886e-b3e07b181ca5",
-          "name": "ios-prod",
-          "maskedKey": "nxs-SE••••5616",
-          "requests": 2383,
-          "tokens": 3692708,
-          "usd": 11.44667900000001,
-          "lastUsedAt": "2026-07-20T12:36:35.000Z"
-        },
-        {
-          "id": "359b1376-309e-4059-90cb-412eaf860219",
-          "name": "android-prod",
-          "maskedKey": "nxs-SE••••23a0",
-          "requests": 2352,
-          "tokens": 3613263,
-          "usd": 10.927745000000002,
-          "lastUsedAt": "2026-07-20T12:38:48.000Z"
-        }
-      ]
-    },
-    "6c0e7927-8a70-4e99-a525-109e44ec2cfb:90d": {
-      "team": {
-        "id": "6c0e7927-8a70-4e99-a525-109e44ec2cfb",
-        "name": "Mobile App",
-        "status": "active",
-        "assignedTier": null,
-        "overBudgetAction": "block",
-        "budgetUsd": 600,
-        "budgetPeriod": "monthly",
-        "budgetSpendUsd": 15.625403,
-        "keyCount": 2
-      },
-      "period": "90d",
-      "since": "2026-04-23T07:11:26.478Z",
-      "until": "2026-07-22T07:11:26.478Z",
-      "totals": {
-        "requests": 12468,
-        "successes": 11892,
-        "errors": 576,
-        "successRate": 0.9538017324350336,
-        "totalTokens": 19153228,
-        "estimatedUsd": 59.5769369999998,
-        "avgLatencyMs": 1874
-      },
-      "byDay": [
-        {
-          "date": "2026-04-23",
-          "requests": 151,
-          "usd": 0.7722659999999997,
-          "tokens": 228968
-        },
-        {
-          "date": "2026-04-24",
-          "requests": 109,
-          "usd": 0.4754460000000001,
-          "tokens": 168977
-        },
-        {
-          "date": "2026-04-25",
-          "requests": 43,
-          "usd": 0.11371099999999999,
-          "tokens": 62783
-        },
-        {
-          "date": "2026-04-26",
-          "requests": 45,
-          "usd": 0.210069,
-          "tokens": 69050
-        },
-        {
-          "date": "2026-04-27",
-          "requests": 143,
-          "usd": 0.6921569999999997,
-          "tokens": 223219
-        },
-        {
-          "date": "2026-04-28",
-          "requests": 173,
-          "usd": 0.9953179999999999,
-          "tokens": 253623
-        },
-        {
-          "date": "2026-04-29",
-          "requests": 151,
-          "usd": 0.7895220000000002,
-          "tokens": 232607
-        },
-        {
-          "date": "2026-04-30",
-          "requests": 165,
-          "usd": 0.7371759999999999,
-          "tokens": 249952
-        },
-        {
-          "date": "2026-05-01",
-          "requests": 102,
-          "usd": 0.4097890000000001,
-          "tokens": 162731
-        },
-        {
-          "date": "2026-05-02",
-          "requests": 45,
-          "usd": 0.12127899999999997,
-          "tokens": 67709
-        },
-        {
-          "date": "2026-05-03",
-          "requests": 44,
-          "usd": 0.23195700000000002,
-          "tokens": 68766
-        },
-        {
-          "date": "2026-05-04",
-          "requests": 153,
-          "usd": 0.6240739999999997,
-          "tokens": 239901
-        },
-        {
-          "date": "2026-05-05",
-          "requests": 156,
-          "usd": 0.9043519999999999,
-          "tokens": 238112
-        },
-        {
-          "date": "2026-05-06",
-          "requests": 170,
-          "usd": 0.684323,
-          "tokens": 254680
-        },
-        {
-          "date": "2026-05-07",
-          "requests": 149,
-          "usd": 0.69893,
-          "tokens": 237226
-        },
-        {
-          "date": "2026-05-08",
-          "requests": 127,
-          "usd": 0.893628,
-          "tokens": 192870
-        },
-        {
-          "date": "2026-05-09",
-          "requests": 45,
-          "usd": 0.2745049999999999,
-          "tokens": 68168
-        },
-        {
-          "date": "2026-05-10",
-          "requests": 37,
-          "usd": 0.252282,
-          "tokens": 55350
-        },
-        {
-          "date": "2026-05-11",
-          "requests": 162,
-          "usd": 0.8364699999999996,
-          "tokens": 238557
-        },
-        {
-          "date": "2026-05-12",
-          "requests": 177,
-          "usd": 0.7709989999999998,
-          "tokens": 273968
-        },
-        {
-          "date": "2026-05-13",
-          "requests": 159,
-          "usd": 0.8800809999999999,
-          "tokens": 238836
-        },
-        {
-          "date": "2026-05-14",
-          "requests": 141,
-          "usd": 0.7998590000000001,
-          "tokens": 213678
-        },
-        {
-          "date": "2026-05-15",
-          "requests": 107,
-          "usd": 0.313514,
-          "tokens": 156116
-        },
-        {
-          "date": "2026-05-16",
-          "requests": 43,
-          "usd": 0.27877,
-          "tokens": 61692
-        },
-        {
-          "date": "2026-05-17",
-          "requests": 59,
-          "usd": 0.193992,
-          "tokens": 94776
-        },
-        {
-          "date": "2026-05-18",
-          "requests": 171,
-          "usd": 0.8509679999999994,
-          "tokens": 264057
-        },
-        {
-          "date": "2026-05-19",
-          "requests": 176,
-          "usd": 1.0483270000000005,
-          "tokens": 273041
-        },
-        {
-          "date": "2026-05-20",
-          "requests": 180,
-          "usd": 0.9130979999999993,
-          "tokens": 273870
-        },
-        {
-          "date": "2026-05-21",
-          "requests": 154,
-          "usd": 0.8973859999999999,
-          "tokens": 233704
-        },
-        {
-          "date": "2026-05-22",
-          "requests": 130,
-          "usd": 0.5443409999999999,
-          "tokens": 197661
-        },
-        {
-          "date": "2026-05-23",
-          "requests": 56,
-          "usd": 0.24402199999999993,
-          "tokens": 91015
-        },
-        {
-          "date": "2026-05-24",
-          "requests": 48,
-          "usd": 0.21749500000000002,
-          "tokens": 72811
-        },
-        {
-          "date": "2026-05-25",
-          "requests": 179,
-          "usd": 0.6478970000000001,
-          "tokens": 275484
-        },
-        {
-          "date": "2026-05-26",
-          "requests": 198,
-          "usd": 1.0082310000000005,
-          "tokens": 287764
-        },
-        {
-          "date": "2026-05-27",
-          "requests": 193,
-          "usd": 0.8136529999999997,
-          "tokens": 285563
-        },
-        {
-          "date": "2026-05-28",
-          "requests": 167,
-          "usd": 0.4984089999999999,
-          "tokens": 245707
-        },
-        {
-          "date": "2026-05-29",
-          "requests": 130,
-          "usd": 0.41055499999999984,
-          "tokens": 199535
-        },
-        {
-          "date": "2026-05-30",
-          "requests": 61,
-          "usd": 0.23327499999999993,
-          "tokens": 88595
-        },
-        {
-          "date": "2026-05-31",
-          "requests": 58,
-          "usd": 0.33148500000000003,
-          "tokens": 93415
-        },
-        {
-          "date": "2026-06-01",
-          "requests": 203,
-          "usd": 0.9457880000000001,
-          "tokens": 316802
-        },
-        {
-          "date": "2026-06-02",
-          "requests": 162,
-          "usd": 0.7278639999999995,
-          "tokens": 260208
-        },
-        {
-          "date": "2026-06-03",
-          "requests": 154,
-          "usd": 0.7120279999999999,
-          "tokens": 242501
-        },
-        {
-          "date": "2026-06-04",
-          "requests": 180,
-          "usd": 0.979614,
-          "tokens": 282840
-        },
-        {
-          "date": "2026-06-05",
-          "requests": 148,
-          "usd": 0.5245259999999999,
-          "tokens": 230690
-        },
-        {
-          "date": "2026-06-06",
-          "requests": 50,
-          "usd": 0.200321,
-          "tokens": 76328
-        },
-        {
-          "date": "2026-06-07",
-          "requests": 51,
-          "usd": 0.23281200000000002,
-          "tokens": 73966
-        },
-        {
-          "date": "2026-06-08",
-          "requests": 171,
-          "usd": 0.847878,
-          "tokens": 258614
-        },
-        {
-          "date": "2026-06-09",
-          "requests": 188,
-          "usd": 0.842164,
-          "tokens": 293104
-        },
-        {
-          "date": "2026-06-10",
-          "requests": 202,
-          "usd": 1.1602440000000003,
-          "tokens": 309414
-        },
-        {
-          "date": "2026-06-11",
-          "requests": 178,
-          "usd": 0.7206399999999997,
-          "tokens": 279193
-        },
-        {
-          "date": "2026-06-12",
-          "requests": 145,
-          "usd": 0.871364,
-          "tokens": 222087
-        },
-        {
-          "date": "2026-06-13",
-          "requests": 79,
-          "usd": 0.32123399999999996,
-          "tokens": 116637
-        },
-        {
-          "date": "2026-06-14",
-          "requests": 51,
-          "usd": 0.29066299999999995,
-          "tokens": 83657
-        },
-        {
-          "date": "2026-06-15",
-          "requests": 169,
-          "usd": 0.8611409999999998,
-          "tokens": 268448
-        },
-        {
-          "date": "2026-06-16",
-          "requests": 177,
-          "usd": 0.9429220000000001,
-          "tokens": 266508
-        },
-        {
-          "date": "2026-06-17",
-          "requests": 210,
-          "usd": 0.9982290000000001,
-          "tokens": 317717
-        },
-        {
-          "date": "2026-06-18",
-          "requests": 184,
-          "usd": 0.9933700000000003,
-          "tokens": 289787
-        },
-        {
-          "date": "2026-06-19",
-          "requests": 133,
-          "usd": 0.7200239999999997,
-          "tokens": 203349
-        },
-        {
-          "date": "2026-06-20",
-          "requests": 57,
-          "usd": 0.31494800000000006,
-          "tokens": 86906
-        },
-        {
-          "date": "2026-06-21",
-          "requests": 57,
-          "usd": 0.306504,
-          "tokens": 93016
-        },
-        {
-          "date": "2026-06-22",
-          "requests": 191,
-          "usd": 0.6864840000000005,
-          "tokens": 297792
-        },
-        {
-          "date": "2026-06-23",
-          "requests": 203,
-          "usd": 0.8531479999999998,
-          "tokens": 314681
-        },
-        {
-          "date": "2026-06-24",
-          "requests": 214,
-          "usd": 0.9180179999999996,
-          "tokens": 326145
-        },
-        {
-          "date": "2026-06-25",
-          "requests": 186,
-          "usd": 0.9344599999999997,
-          "tokens": 285451
-        },
-        {
-          "date": "2026-06-26",
-          "requests": 161,
-          "usd": 0.6242099999999999,
-          "tokens": 241429
-        },
-        {
-          "date": "2026-06-27",
-          "requests": 63,
-          "usd": 0.3375540000000001,
-          "tokens": 100621
-        },
-        {
-          "date": "2026-06-28",
-          "requests": 73,
-          "usd": 0.538545,
-          "tokens": 105693
-        },
-        {
-          "date": "2026-06-29",
-          "requests": 225,
-          "usd": 0.982927,
-          "tokens": 356847
-        },
-        {
-          "date": "2026-06-30",
-          "requests": 210,
-          "usd": 0.9482989999999997,
-          "tokens": 326788
-        },
-        {
-          "date": "2026-07-01",
-          "requests": 254,
-          "usd": 1.2205120000000012,
-          "tokens": 399481
-        },
-        {
-          "date": "2026-07-02",
-          "requests": 210,
-          "usd": 1.293205,
-          "tokens": 322789
-        },
-        {
-          "date": "2026-07-03",
-          "requests": 190,
-          "usd": 0.7708939999999994,
-          "tokens": 292909
-        },
-        {
-          "date": "2026-07-04",
-          "requests": 67,
-          "usd": 0.3317379999999999,
-          "tokens": 102363
-        },
-        {
-          "date": "2026-07-05",
-          "requests": 80,
-          "usd": 0.4539329999999998,
-          "tokens": 123134
-        },
-        {
-          "date": "2026-07-06",
-          "requests": 181,
-          "usd": 1.0490899999999999,
-          "tokens": 282324
-        },
-        {
-          "date": "2026-07-07",
-          "requests": 217,
-          "usd": 0.7892870000000006,
-          "tokens": 314815
-        },
-        {
-          "date": "2026-07-08",
-          "requests": 199,
-          "usd": 0.9864530000000002,
-          "tokens": 301451
-        },
-        {
-          "date": "2026-07-09",
-          "requests": 227,
-          "usd": 1.2049010000000002,
-          "tokens": 360453
-        },
-        {
-          "date": "2026-07-10",
-          "requests": 160,
-          "usd": 0.8615740000000002,
-          "tokens": 254494
-        },
-        {
-          "date": "2026-07-11",
-          "requests": 54,
-          "usd": 0.23504200000000006,
-          "tokens": 91911
-        },
-        {
-          "date": "2026-07-12",
-          "requests": 63,
-          "usd": 0.29670600000000014,
-          "tokens": 95869
-        },
-        {
-          "date": "2026-07-13",
-          "requests": 246,
-          "usd": 0.8833680000000002,
-          "tokens": 382218
-        },
-        {
-          "date": "2026-07-14",
-          "requests": 231,
-          "usd": 1.2166730000000006,
-          "tokens": 351111
-        },
-        {
-          "date": "2026-07-15",
-          "requests": 241,
-          "usd": 1.328479,
-          "tokens": 370043
-        },
-        {
-          "date": "2026-07-16",
-          "requests": 210,
-          "usd": 0.9691679999999996,
-          "tokens": 318850
-        },
-        {
-          "date": "2026-07-17",
-          "requests": 171,
-          "usd": 0.7260800000000005,
-          "tokens": 256481
-        },
-        {
-          "date": "2026-07-18",
-          "requests": 71,
-          "usd": 0.2694700000000001,
-          "tokens": 118647
-        },
-        {
-          "date": "2026-07-19",
-          "requests": 73,
-          "usd": 0.2766459999999999,
-          "tokens": 108613
-        },
-        {
-          "date": "2026-07-20",
-          "requests": 91,
-          "usd": 0.46218400000000004,
-          "tokens": 143516
         },
         {
-          "date": "2026-07-21",
+          "date": "2026-07-23",
           "requests": 0,
           "usd": 0,
           "tokens": 0
         },
         {
-          "date": "2026-07-22",
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
           "requests": 0,
           "usd": 0,
           "tokens": 0
@@ -7012,51 +7012,51 @@
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 2756,
-          "tokens": 4234175,
-          "usd": 0.9917730000000002
+          "requests": 2699,
+          "tokens": 4146264,
+          "usd": 0.9729440000000006
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 2528,
-          "tokens": 3868453,
-          "usd": 20.66374199999996
+          "requests": 2465,
+          "tokens": 3781553,
+          "usd": 20.16213599999999
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 1755,
-          "tokens": 2700784,
-          "usd": 4.780720000000003
+          "requests": 1698,
+          "tokens": 2609298,
+          "usd": 4.627727999999999
         },
         {
           "model": "GPT-4o",
-          "requests": 1477,
-          "tokens": 2279491,
-          "usd": 8.811755999999992
+          "requests": 1449,
+          "tokens": 2238760,
+          "usd": 8.650783000000015
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 1230,
-          "tokens": 1875715,
-          "usd": 0.29152299999999937
+          "requests": 1196,
+          "tokens": 1826157,
+          "usd": 0.2845260000000001
         },
         {
           "model": "o3-mini",
-          "requests": 732,
-          "tokens": 1117622,
-          "usd": 1.8990939999999987
+          "requests": 714,
+          "tokens": 1088018,
+          "usd": 1.857437999999999
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 629,
-          "tokens": 985351,
-          "usd": 0.5374819999999998
+          "requests": 611,
+          "tokens": 960509,
+          "usd": 0.5258359999999999
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 621,
-          "tokens": 966198,
-          "usd": 1.8142619999999998
+          "requests": 604,
+          "tokens": 938229,
+          "usd": 1.753849999999999
         }
       ],
       "members": [
@@ -7064,18 +7064,18 @@
           "id": "ad1e0ab2-c1d0-44dd-886e-b3e07b181ca5",
           "name": "ios-prod",
           "maskedKey": "nxs-SE••••5616",
-          "requests": 6280,
-          "tokens": 9662963,
-          "usd": 30.88762399999995,
+          "requests": 6121,
+          "tokens": 9419713,
+          "usd": 30.10050800000002,
           "lastUsedAt": "2026-07-20T12:36:35.000Z"
         },
         {
           "id": "359b1376-309e-4059-90cb-412eaf860219",
           "name": "android-prod",
           "maskedKey": "nxs-SE••••23a0",
-          "requests": 6188,
-          "tokens": 9490265,
-          "usd": 28.689312999999952,
+          "requests": 6036,
+          "tokens": 9263841,
+          "usd": 28.10436300000003,
           "lastUsedAt": "2026-07-20T12:38:48.000Z"
         }
       ]
@@ -7093,8 +7093,8 @@
         "keyCount": 1
       },
       "period": "today",
-      "since": "2026-07-22T00:00:00.000Z",
-      "until": "2026-07-22T07:11:26.559Z",
+      "since": "2026-07-25T00:00:00.000Z",
+      "until": "2026-07-25T06:14:10.701Z",
       "totals": {
         "requests": 0,
         "successes": 0,
@@ -7106,7 +7106,7 @@
       },
       "byDay": [
         {
-          "date": "2026-07-22",
+          "date": "2026-07-25",
           "requests": 0,
           "usd": 0,
           "tokens": 0
@@ -7138,41 +7138,23 @@
         "keyCount": 1
       },
       "period": "7d",
-      "since": "2026-07-15T07:11:26.564Z",
-      "until": "2026-07-22T07:11:26.564Z",
+      "since": "2026-07-18T06:14:10.707Z",
+      "until": "2026-07-25T06:14:10.707Z",
       "totals": {
-        "requests": 457,
-        "successes": 439,
-        "errors": 18,
-        "successRate": 0.9606126914660832,
-        "totalTokens": 707451,
-        "estimatedUsd": 1.9754019999999994,
-        "avgLatencyMs": 1876
+        "requests": 124,
+        "successes": 121,
+        "errors": 3,
+        "successRate": 0.9758064516129032,
+        "totalTokens": 188876,
+        "estimatedUsd": 0.5282609999999999,
+        "avgLatencyMs": 1918
       },
       "byDay": [
         {
-          "date": "2026-07-15",
-          "requests": 106,
-          "usd": 0.4627030000000001,
-          "tokens": 168760
-        },
-        {
-          "date": "2026-07-16",
-          "requests": 123,
-          "usd": 0.641447,
-          "tokens": 192909
-        },
-        {
-          "date": "2026-07-17",
-          "requests": 99,
-          "usd": 0.30555,
-          "tokens": 151143
-        },
-        {
           "date": "2026-07-18",
-          "requests": 35,
-          "usd": 0.23709299999999997,
-          "tokens": 50688
+          "requests": 30,
+          "usd": 0.19965199999999997,
+          "tokens": 44925
         },
         {
           "date": "2026-07-19",
@@ -7197,56 +7179,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 98,
-          "tokens": 153310,
-          "usd": 0.036216
+          "requests": 29,
+          "tokens": 43902,
+          "usd": 0.010396000000000002
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 95,
-          "tokens": 144406,
-          "usd": 0.7579500000000001
+          "requests": 23,
+          "tokens": 33625,
+          "usd": 0.172242
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 62,
-          "tokens": 92113,
-          "usd": 0.16512799999999997
-        },
-        {
-          "model": "GPT-4o",
-          "requests": 55,
-          "tokens": 86502,
-          "usd": 0.312789
+          "requests": 16,
+          "tokens": 23956,
+          "usd": 0.046509999999999996
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 47,
-          "tokens": 72861,
-          "usd": 0.011703000000000002
+          "requests": 13,
+          "tokens": 19637,
+          "usd": 0.0028309999999999997
         },
         {
-          "model": "o3-mini",
-          "requests": 25,
-          "tokens": 41327,
-          "usd": 0.07312199999999999
+          "model": "GPT-4o",
+          "requests": 12,
+          "tokens": 18170,
+          "usd": 0.081567
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 24,
-          "tokens": 37532,
-          "usd": 0.071299
+          "requests": 8,
+          "tokens": 14696,
+          "usd": 0.030209000000000003
+        },
+        {
+          "model": "DeepSeek Chat",
+          "requests": 6,
+          "tokens": 8683,
+          "usd": 0.001253
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 22,
-          "tokens": 33627,
-          "usd": 0.021089
+          "requests": 6,
+          "tokens": 8008,
+          "usd": 0.0052710000000000005
         }
       ],
       "members": [
@@ -7254,9 +7254,9 @@
           "id": "61d2d791-0e90-40bd-a30d-447f00ec4171",
           "name": "internal-scripts",
           "maskedKey": "nxs-SE••••02b4",
-          "requests": 457,
-          "tokens": 707451,
-          "usd": 1.9754019999999994,
+          "requests": 124,
+          "tokens": 188876,
+          "usd": 0.5282609999999999,
           "lastUsedAt": "2026-07-20T12:22:04.000Z"
         }
       ]
@@ -7274,41 +7274,23 @@
         "keyCount": 1
       },
       "period": "30d",
-      "since": "2026-06-22T07:11:26.575Z",
-      "until": "2026-07-22T07:11:26.575Z",
+      "since": "2026-06-25T06:14:10.713Z",
+      "until": "2026-07-25T06:14:10.713Z",
       "totals": {
-        "requests": 2716,
-        "successes": 2602,
-        "errors": 114,
-        "successRate": 0.9580265095729014,
-        "totalTokens": 4180194,
-        "estimatedUsd": 12.289863000000016,
-        "avgLatencyMs": 1877
+        "requests": 2365,
+        "successes": 2269,
+        "errors": 96,
+        "successRate": 0.9594080338266385,
+        "totalTokens": 3638566,
+        "estimatedUsd": 10.809983000000024,
+        "avgLatencyMs": 1886
       },
       "byDay": [
         {
-          "date": "2026-06-22",
-          "requests": 114,
-          "usd": 0.5449489999999996,
-          "tokens": 168963
-        },
-        {
-          "date": "2026-06-23",
-          "requests": 106,
-          "usd": 0.42716399999999993,
-          "tokens": 168164
-        },
-        {
-          "date": "2026-06-24",
-          "requests": 126,
-          "usd": 0.491215,
-          "tokens": 196003
-        },
-        {
           "date": "2026-06-25",
-          "requests": 94,
-          "usd": 0.39892000000000005,
-          "tokens": 150792
+          "requests": 89,
+          "usd": 0.38236800000000004,
+          "tokens": 142294
         },
         {
           "date": "2026-06-26",
@@ -7471,56 +7453,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 600,
-          "tokens": 922835,
-          "usd": 0.21843000000000004
+          "requests": 528,
+          "tokens": 814119,
+          "usd": 0.19290999999999997
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 519,
-          "tokens": 789241,
-          "usd": 4.117080000000002
+          "requests": 464,
+          "tokens": 704147,
+          "usd": 3.6546780000000014
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 378,
-          "tokens": 576268,
-          "usd": 1.0174880000000002
+          "requests": 328,
+          "tokens": 495946,
+          "usd": 0.8822960000000002
         },
         {
           "model": "GPT-4o",
-          "requests": 326,
-          "tokens": 513008,
-          "usd": 1.9494530000000005
+          "requests": 275,
+          "tokens": 431255,
+          "usd": 1.6239260000000004
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 270,
-          "tokens": 416260,
-          "usd": 0.06651400000000002
+          "requests": 223,
+          "tokens": 343633,
+          "usd": 0.055771000000000036
         },
         {
           "model": "o3-mini",
-          "requests": 184,
-          "tokens": 287436,
-          "usd": 0.4942810000000003
+          "requests": 156,
+          "tokens": 246925,
+          "usd": 0.4240500000000003
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 148,
-          "tokens": 231439,
-          "usd": 0.13506599999999994
+          "requests": 135,
+          "tokens": 213575,
+          "usd": 0.125385
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 134,
-          "tokens": 210979,
-          "usd": 0.416796
+          "requests": 118,
+          "tokens": 183077,
+          "usd": 0.35555400000000004
         }
       ],
       "members": [
@@ -7528,9 +7528,9 @@
           "id": "61d2d791-0e90-40bd-a30d-447f00ec4171",
           "name": "internal-scripts",
           "maskedKey": "nxs-SE••••02b4",
-          "requests": 2716,
-          "tokens": 4180194,
-          "usd": 12.289863000000016,
+          "requests": 2365,
+          "tokens": 3638566,
+          "usd": 10.809983000000024,
           "lastUsedAt": "2026-07-20T12:22:04.000Z"
         }
       ]
@@ -7548,36 +7548,18 @@
         "keyCount": 1
       },
       "period": "90d",
-      "since": "2026-04-23T07:11:26.610Z",
-      "until": "2026-07-22T07:11:26.610Z",
+      "since": "2026-04-26T06:14:10.743Z",
+      "until": "2026-07-25T06:14:10.743Z",
       "totals": {
-        "requests": 7226,
-        "successes": 6917,
-        "errors": 309,
-        "successRate": 0.9572377525601993,
-        "totalTokens": 11171648,
-        "estimatedUsd": 34.205166999999925,
-        "avgLatencyMs": 1908
+        "requests": 7047,
+        "successes": 6746,
+        "errors": 301,
+        "successRate": 0.9572867887044132,
+        "totalTokens": 10890313,
+        "estimatedUsd": 33.25722799999992,
+        "avgLatencyMs": 1905
       },
       "byDay": [
-        {
-          "date": "2026-04-23",
-          "requests": 73,
-          "usd": 0.5138550000000001,
-          "tokens": 117090
-        },
-        {
-          "date": "2026-04-24",
-          "requests": 75,
-          "usd": 0.3201530000000002,
-          "tokens": 114405
-        },
-        {
-          "date": "2026-04-25",
-          "requests": 31,
-          "usd": 0.11393099999999999,
-          "tokens": 49840
-        },
         {
           "date": "2026-04-26",
           "requests": 29,
@@ -7587,7 +7569,7 @@
         {
           "date": "2026-04-27",
           "requests": 77,
-          "usd": 0.5778700000000001,
+          "usd": 0.57787,
           "tokens": 119034
         },
         {
@@ -7599,19 +7581,19 @@
         {
           "date": "2026-04-29",
           "requests": 89,
-          "usd": 0.389304,
+          "usd": 0.38930399999999993,
           "tokens": 139927
         },
         {
           "date": "2026-04-30",
           "requests": 95,
-          "usd": 0.5800929999999999,
+          "usd": 0.580093,
           "tokens": 154147
         },
         {
           "date": "2026-05-01",
           "requests": 62,
-          "usd": 0.3412940000000001,
+          "usd": 0.34129400000000004,
           "tokens": 94193
         },
         {
@@ -7629,7 +7611,7 @@
         {
           "date": "2026-05-04",
           "requests": 94,
-          "usd": 0.5106390000000002,
+          "usd": 0.5106390000000001,
           "tokens": 137566
         },
         {
@@ -7647,7 +7629,7 @@
         {
           "date": "2026-05-07",
           "requests": 76,
-          "usd": 0.40047600000000005,
+          "usd": 0.400476,
           "tokens": 106096
         },
         {
@@ -7665,7 +7647,7 @@
         {
           "date": "2026-05-10",
           "requests": 26,
-          "usd": 0.099924,
+          "usd": 0.09992400000000001,
           "tokens": 44665
         },
         {
@@ -7677,13 +7659,13 @@
         {
           "date": "2026-05-12",
           "requests": 101,
-          "usd": 0.47808199999999984,
+          "usd": 0.4780819999999999,
           "tokens": 157761
         },
         {
           "date": "2026-05-13",
           "requests": 93,
-          "usd": 0.34945799999999994,
+          "usd": 0.3494579999999999,
           "tokens": 144623
         },
         {
@@ -7713,19 +7695,19 @@
         {
           "date": "2026-05-18",
           "requests": 118,
-          "usd": 0.4149059999999999,
+          "usd": 0.41490599999999983,
           "tokens": 192982
         },
         {
           "date": "2026-05-19",
           "requests": 96,
-          "usd": 0.433197,
+          "usd": 0.43319699999999994,
           "tokens": 152372
         },
         {
           "date": "2026-05-20",
           "requests": 103,
-          "usd": 0.362692,
+          "usd": 0.36269199999999996,
           "tokens": 142361
         },
         {
@@ -7737,13 +7719,13 @@
         {
           "date": "2026-05-22",
           "requests": 74,
-          "usd": 0.2698789999999999,
+          "usd": 0.269879,
           "tokens": 107857
         },
         {
           "date": "2026-05-23",
           "requests": 28,
-          "usd": 0.111089,
+          "usd": 0.11108900000000001,
           "tokens": 41379
         },
         {
@@ -7761,7 +7743,7 @@
         {
           "date": "2026-05-26",
           "requests": 95,
-          "usd": 0.6478019999999999,
+          "usd": 0.6478019999999998,
           "tokens": 145255
         },
         {
@@ -7773,13 +7755,13 @@
         {
           "date": "2026-05-28",
           "requests": 109,
-          "usd": 0.4264570000000001,
+          "usd": 0.42645700000000003,
           "tokens": 165269
         },
         {
           "date": "2026-05-29",
           "requests": 99,
-          "usd": 0.55346,
+          "usd": 0.5534599999999998,
           "tokens": 155674
         },
         {
@@ -7803,7 +7785,7 @@
         {
           "date": "2026-06-02",
           "requests": 96,
-          "usd": 0.431476,
+          "usd": 0.43147599999999997,
           "tokens": 151154
         },
         {
@@ -7815,19 +7797,19 @@
         {
           "date": "2026-06-04",
           "requests": 106,
-          "usd": 0.6315649999999998,
+          "usd": 0.6315649999999999,
           "tokens": 168034
         },
         {
           "date": "2026-06-05",
           "requests": 84,
-          "usd": 0.42717599999999983,
+          "usd": 0.4271759999999999,
           "tokens": 123413
         },
         {
           "date": "2026-06-06",
           "requests": 31,
-          "usd": 0.180255,
+          "usd": 0.18025500000000003,
           "tokens": 47397
         },
         {
@@ -7851,19 +7833,19 @@
         {
           "date": "2026-06-10",
           "requests": 111,
-          "usd": 0.5325469999999998,
+          "usd": 0.5325469999999999,
           "tokens": 171112
         },
         {
           "date": "2026-06-11",
           "requests": 110,
-          "usd": 0.5348609999999997,
+          "usd": 0.5348609999999998,
           "tokens": 176486
         },
         {
           "date": "2026-06-12",
           "requests": 73,
-          "usd": 0.335387,
+          "usd": 0.33538700000000005,
           "tokens": 113839
         },
         {
@@ -7875,25 +7857,25 @@
         {
           "date": "2026-06-14",
           "requests": 28,
-          "usd": 0.09840899999999998,
+          "usd": 0.098409,
           "tokens": 40886
         },
         {
           "date": "2026-06-15",
           "requests": 119,
-          "usd": 0.6197550000000001,
+          "usd": 0.619755,
           "tokens": 185600
         },
         {
           "date": "2026-06-16",
           "requests": 117,
-          "usd": 0.4689090000000001,
+          "usd": 0.46890899999999996,
           "tokens": 178340
         },
         {
           "date": "2026-06-17",
           "requests": 105,
-          "usd": 0.5134770000000001,
+          "usd": 0.513477,
           "tokens": 166821
         },
         {
@@ -7905,25 +7887,25 @@
         {
           "date": "2026-06-19",
           "requests": 97,
-          "usd": 0.287942,
+          "usd": 0.28794200000000003,
           "tokens": 151889
         },
         {
           "date": "2026-06-20",
           "requests": 43,
-          "usd": 0.18494399999999997,
+          "usd": 0.18494399999999994,
           "tokens": 64209
         },
         {
           "date": "2026-06-21",
           "requests": 39,
-          "usd": 0.13987399999999997,
+          "usd": 0.139874,
           "tokens": 62006
         },
         {
           "date": "2026-06-22",
           "requests": 125,
-          "usd": 0.5741119999999995,
+          "usd": 0.5741119999999997,
           "tokens": 185238
         },
         {
@@ -7935,7 +7917,7 @@
         {
           "date": "2026-06-24",
           "requests": 126,
-          "usd": 0.491215,
+          "usd": 0.49121499999999996,
           "tokens": 196003
         },
         {
@@ -7965,13 +7947,13 @@
         {
           "date": "2026-06-29",
           "requests": 123,
-          "usd": 0.6768640000000001,
+          "usd": 0.6768640000000002,
           "tokens": 193750
         },
         {
           "date": "2026-06-30",
           "requests": 126,
-          "usd": 0.63406,
+          "usd": 0.6340600000000001,
           "tokens": 196214
         },
         {
@@ -7983,13 +7965,13 @@
         {
           "date": "2026-07-02",
           "requests": 120,
-          "usd": 0.48514300000000005,
+          "usd": 0.48514299999999994,
           "tokens": 184352
         },
         {
           "date": "2026-07-03",
           "requests": 96,
-          "usd": 0.40890399999999993,
+          "usd": 0.4089039999999999,
           "tokens": 145298
         },
         {
@@ -8031,13 +8013,13 @@
         {
           "date": "2026-07-10",
           "requests": 96,
-          "usd": 0.6328360000000002,
+          "usd": 0.6328360000000001,
           "tokens": 147993
         },
         {
           "date": "2026-07-11",
           "requests": 38,
-          "usd": 0.13791199999999998,
+          "usd": 0.137912,
           "tokens": 55881
         },
         {
@@ -8055,7 +8037,7 @@
         {
           "date": "2026-07-14",
           "requests": 129,
-          "usd": 0.49498899999999996,
+          "usd": 0.49498900000000007,
           "tokens": 192727
         },
         {
@@ -8067,7 +8049,7 @@
         {
           "date": "2026-07-16",
           "requests": 123,
-          "usd": 0.641447,
+          "usd": 0.6414470000000001,
           "tokens": 192909
         },
         {
@@ -8091,7 +8073,7 @@
         {
           "date": "2026-07-20",
           "requests": 55,
-          "usd": 0.195738,
+          "usd": 0.19573800000000002,
           "tokens": 86780
         },
         {
@@ -8105,56 +8087,74 @@
           "requests": 0,
           "usd": 0,
           "tokens": 0
+        },
+        {
+          "date": "2026-07-23",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-24",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
+        },
+        {
+          "date": "2026-07-25",
+          "requests": 0,
+          "usd": 0,
+          "tokens": 0
         }
       ],
       "byModel": [
         {
           "model": "GPT-4o mini",
-          "requests": 1630,
-          "tokens": 2527623,
-          "usd": 0.5902370000000008
+          "requests": 1594,
+          "tokens": 2466920,
+          "usd": 0.5766339999999983
         },
         {
           "model": "Claude Sonnet 4.5",
-          "requests": 1394,
-          "tokens": 2179731,
-          "usd": 11.689398000000004
+          "requests": 1350,
+          "tokens": 2106273,
+          "usd": 11.279520000000005
         },
         {
           "model": "Claude Haiku 4.5",
-          "requests": 1033,
-          "tokens": 1582583,
-          "usd": 2.835491000000001
+          "requests": 1013,
+          "tokens": 1553098,
+          "usd": 2.783673000000003
         },
         {
           "model": "GPT-4o",
-          "requests": 857,
-          "tokens": 1326434,
-          "usd": 5.201078
+          "requests": 834,
+          "tokens": 1293401,
+          "usd": 5.0710130000000015
         },
         {
           "model": "Gemini 2.0 Flash",
-          "requests": 727,
-          "tokens": 1131658,
-          "usd": 0.17941099999999993
+          "requests": 708,
+          "tokens": 1102713,
+          "usd": 0.17440599999999987
         },
         {
           "model": "o3-mini",
-          "requests": 417,
-          "tokens": 642250,
-          "usd": 1.0792509999999995
+          "requests": 407,
+          "tokens": 627176,
+          "usd": 1.0561389999999997
         },
         {
           "model": "Llama 3.3 70B",
-          "requests": 398,
-          "tokens": 601018,
-          "usd": 0.33349799999999985
+          "requests": 384,
+          "tokens": 581412,
+          "usd": 0.32223099999999993
         },
         {
           "model": "Gemini 1.5 Pro",
-          "requests": 349,
-          "tokens": 542704,
-          "usd": 1.0469430000000002
+          "requests": 344,
+          "tokens": 535331,
+          "usd": 1.0304699999999998
         }
       ],
       "members": [
@@ -8162,9 +8162,9 @@
           "id": "61d2d791-0e90-40bd-a30d-447f00ec4171",
           "name": "internal-scripts",
           "maskedKey": "nxs-SE••••02b4",
-          "requests": 7226,
-          "tokens": 11171648,
-          "usd": 34.205166999999925,
+          "requests": 7047,
+          "tokens": 10890313,
+          "usd": 33.25722799999993,
           "lastUsedAt": "2026-07-20T12:22:04.000Z"
         }
       ]
@@ -10765,48 +10765,6 @@
         "status": 200,
         "detail": null,
         "createdAt": "2026-04-23T07:32:01.265Z"
-      },
-      {
-        "id": "bc04649c-8733-450a-8900-11c6b839670d",
-        "action": "models.delete",
-        "method": "DELETE",
-        "actorRole": "admin",
-        "actor": "password",
-        "actorId": null,
-        "actorName": "Sana Malik",
-        "target": null,
-        "ip": "203.0.113.10",
-        "status": 200,
-        "detail": null,
-        "createdAt": "2026-04-23T06:51:01.265Z"
-      },
-      {
-        "id": "fbcb8826-11a4-4737-a7bd-0b9cd9c07b94",
-        "action": "keys.create",
-        "method": "POST",
-        "actorRole": "admin",
-        "actor": "password",
-        "actorId": null,
-        "actorName": "Sana Malik",
-        "target": "id_2045",
-        "ip": "203.0.113.10",
-        "status": 201,
-        "detail": null,
-        "createdAt": "2026-04-22T23:52:01.265Z"
-      },
-      {
-        "id": "4bfbf86b-3bbe-429f-8f06-8ddb8f16db63",
-        "action": "auth.login",
-        "method": "POST",
-        "actorRole": "admin",
-        "actor": "password",
-        "actorId": null,
-        "actorName": "Sana Malik",
-        "target": "id_2129",
-        "ip": "203.0.113.10",
-        "status": 200,
-        "detail": null,
-        "createdAt": "2026-04-22T19:09:01.265Z"
       }
     ]
   },
@@ -10902,14 +10860,14 @@
       {
         "id": "redis",
         "label": "Redis PING",
-        "measured": "0.8 ms",
+        "measured": "1.0 ms",
         "threshold": "< 50 ms",
         "status": "healthy"
       },
       {
         "id": "postgres",
         "label": "Postgres SELECT 1",
-        "measured": "1.1 ms",
+        "measured": "1.3 ms",
         "threshold": "< 150 ms",
         "status": "healthy"
       },
@@ -10929,6 +10887,16 @@
       }
     ],
     "ready": true,
+    "backend": {
+      "mode": "server",
+      "db": "postgres",
+      "kv": "redis",
+      "dbLabel": "PostgreSQL",
+      "kvLabel": "Redis",
+      "durable": true,
+      "summary": "PostgreSQL + Redis",
+      "warning": null
+    },
     "strip": [
       "none",
       "none",
@@ -10993,11 +10961,11 @@
     ],
     "series": [
       {
-        "ts": 1784704286744,
-        "redisMs": 1.7791999999999462,
-        "pgMs": 2.298500000000331,
-        "cpuPct": 0,
-        "rssMb": 101,
+        "ts": 1784960050863,
+        "redisMs": 2.0968000000002576,
+        "pgMs": 3.4965999999994892,
+        "cpuPct": 750,
+        "rssMb": 104,
         "loopP99Ms": 0
       }
     ],
@@ -11006,21 +10974,21 @@
       "samples": 5,
       "capacity": 240
     },
-    "sampledAt": "2026-07-22T07:11:26.742Z",
+    "sampledAt": "2026-07-25T06:14:10.861Z",
     "redis": {
       "up": true,
-      "pingMs": 0.8299999999999272,
-      "p50Ms": 1.1390000000001237,
-      "p95Ms": 1.7791999999999462,
-      "p99Ms": 1.7791999999999462,
+      "pingMs": 0.9906999999993786,
+      "p50Ms": 1.4601999999995314,
+      "p95Ms": 2.0968000000002576,
+      "p99Ms": 2.0968000000002576,
       "info": {
         "version": "7.4.9",
-        "uptimeSeconds": 44,
+        "uptimeSeconds": 47,
         "connectedClients": 2,
         "blockedClients": 0,
-        "usedMemoryBytes": 1110728,
+        "usedMemoryBytes": 1131232,
         "maxMemoryBytes": null,
-        "fragmentationRatio": 7.68,
+        "fragmentationRatio": 7.66,
         "opsPerSec": 17,
         "keyspaceHits": 27,
         "keyspaceMisses": 5,
@@ -11031,10 +10999,10 @@
     },
     "postgres": {
       "up": true,
-      "queryMs": 1.1199999999998909,
-      "p50Ms": 1.5645999999997002,
-      "p95Ms": 2.298500000000331,
-      "p99Ms": 2.298500000000331,
+      "queryMs": 1.2802999999994427,
+      "p50Ms": 1.683100000000195,
+      "p95Ms": 3.4965999999994892,
+      "p99Ms": 3.4965999999994892,
       "stats": {
         "version": "16.14",
         "maxConnections": 100,
@@ -11043,13 +11011,13 @@
           "active": 3,
           "idle": 8
         },
-        "cacheHitRatio": 0.9957295867456292,
-        "commits": 1589,
+        "cacheHitRatio": 0.9960632231354211,
+        "commits": 7915,
         "rollbacks": 0,
         "deadlocks": 0,
-        "tempBytes": 20275200,
+        "tempBytes": 29106176,
         "databaseBytes": 49609751,
-        "longestTxnSeconds": 0.000836,
+        "longestTxnSeconds": 0,
         "largestTables": [
           {
             "name": "TokenUsage",
@@ -11081,14 +11049,14 @@
     },
     "process": {
       "node": "v22.22.0",
-      "uptimeSeconds": 3,
-      "pid": 3076,
+      "uptimeSeconds": 8,
+      "pid": 15092,
       "loopP50Ms": 0,
       "loopP99Ms": 0,
       "loopMaxP99Ms": 0,
       "cpuPct": 0,
-      "rssBytes": 105496576,
-      "heapUsedBytes": 16437904,
+      "rssBytes": 108777472,
+      "heapUsedBytes": 16522832,
       "heapLimitBytes": 4345298944,
       "containerLimitBytes": null
     }
@@ -11101,10 +11069,10 @@
     "entries": 0,
     "windowDays": 7,
     "recent": {
-      "hits": 781,
-      "requests": 5705,
-      "hitRate": 0.136897458369851,
-      "savedUsd": 5.043794000000003
+      "hits": 233,
+      "requests": 1610,
+      "hitRate": 0.14472049689440994,
+      "savedUsd": 1.6072350000000004
     }
   },
   "cacheConfig": {

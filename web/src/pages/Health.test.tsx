@@ -16,6 +16,11 @@ const overview = (over: Record<string, unknown> = {}) => ({
     { id: 'eventLoop', label: 'Event-loop lag p99', measured: '7.1 ms',  threshold: '< 200 ms', status: 'healthy' },
     { id: 'heap',      label: 'Heap saturation',    measured: '35%',     threshold: '< 90%',    status: 'healthy' },
   ],
+  backend: {
+    mode: 'server', db: 'postgres', kv: 'redis',
+    dbLabel: 'PostgreSQL', kvLabel: 'Redis',
+    durable: true, summary: 'PostgreSQL + Redis', warning: null,
+  },
   strip: Array(60).fill('healthy'),
   series: [{ ts: Date.now() - 60000, redisMs: 0.5, pgMs: 12, cpuPct: 3, rssMb: 240, loopP99Ms: 4 }],
   window: { minutes: 60, samples: 240, capacity: 240 },
@@ -157,5 +162,57 @@ describe('Health — Benchmarks tab', () => {
     fireEvent.click(screen.getByRole('tab', { name: /benchmarks/i }));
     expect(screen.getByText('Benchmarks are not built yet.')).toBeInTheDocument();
     expect(screen.getByText(/numbers the gateway never measured/)).toBeInTheDocument();
+  });
+});
+
+// The Storage card (S0). It answers "what is this gateway actually running on" — a question an
+// operator otherwise has to answer from environment variables they may not be able to see.
+describe('Health — Storage card', () => {
+  it('names both engines on a production pairing, with no caution', async () => {
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('All systems operational')).toBeInTheDocument());
+
+    expect(screen.getByText('Storage')).toBeInTheDocument();
+    expect(screen.getByText('Server mode')).toBeInTheDocument();
+    expect(screen.getByText('Survives a restart')).toBeInTheDocument();
+    // Postgres + Redis is the configuration with nothing to warn about.
+    expect(screen.queryByText(/not for production/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the caution and the reset warning when counters live in memory', async () => {
+    get.mockImplementation((path: string) =>
+      path.startsWith('/admin/health/overview')
+        ? Promise.resolve(overview({
+            backend: {
+              mode: 'standalone', db: 'postgres', kv: 'memory',
+              dbLabel: 'PostgreSQL', kvLabel: 'In-process memory',
+              durable: false,
+              summary: 'PostgreSQL + in-process memory (data is not durable)',
+              warning: 'Counters and sessions are held in memory: everyone is signed out and rate-limit windows reset when the gateway restarts.',
+            },
+          }))
+        : Promise.resolve(nexusOverview));
+
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument());
+
+    expect(screen.getByText('Standalone mode')).toBeInTheDocument();
+    expect(screen.getByText('Resets on restart')).toBeInTheDocument();
+    expect(screen.getByText(/everyone is signed out/i)).toBeInTheDocument();
+  });
+
+  // The lesson from the Connect page: a field read during render that the payload does not carry
+  // takes the whole view down. An older gateway — or the demo's frozen snapshot — has no `backend`,
+  // and the rest of the tab must still render.
+  it('renders the tab without the card when the gateway reports no backend', async () => {
+    get.mockImplementation((path: string) => {
+      if (!path.startsWith('/admin/health/overview')) return Promise.resolve(nexusOverview);
+      const { backend: _omitted, ...withoutBackend } = overview() as Record<string, unknown>;
+      return Promise.resolve(withoutBackend);
+    });
+
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('All systems operational')).toBeInTheDocument());
+    expect(screen.queryByText('Storage')).not.toBeInTheDocument();
   });
 });

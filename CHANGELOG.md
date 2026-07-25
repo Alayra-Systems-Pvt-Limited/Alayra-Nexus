@@ -7,6 +7,28 @@ All notable changes to Alayra Nexus™ are documented here. The format is based 
 The `model: "alayra-nexus-1"` routing contract is the public API surface covered by
 semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
+## [Unreleased]
+
+### Added
+- **The Health page now says which stores the gateway is running on.** A Storage card names the
+  database and the counter/session engine, whether a restart loses anything, and the caution that
+  goes with an ephemeral pairing. Admin-only: the public `/health` and `/ready` are unchanged, since
+  "this gateway keeps its rate-limit windows in memory and runs one process" is a useful thing to
+  know before attacking it.
+- **A storage configuration check at boot.** `NEXUS_MODE` (`server` / `standalone`) is read alongside
+  `DATABASE_URL` and `REDIS_URL`. A configured URL is always honoured, and an unreachable one still
+  fails loudly exactly as before — a database outage must never demote a gateway into an ephemeral
+  store that accepts traffic it will lose. A contradiction (`NEXUS_MODE=standalone` next to a
+  `DATABASE_URL`) is refused rather than guessed: both readings destroy something, so the message
+  names the two settings that disagree. Groundwork for SQLite and in-memory operation; neither is
+  available yet, and the boot says so plainly instead of half-starting.
+
+### Fixed
+- **A malformed `SELECT version()` row no longer takes the whole Health response down.** The Postgres
+  introspection read guarded a missing row but not a null column, so an unexpected shape raised a
+  TypeError instead of degrading to the "version —" the UI already renders. Found while writing the
+  tests above.
+
 ## [1.3.2] - 2026-07-20
 
 ### Fixed

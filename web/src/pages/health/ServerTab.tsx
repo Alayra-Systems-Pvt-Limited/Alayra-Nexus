@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'preact/hooks';
-import { Server, Database, Zap, Activity } from 'lucide-preact';
+import { Server, Database, Zap, Activity, HardDrive } from 'lucide-preact';
 import { Card, Spinner, Button } from '../../ui';
 import { useApi } from '../../hooks/useApi';
 import type { HealthOverview, HealthStatus, ReadyCheck } from '../../api';
@@ -83,6 +83,28 @@ export function ServerTab() {
           History resets with the process: {d.window.samples} of {d.window.capacity} samples collected —
           the full {d.window.minutes}-minute picture builds up as the gateway runs.
         </p>
+      )}
+
+      {/* ── Storage backend (S0) ──
+          Guarded on `backend` rather than assumed: a gateway older than the field, or the demo's
+          frozen snapshot, simply omits it and the card does not render. Reading through a missing
+          object here would take the whole tab down with it. */}
+      {d.backend && (
+        <div class={`${s.dep} ${p.section} ${d.backend.durable ? '' : s.warnBorder}`}>
+          <div class={s.depHead}>
+            <span class={s.depIco}><HardDrive size={13} /></span>
+            <span class={s.depName}>Storage</span>
+            {/* "Server mode", not "Server": this tab is itself called Server, and a bare chip reading
+                the same word next to it is a puzzle rather than a label. */}
+            <span class={s.chip}>{d.backend.mode === 'server' ? 'Server mode' : 'Standalone mode'}</span>
+          </div>
+          <div class={s.chips}>
+            <span class={s.chip}>Database <b>{d.backend.dbLabel}</b></span>
+            <span class={s.chip}>Counters &amp; sessions <b>{d.backend.kvLabel}</b></span>
+            <span class={s.chip}>{d.backend.durable ? 'Survives a restart' : 'Resets on restart'}</span>
+          </div>
+          {d.backend.warning && <p class={s.storageWarn}>{d.backend.warning}</p>}
+        </div>
       )}
 
       {/* ── Dependency cards ── */}

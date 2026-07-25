@@ -561,8 +561,28 @@ export interface PgHealthStats {
   largestTables: { name: string; rows: number; bytes: number }[];
 }
 
+/** Which stores the gateway is running on (S0). Mirrors BackendInfo in healthSampler.service.ts. */
+export interface BackendInfo {
+  mode: 'server' | 'standalone';
+  db:   'postgres' | 'sqlite';
+  kv:   'redis' | 'memory';
+  /** Engine names come from the server so the dashboard never hardcodes one. */
+  dbLabel: string;
+  kvLabel: string;
+  durable: boolean;
+  summary: string;
+  warning: string | null;
+}
+
 export interface HealthOverview {
   status: HealthStatus; summary: string; checks: ReadyCheck[]; ready: boolean;
+  /**
+   * Optional on purpose. A gateway older than this field, or the demo's frozen snapshot taken before
+   * it existed, simply has no `backend` — and the Storage card must then not render rather than
+   * throw. A required field here is exactly how the Connect page came to hang on "Loading…": a
+   * missing property read during render kills the whole view.
+   */
+  backend?: BackendInfo;
   strip: StripCell[]; series: HealthMinutePoint[];
   window: { minutes: number; samples: number; capacity: number };
   sampledAt: string | null;

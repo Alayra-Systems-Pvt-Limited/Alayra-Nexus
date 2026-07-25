@@ -171,7 +171,7 @@ describe('demo responder — response shapes', () => {
     ['/admin/config',           ['baseUrl', 'baseUrlSource', 'apiKeySet', 'isFirstRun']],
     ['/admin/overview',         ['stats', 'series7d', 'topModels', 'topKeys', 'recentLogs']],
     ['/admin/nexus/overview',   ['summary', 'routing', 'tiers']],
-    ['/admin/health/overview',  ['status', 'summary', 'checks', 'ready']],
+    ['/admin/health/overview',  ['status', 'summary', 'checks', 'ready', 'backend']],
     ['/admin/models',           ['models', 'capabilities']],
     ['/admin/teams',            ['teams']],
     ['/admin/team-keys',        ['keys']],
@@ -195,6 +195,13 @@ describe('demo responder — response shapes', () => {
   // A demo whose Health page says the gateway is down misrepresents a working product. The fixture
   // is captured from real probes (scripts/demo/buildFixtures.ts takes samples first); if that
   // capture regresses to the empty-ring-buffer default, every check reads "down" and this catches it.
+  // The demo is a snapshot of a real Postgres + Redis gateway, so its Storage card must say so. If a
+  // rebuild ever captured a standalone gateway the demo would quietly advertise the wrong product.
+  it('reports the backend the snapshot was actually taken from', () => {
+    const h = demoRespond<{ backend: { db: string; kv: string; durable: boolean } }>('GET', '/admin/health/overview');
+    expect(h.backend).toMatchObject({ db: 'postgres', kv: 'redis', durable: true });
+  });
+
   it('shows a healthy gateway on the Health page', () => {
     const h = demoRespond<{ status: string; checks: { id: string; status: string }[] }>('GET', '/admin/health/overview');
     expect(h.status).toBe('healthy');

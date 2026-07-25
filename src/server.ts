@@ -15,6 +15,13 @@
  */
 
 import 'dotenv/config';
+// Must stay in this position: after dotenv (which populates process.env) and before every other
+// import. It checks the storage configuration, and lib/redis.ts throws on import when REDIS_URL is
+// unset — so anything imported ahead of this would pre-empt the useful message with that bare one.
+// Only `logMode` is needed here. Nothing else in the codebase may import this module: it exits the
+// process on a bad configuration, which inside a test run would kill the runner. Everywhere else
+// imports the pure `resolveMode` from lib/mode instead.
+import { logMode } from './bootGuard';
 import Fastify            from 'fastify';
 import cors               from '@fastify/cors';
 import helmet             from '@fastify/helmet';
@@ -189,6 +196,8 @@ async function bootstrap() {
   await app.listen({ port: PORT, host: HOST });
   console.log(`\n🚀  Alayra Nexus running on http://${HOST}:${PORT}`);
   console.log(`    OpenAI base URL → http://localhost:${PORT}/v1`);
+  // Which stores this process is actually on, plus a caution when a restart would lose something.
+  logMode();
 
   // Compliance retention (Phase 6.7): apply the configured audit/usage retention windows
   // daily. Deletion is bounded to whatever the operator set (default 90 days; "Off" keeps
