@@ -9,7 +9,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { resolveMode, describeMode, ephemeralWarning } from './mode';
+import { resolveMode, describeMode, ephemeralWarning, resolveDatabaseUrl, DEFAULT_DATA_DIR, DEFAULT_DB_FILE } from './mode';
+import { isAbsolute, resolve as resolvePath } from 'node:path';
 
 const PG    = 'postgresql://nexus:nexus@localhost:5432/nexus';
 const REDIS = 'redis://localhost:6379';
@@ -214,5 +215,65 @@ describe('ephemeralWarning', () => {
 
   it('says plainly that full standalone is not for production', () => {
     expect(ephemeralWarning(resolveMode(env()))!).toMatch(/not for production/i);
+  });
+});
+
+describe('resolveDatabaseUrl', () => {
+  const CWD = resolvePath('/srv/app');
+
+  it('returns a configured DATABASE_URL untouched', () => {
+    // The Postgres path must be incapable of being rewritten by anything in standalone mode.
+    expect(resolveDatabaseUrl(env({ DATABASE_URL: PG }), CWD)).toBe(PG);
+  });
+
+  it('trims, because a trailing newline in a .env file is not a different database', () => {
+    expect(resolveDatabaseUrl(env({ DATABASE_URL: `  ${PG}\n` }), CWD)).toBe(PG);
+  });
+
+  it('passes an explicit SQLite URL through as-is', () => {
+    expect(resolveDatabaseUrl(env({ DATABASE_URL: FILE }), CWD)).toBe(FILE);
+  });
+
+  it('synthesises a file path under the data directory when nothing is configured', () => {
+    const url = resolveDatabaseUrl(env(), CWD);
+    expect(url.startsWith('file:')).toBe(true);
+    expect(url).toContain(DEFAULT_DATA_DIR);
+    expect(url).toContain(DEFAULT_DB_FILE);
+  });
+
+  it('makes that path ABSOLUTE', () => {
+    // Not cosmetic. Prisma resolves a relative `file:` URL against the schema file's directory,
+    // not the working directory — so a relative default would put the database inside prisma/,
+    // and running the gateway from a different folder would silently open a different database
+    // while appearing to work.
+    const path = resolveDatabaseUrl(env(), CWD).slice('file:'.length);
+    expect(isAbsolute(path)).toBe(true);
+    expect(path).toBe(resolvePath(CWD, DEFAULT_DATA_DIR, DEFAULT_DB_FILE));
+  });
+
+  it('honours NEXUS_DATA_DIR', () => {
+    const path = resolveDatabaseUrl(env({ NEXUS_DATA_DIR: 'data' }), CWD).slice('file:'.length);
+    expect(path).toBe(resolvePath(CWD, 'data', DEFAULT_DB_FILE));
+  });
+
+  it('accepts an absolute NEXUS_DATA_DIR rather than nesting it under the cwd', () => {
+    const abs  = resolvePath('/var/lib/nexus');
+    const path = resolveDatabaseUrl(env({ NEXUS_DATA_DIR: abs }), CWD).slice('file:'.length);
+    expect(path).toBe(resolvePath(abs, DEFAULT_DB_FILE));
+  });
+
+  it('ignores a blank NEXUS_DATA_DIR instead of writing to the cwd root', () => {
+    const path = resolveDatabaseUrl(env({ NEXUS_DATA_DIR: '   ' }), CWD).slice('file:'.length);
+    expect(path).toBe(resolvePath(CWD, DEFAULT_DATA_DIR, DEFAULT_DB_FILE));
+  });
+
+  it('agrees with resolveMode about which engine it just named', () => {
+    // The two functions read the same env separately; if they ever disagreed, the gateway would
+    // build one client and point it at the other engine's URL.
+    for (const e of [env({ DATABASE_URL: PG }), env({ DATABASE_URL: FILE }), env()]) {
+      const expected = resolveMode(e).db === 'postgres' ? 'postgres' : 'sqlite';
+      const url      = resolveDatabaseUrl(e, CWD).toLowerCase();
+      expect(url.startsWith('file:') ? 'sqlite' : 'postgres').toBe(expected);
+    }
   });
 });

@@ -10,6 +10,8 @@
     "start": "node dist/server.js",
     "migrate": "npx prisma migrate deploy",
     "db:push": "npx prisma db push",
+    "db:sqlite-schema": "tsx scripts/db/sqliteSchema.ts",
+    "db:generate": "npx prisma generate && npx prisma generate --schema prisma/schema.sqlite.prisma",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

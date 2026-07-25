@@ -25,7 +25,9 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npx prisma generate
+      # Both clients (Phase S2): Postgres for server mode, SQLite for standalone. Generating only
+      # the first would leave every engine-parity check unable to load its other half.
+      - run: npm run db:generate
       - run: npm run lint
 
   typecheck:
@@ -38,7 +40,9 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npx prisma generate
+      # Both clients (Phase S2): Postgres for server mode, SQLite for standalone. Generating only
+      # the first would leave every engine-parity check unable to load its other half.
+      - run: npm run db:generate
       - run: npm run typecheck
 
   test:
@@ -64,7 +68,9 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npx prisma generate
+      # Both clients (Phase S2): Postgres for server mode, SQLite for standalone. Generating only
+      # the first would leave every engine-parity check unable to load its other half.
+      - run: npm run db:generate
       - run: npm test
         env:
           PARITY_REDIS_URL: redis://localhost:6379
@@ -79,7 +85,9 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npx prisma generate
+      # Both clients (Phase S2): Postgres for server mode, SQLite for standalone. Generating only
+      # the first would leave every engine-parity check unable to load its other half.
+      - run: npm run db:generate
       - run: npm run build
 
   audit:
@@ -183,7 +191,9 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci
-      - run: npx prisma generate
+      # Both clients (Phase S2): Postgres for server mode, SQLite for standalone. Generating only
+      # the first would leave every engine-parity check unable to load its other half.
+      - run: npm run db:generate
       - run: npm run build
       - run: npm ci
         working-directory: web

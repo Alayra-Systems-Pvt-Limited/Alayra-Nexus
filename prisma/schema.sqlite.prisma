@@ -1,0 +1,374 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERATED FILE — DO NOT EDIT.
+//
+// Derived from prisma/schema.prisma by scripts/db/sqliteSchema.ts. Edit that schema and re-run
+// `npm run db:sqlite-schema`; a hand-edit here is erased by the next run and, worse, would go
+// unnoticed until standalone mode disagreed with server mode about what a row looks like.
+// ─────────────────────────────────────────────────────────────────────────────
+// Alayra Nexus — slim schema
+// Only what the proxy needs: providers, keys, model registry, token usage, settings
+
+generator client {
+  output   = "../node_modules/.prisma/client-sqlite"
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model NexusProvider {
+  id             String     @id @default(uuid())
+  name           String
+  slug           String     @unique
+  provider       String
+  baseUrl        String?
+  modelFetchUrl  String?
+  authHeader     String     @default("Authorization")
+  authPrefix     String?
+  modelIdPath    String     @default("data[].id")
+  // Extra request headers merged into every outbound call to this provider (model-fetch,
+  // validation probes, and the proxy path). Stored as a JSON object string, e.g.
+  // {"anthropic-version":"2023-06-01"}. System headers (auth, content-type) always win over
+  // these, so an operator can add a required header without being able to spoof credentials.
+  extraHeaders   String?
+  tier           String     @default("standard")
+  preferredModel String?
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  keys           NexusKey[]
+}
+
+model NexusKey {
+  id           String        @id @default(uuid())
+  providerId   String
+  provider     NexusProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  label        String?
+  encryptedKey String
+  maskedKey    String
+  status       String        @default("active")
+  rpmLimit     Int           @default(60)
+  tpmLimit     Int           @default(100000)
+  // Max distinct end-users this key may serve (P7.4b). Stored and shown now; per-user
+  // admission enforcement lands once requests carry a user identity signal.
+  maxUsers     Int           @default(1000)
+  lastUsedAt   DateTime?
+  coolingUntil DateTime?
+  // BYOK (Phase 5.5): null = shared pool, set = private to that team. Ownership sits
+  // on the credential, not the provider, so a BYOK key reuses the provider's shared
+  // config (baseUrl/tier/auth) and the same admission + breaker + analytics path.
+  // Cascade, NOT SetNull: deleting a team must destroy its private keys, never
+  // release them into the shared pool.
+  ownerTeamId  String?
+  ownerTeam    Team?         @relation(fields: [ownerTeamId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([providerId, status])
+  @@index([ownerTeamId, status])
+}
+
+model AiModelRegistry {
+  id         String   @id @default(uuid())
+  modelsJson String
+  updatedAt  DateTime @updatedAt
+}
+
+model TokenUsage {
+  id             String        @id @default(uuid())
+  sessionId      String
+  modelId        String
+  modelName      String
+  provider       String
+  inputTokens    Int           @default(0)
+  outputTokens   Int           @default(0)
+  totalTokens    Int           @default(0)
+  // Per-modality billing (Phase 6.3b). Token endpoints leave these at their defaults;
+  // non-token modalities (image, and later speech/transcription) record their natural
+  // unit here — `unit` names it ("image"), `quantity` counts it (3 images) — so token
+  // sums stay clean while every request still carries an honest, priceable count.
+  unit           String        @default("token")
+  quantity       Int           @default(0)
+  estimatedUsd   Float         @default(0)
+  // Per-request outcome (Phase 7.5). Until now only successful requests were recorded, so the
+  // dashboard could never show a success or error rate — the data was simply never written.
+  // Every request now lands a row, carrying the same outcome taxonomy the Prometheus metrics use
+  // ("success" | "client_error" | "blocked" | "no_capacity" | "upstream_error" | "ssrf_blocked" |
+  // "budget_blocked"). A failed request has no tokens and no cost, so its sums stay zero and every
+  // existing money/token aggregate is unaffected.
+  outcome        String        @default("success")
+  latencyMs      Int           @default(0)
+  // Response-cache accounting (Phase 7.5). `cached` marks a request served from the cache: no
+  // provider was called, so `estimatedUsd` is 0 — and `savedUsd` records what that call *would*
+  // have cost. Summing savedUsd is what makes cache savings a real, honest number rather than an
+  // absence in the data.
+  cached         Boolean       @default(false)
+  savedUsd       Float         @default(0)
+  nexusTeamKeyId String?
+  teamKey        NexusTeamKey? @relation(fields: [nexusTeamKeyId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+
+  @@index([modelId, createdAt])
+  @@index([createdAt])
+  @@index([nexusTeamKeyId])
+  @@index([outcome, createdAt])
+}
+
+// A team groups scoped access keys and carries the per-period budget cap that is
+// enforced on the admission path. Deliberately shaped so an `Org` parent can wrap
+// it later with one additive column (orgId) — no restructuring migration needed.
+model Team {
+  id               String         @id @default(uuid())
+  name             String
+  status           String         @default("active") // active | suspended
+  assignedTier     String? // preferred routing tier — stored now, wired with the Teams tab rebuild
+  budgetUsd        Float? // USD spend cap per period; null = unlimited
+  budgetPeriod     String         @default("monthly") // daily | weekly | monthly
+  // What happens when the period cap is reached (Phase 7.10). "block" = today's behaviour, a hard
+  // 429 until the window resets; "notify" = a soft cap that only alerts and never blocks; "downgrade"
+  // = keep serving but force the cheapest (fast) tier once over budget, to conserve spend rather than
+  // stop work. Defaults to "block" so every existing team is unchanged by the migration.
+  overBudgetAction String         @default("block") // block | notify | downgrade
+  // BYOK (Phase 5.5): when the team owns provider keys, may its traffic fall back to
+  // the shared pool once its own keys are exhausted? false = hard isolation (503).
+  // Ignored for teams that own no keys — they always use the shared pool.
+  byokFallback     Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  teamKeys         NexusTeamKey[]
+  ownedKeys        NexusKey[]
+  domains          DomainAlias[]
+}
+
+model NexusTeamKey {
+  id           String       @id @default(uuid())
+  name         String
+  encryptedKey String
+  keyHash      String       @unique
+  maskedKey    String
+  teamId       String?
+  team         Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdAt    DateTime     @default(now())
+  tokenUsages  TokenUsage[]
+
+  @@index([teamId])
+}
+
+model AppSettings {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// The in-app operator alert feed (Phase 7.11). Alerts used to be email/webhook only and were never
+// written down, so the dashboard bell had nothing to read — and since delivery is off by default,
+// a feed built from the send path would have been permanently empty. Every raised alert is recorded
+// here regardless of the email configuration; external delivery stays gated by it. `dedupeKey` is
+// the same logical-occurrence key the send path coalesces on, so a flapping source leaves one entry
+// per window rather than a storm. Pruned by the retention job like every other growing table.
+model Notification {
+  id        String    @id @default(uuid())
+  type      String // NotifyEventType: keyBanned | breakerOpened | adminLockout | budgetThreshold | tierExhausted
+  severity  String    @default("info") // NotifySeverity: critical | warning | info — drives panel tint (7.16c)
+  title     String
+  body      String
+  section   String? // dashboard section that raised it, for click-through (e.g. "nexus")
+  dedupeKey String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([readAt, createdAt])
+}
+
+// ── Admin accounts (Phase 7.13a) ──────────────────────────────────────────────
+
+// A person who administers the gateway. Before this, there was no such thing: one shared
+// ADMIN_PASSWORD in an environment variable authenticated everyone, so nobody could be added or
+// removed and the audit trail could only say "someone with the password".
+//
+// `passwordHash` is nullable because an SSO-provisioned account has no local password and must
+// never be able to sign in with one — null is the enforcement, not a missing value. It holds a
+// scrypt digest (see lib/password.ts): a human-chosen password is low-entropy and needs a slow,
+// memory-hard hash, unlike every other secret here, which we generate at full entropy and digest
+// with sha256 for an O(1) lookup.
+//
+// `role` defaults to the LEAST privilege, never owner: a create path with a forgotten role must
+// fail closed. `totpSecret` is per-user now (AdminAuth below held one for the whole gateway) and
+// carries the same AES-256-GCM envelope as every other credential.
+model AdminUser {
+  id              String    @id @default(uuid())
+  email           String    @unique // the sign-in identity; stored lowercased by the service
+  name            String
+  passwordHash    String?
+  role            String    @default("viewer") // owner | admin | viewer
+  status          String    @default("active") // active | suspended
+  source          String    @default("local") // local | sso (sso accounts are provisioned on first sign-in)
+  totpSecret      String?
+  totpConfirmedAt DateTime?
+  // Resets a forgotten PASSWORD — distinct from the recovery codes below, which substitute for a
+  // lost AUTHENTICATOR. Different losses, different escapes. Shown once, stored only as a hash.
+  recoveryKeyHash String?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  recoveryCodes AdminRecoveryCode[]
+  apiTokens     AdminApiToken[]
+  invitesSent   AdminInvite[]
+
+  @@index([role, status])
+}
+
+// A pending invitation. Only the token's hash is stored, so a stolen database cannot yield a usable
+// invite link. Handed over as a link — and emailed only when email happens to be configured —
+// because email delivery is off by default here, and an email-only invite would be a flow that
+// silently never works.
+model AdminInvite {
+  id          String     @id @default(uuid())
+  email       String
+  role        String     @default("viewer")
+  tokenHash   String     @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  invitedById String?
+  // SET NULL, not Cascade: removing the person who sent an invite must not silently withdraw an
+  // invitation the invitee may already be holding.
+  invitedBy   AdminUser? @relation(fields: [invitedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+
+  @@index([email, acceptedAt])
+}
+
+// ── Admin authentication (Phase 6) ────────────────────────────────────────────
+
+// DEPRECATED (Phase 7.13a) — the gateway's single, shared second factor, from when there were no
+// users. The claim flow copies this secret onto the first owner's account and then nulls it here,
+// so a live TOTP secret never exists in two places. Kept only so that a deployment upgrading from
+// before 7.13 can carry its authenticator over; dropped in a later phase, once every deployment
+// has claimed.
+model AdminAuth {
+  id          String    @id @default("singleton")
+  totpSecret  String?
+  confirmedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// Single-use codes that substitute for a TOTP code when the authenticator is lost.
+// Only the hash is stored — a stolen database cannot yield a usable code.
+//
+// `userId` (7.13a) makes a code a person's rather than the gateway's. Null means a code issued
+// before accounts existed, belonging to the singleton second factor above; the claim flow adopts
+// those rows onto the first owner so an operator's existing codes keep working. Cascade: codes that
+// unlock a deleted account unlock nothing, and leaving them behind is worse than removing them.
+model AdminRecoveryCode {
+  id        String     @id @default(uuid())
+  codeHash  String     @unique
+  usedAt    DateTime?
+  userId    String?
+  user      AdminUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@index([userId, usedAt])
+}
+
+// Long-lived credentials for scripts and CI, which cannot present a second factor.
+// Hashed like team keys, so verification is an indexed lookup rather than a compare.
+// Revocation is a timestamp, not a delete, so an audit trail survives.
+model AdminApiToken {
+  id          String     @id @default(uuid())
+  name        String
+  tokenHash   String     @unique
+  maskedKey   String
+  // Access level (Phase 6.5 RBAC): "owner" = full control, "viewer" = read-only (GET
+  // routes; every mutation is refused). Defaults to owner so existing tokens are unchanged.
+  role        String     @default("owner")
+  // Who minted it (7.13a). Without this, removing a person left the tokens they created working
+  // forever, attributed to nobody. SetNull rather than Cascade because removal revokes those tokens
+  // explicitly (a timestamp, so the trail survives) — deleting the rows would erase the evidence
+  // that the token ever existed. Null = minted before accounts, or by a since-deleted account.
+  createdById String?
+  createdBy   AdminUser? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([createdById])
+}
+
+// ── Audit & compliance logging (Phase 6.7) ────────────────────────────────────
+// An append-only trail of state-changing admin actions. Written off the request path
+// through a buffered writer (the Phase 4 usage-pipeline pattern), never updated after
+// insert, and pruned only by the retention job. `actorRole` ties every action to the
+// Phase 6.5 role that performed it; secrets are redacted and the IP may be anonymized
+// before write for GDPR-sensitive deployments. Indexed for time-ordered, per-action reads.
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String // stable slug, e.g. "keys.ban", "settings.notifications", "auth.login"
+  method    String   @default("") // HTTP method that produced it
+  actorRole String   @default("system") // owner | admin | viewer | system
+  actor     String? // coarse, non-PII actor hint ("password" | "token" | "sso"); role is the attributor
+  // Who did it (Phase 7.13a). DELIBERATELY NOT A RELATION, and `actorName` is denormalised on
+  // purpose: an audit record must outlive the account it describes, because the whole point of the
+  // trail is to answer "who did this" about people who have since been removed. A foreign key would
+  // either block the removal or null the actor, and a join would lose the name — each of which
+  // quietly destroys evidence. Null on rows written before accounts existed, where `actorRole` and
+  // `actor` remain all that was ever known.
+  actorId   String?
+  actorName String?
+  target    String? // the resource acted on (id / path)
+  ip        String? // request IP; truncated when anonymization is enabled
+  status    Int      @default(0) // response status code
+  detail    String? // small redacted JSON of safe context — never a secret
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+}
+
+// ── Enterprise SSO (Phase 6.6) ────────────────────────────────────────────────
+// A single active identity-provider configuration. A table (single "singleton" row),
+// not columns on AppSettings, so a second IdP or a SAML adapter is an additive change
+// later — never a restructuring migration. `protocol` is stored now and only "oidc" is
+// wired; a "saml" adapter slots in behind the same row without a schema change.
+// `clientSecret` uses the same AES-256-GCM envelope as every other credential, never
+// plaintext. Role mapping is deliberately least-privilege: a user is granted "owner"
+// only when the configured claim carries the configured value; everyone else who
+// authenticates is a read-only "viewer". The master password remains the owner
+// break-glass, so a misconfigured mapping can never lock the operator out.
+model SsoProvider {
+  id           String   @id @default("singleton")
+  protocol     String   @default("oidc") // oidc (wired) | saml (reserved)
+  enabled      Boolean  @default(false)
+  displayName  String   @default("Single Sign-On")
+  issuer       String   @default("")
+  clientId     String   @default("")
+  clientSecret String   @default("") // AES-256-GCM encrypted; "" when unset
+  scopes       String   @default("openid email profile")
+  roleClaim    String   @default("") // claim carrying groups/role, e.g. "groups"
+  ownerValue   String   @default("") // claim value that maps to owner; else viewer
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ── Custom domains (schema now; UI in Phase 7) ────────────────────────────────
+// A team may map several hostnames, and each carries its own verification state, so
+// this is a table rather than a column on Team. `verificationToken` is the value the
+// operator publishes as a DNS TXT record to prove control of the domain.
+model DomainAlias {
+  id                String    @id @default(uuid())
+  domain            String    @unique
+  teamId            String?
+  team              Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  status            String    @default("pending") // pending | verified | failed
+  verificationToken String
+  verifiedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([teamId])
+}

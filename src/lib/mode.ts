@@ -21,10 +21,13 @@
 // of `standalone` is a description of intent, not a working configuration. `isImplemented` below is
 // what keeps this module from claiming otherwise.
 //
-// Deliberately free of imports: no prisma, no redis, no config module. Two reasons. It has to be
-// callable before either client is constructed (lib/redis.ts throws at import time when REDIS_URL is
-// unset, so anything importing it inherits that), and a pure function of its input is a function the
-// whole decision matrix can be tested against without touching a process env.
+// Deliberately free of APPLICATION imports: no prisma, no redis, no config module. Two reasons. It
+// has to be callable before either client is constructed (lib/redis.ts throws at import time when
+// REDIS_URL is unset, so anything importing it inherits that), and a pure function of its input is a
+// function the whole decision matrix can be tested against without touching a process env. A node
+// builtin costs neither property — it has no side effects and nothing to construct.
+
+import { resolve as resolvePath } from 'node:path';
 
 /** The durable store — where rows live. */
 export type DbEngine = 'postgres' | 'sqlite';
@@ -167,6 +170,38 @@ export function resolveMode(env: NodeJS.ProcessEnv = process.env): ResolvedMode 
   const isImplemented = db === 'postgres';
 
   return { mode, db, kv, durable, isImplemented, reasons, errors };
+}
+
+/**
+ * Where the standalone database file lives when nothing was configured, relative to the working
+ * directory. A dot-directory rather than a bare `nexus.db` because `npx @alayra/nexus` runs in
+ * whatever folder the operator happened to be standing in, and a tool that drops loose files there
+ * is a tool people stop trusting. One directory is also one thing to back up, and one thing to
+ * delete to start over.
+ */
+export const DEFAULT_DATA_DIR = '.nexus';
+export const DEFAULT_DB_FILE  = 'nexus.db';
+
+/**
+ * The concrete URL to hand Prisma, as opposed to `resolveMode()`'s question of *which engine*.
+ *
+ * Kept separate from `resolveMode` so that function stays a pure env→decision mapping with no
+ * filesystem in it. Only the SQLite branch needs synthesising: a configured DATABASE_URL is
+ * returned untouched, so the Postgres path cannot be altered by anything here.
+ *
+ * The SQLite path is made ABSOLUTE deliberately. Prisma resolves a relative `file:` URL against the
+ * *schema file's* directory, not the working directory — so `file:./nexus.db` would quietly put the
+ * database inside `prisma/`, somewhere the operator never looks, and a `cd` between runs would open
+ * a different database while appearing to work. An absolute path removes both surprises.
+ *
+ * @param cwd injectable so the behaviour can be tested without chdir'ing the test process.
+ */
+export function resolveDatabaseUrl(env: NodeJS.ProcessEnv = process.env, cwd: string = process.cwd()): string {
+  const configured = env.DATABASE_URL?.trim();
+  if (configured) return configured;
+
+  const dir = env.NEXUS_DATA_DIR?.trim() || DEFAULT_DATA_DIR;
+  return `file:${resolvePath(cwd, dir, DEFAULT_DB_FILE)}`;
 }
 
 /** What the Health panel and the boot banner call each store. */
