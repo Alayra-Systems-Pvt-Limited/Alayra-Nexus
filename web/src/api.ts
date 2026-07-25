@@ -552,6 +552,14 @@ export interface RedisInfoStats {
   evictedKeys: number | null; expiredKeys: number | null;
 }
 
+/**
+ * What the durable store reports about itself. Mirrors DbStats in lib/dbStats.ts.
+ *
+ * A null here means the ENGINE HAS NO SUCH CONCEPT, not that a reading failed — SQLite is a file
+ * opened by one process, so it has no connection pool, no server-side buffer cache and no
+ * cumulative transaction counter. The panel must say which of the two it is; rendering "—" for
+ * both reads as "we could not reach your database".
+ */
 export interface PgHealthStats {
   version: string | null; maxConnections: number | null;
   connections: { total: number; active: number; idle: number } | null;
@@ -559,6 +567,11 @@ export interface PgHealthStats {
   deadlocks: number | null; tempBytes: number | null; databaseBytes: number | null;
   longestTxnSeconds: number | null;
   largestTables: { name: string; rows: number; bytes: number }[];
+  /** SQLite only: "wal" or "delete" — whether a reader blocks while a write is in flight. */
+  journalMode: string | null;
+  pageSize: number | null;
+  /** SQLite only: space the file holds but is not using, reclaimable by VACUUM. */
+  reclaimableBytes: number | null;
 }
 
 /** Which stores the gateway is running on (S0). Mirrors BackendInfo in healthSampler.service.ts. */

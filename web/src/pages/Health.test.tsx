@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/preact';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/preact';
 
 const get = vi.fn();
 vi.mock('../api', () => ({ GET: (p: string) => get(p) }));
@@ -247,5 +247,167 @@ describe('Health — dependency cards name the real engine', () => {
     expect(screen.getAllByText('In-process memory').length).toBeGreaterThan(0);
     expect(screen.getByText('read round-trip')).toBeInTheDocument();
     expect(screen.queryByText('PING round-trip')).not.toBeInTheDocument();
+  });
+});
+
+// The durable-store panel (S2.3). Before this, the panel was hardcoded to "PostgreSQL" and its seven
+// pg_catalog queries were each `.catch()`-guarded — so on SQLite nothing errored, every reading came
+// back null, and the panel rendered a wall of "—" that reads as "your database is unreachable".
+describe('Health — durable store panel', () => {
+  /** A gateway running on a SQLite file, with the facts such a gateway can actually report. */
+  const onSqlite = (statsOver: Record<string, unknown> = {}) =>
+    get.mockImplementation((path: string) =>
+      path.startsWith('/admin/health/overview')
+        ? Promise.resolve(overview({
+            backend: {
+              mode: 'standalone', db: 'sqlite', kv: 'memory',
+              dbLabel: 'SQLite', kvLabel: 'In-process memory',
+              durable: false,
+              summary: 'SQLite + in-process memory (data is not durable)',
+              warning: 'Standalone mode: the database is a local file and counters live in memory.',
+            },
+            postgres: {
+              up: true, queryMs: 2, p50Ms: 2, p95Ms: 4, p99Ms: 6,
+              stats: {
+                version: '3.45.0',
+                maxConnections: null, connections: null, cacheHitRatio: null,
+                commits: null, rollbacks: null, deadlocks: null, tempBytes: null, longestTxnSeconds: null,
+                databaseBytes: 356352,
+                largestTables: [
+                  { name: 'AuditLog',   rows: 300, bytes: 126976 },
+                  { name: 'TokenUsage', rows: 12,  bytes: 24576 },
+                ],
+                journalMode: 'delete', pageSize: 4096, reclaimableBytes: 0,
+                ...statsOver,
+              },
+            },
+          }))
+        : Promise.resolve(nexusOverview));
+
+  it('titles the panel with the engine actually in use, not a hardcoded one', async () => {
+    onSqlite();
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument());
+
+    // SQLite is named in three places on this tab — the Storage chip, the dependency card and this
+    // panel's heading — so the count is what proves the panel is one of them.
+    expect(screen.getAllByText('SQLite').length).toBeGreaterThanOrEqual(3);
+    // And the word PostgreSQL must appear nowhere on a gateway that is not running it.
+    expect(screen.queryByText('PostgreSQL')).not.toBeInTheDocument();
+  });
+
+  it('shows the file facts an operator of a single-file database can act on', async () => {
+    onSqlite();
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument());
+
+    expect(screen.getByText('Database file')).toBeInTheDocument();
+    expect(screen.getByText('Journal mode')).toBeInTheDocument();
+    expect(screen.getByText('DELETE')).toBeInTheDocument();
+    expect(screen.getByText('Reclaimable')).toBeInTheDocument();
+    expect(screen.getByText('Page size')).toBeInTheDocument();
+  });
+
+  it('judges the journal mode rather than only displaying it', async () => {
+    // Whether a read blocks during a write is the one setting that matters here, and an operator
+    // cannot be expected to know which of two opaque words is the good one.
+    onSqlite();
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('DELETE')).toBeInTheDocument());
+    expect(screen.getByText(/reads wait for writes/i)).toBeInTheDocument();
+
+    cleanup();
+    onSqlite({ journalMode: 'wal' });
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('WAL')).toBeInTheDocument());
+    expect(screen.getByText(/reads run during writes/i)).toBeInTheDocument();
+  });
+
+  it('explains WHY the connection and cache numbers are absent', async () => {
+    // The whole point of the phase. Silence here would leave a panel that looks broken.
+    onSqlite();
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument());
+
+    expect(screen.getByText(/file opened by this process, not a server/i)).toBeInTheDocument();
+    // And the Postgres-only widgets must not be rendered at all, rather than rendered empty.
+    expect(screen.queryByText(/connection detail unavailable/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no reads yet, so there is no cache ratio/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Deadlocks')).not.toBeInTheDocument();
+    expect(screen.queryByText('Commits')).not.toBeInTheDocument();
+  });
+
+  it('still lists the largest tables, which both engines can report', async () => {
+    onSqlite();
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('Largest tables')).toBeInTheDocument());
+    expect(screen.getByText('AuditLog')).toBeInTheDocument();
+    expect(screen.getByText('TokenUsage')).toBeInTheDocument();
+  });
+
+  it('leaves the Postgres panel exactly as it was', async () => {
+    // The regression that matters: every existing deployment is on Postgres, and this phase must be
+    // invisible to them.
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('All systems operational')).toBeInTheDocument());
+
+    expect(screen.getByText('Commits')).toBeInTheDocument();
+    expect(screen.getByText('Deadlocks')).toBeInTheDocument();
+    expect(screen.getByText('Temp files')).toBeInTheDocument();
+    expect(screen.getByText('Longest txn')).toBeInTheDocument();
+    expect(screen.getByText('Database size')).toBeInTheDocument();
+    // And none of the SQLite-only rows leak into it.
+    expect(screen.queryByText('Journal mode')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reclaimable')).not.toBeInTheDocument();
+  });
+
+  // Found by LOOKING at a rendered SQLite gateway, not by any assertion above: three more places
+  // still named engines this gateway is not running. The panel was right and its surroundings were
+  // not, which is the same half-fix S1 made when it corrected the dependency cards only.
+  it('names the store in the KV panel heading, not just the card above it', async () => {
+    onSqlite();
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument());
+
+    // "In-process memory" appears on the dependency card AND as the panel heading beneath it.
+    expect(screen.getAllByText('In-process memory').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('Redis')).not.toBeInTheDocument();
+  });
+
+  it('summarises the banner with the stores actually in use', async () => {
+    onSqlite();
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument());
+    expect(screen.queryByText(/Redis, PostgreSQL and the process itself/)).not.toBeInTheDocument();
+  });
+
+  it('does not report a connection count for a database that has no connections', async () => {
+    onSqlite();
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument());
+
+    // "conns —" reads as a failed measurement rather than an absent concept.
+    expect(screen.queryByText('conns —')).not.toBeInTheDocument();
+    expect(screen.getByText('delete journal')).toBeInTheDocument();
+  });
+
+  it('survives a gateway that reports no stats at all', async () => {
+    get.mockImplementation((path: string) =>
+      path.startsWith('/admin/health/overview')
+        ? Promise.resolve(overview({
+            backend: {
+              mode: 'standalone', db: 'sqlite', kv: 'memory',
+              dbLabel: 'SQLite', kvLabel: 'In-process memory', durable: false,
+              summary: 'SQLite + in-process memory', warning: null,
+            },
+            postgres: { up: true, queryMs: 2, p50Ms: 2, p95Ms: 4, p99Ms: 6, stats: null },
+          }))
+        : Promise.resolve(nexusOverview));
+
+    render(<Health />);
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument());
+    // Named from the backend even in the fallback copy — "PostgreSQL introspection is unavailable"
+    // on a SQLite gateway would be the same hardcoding this phase removed.
+    expect(screen.getByText(/SQLite introspection is unavailable/i)).toBeInTheDocument();
   });
 });

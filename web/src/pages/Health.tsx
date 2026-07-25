@@ -21,7 +21,10 @@ export function Health() {
 
   return (
     <>
-      <PageHeader title="Health" subtitle="The gateway’s own vitals — process, Redis, PostgreSQL, and upstream capacity" />
+      {/* Engine-neutral on purpose (S2.3). This header renders before the overview is fetched, so it
+          cannot name the engines the gateway is actually on — and naming the wrong two is worse than
+          naming none. The Storage card and each panel below name them from what the server reports. */}
+      <PageHeader title="Health" subtitle="The gateway’s own vitals — process, data stores, and upstream capacity" />
       <div class={s.setTabs}>
         <Tabs items={TABS} active={tab} onChange={setTab} />
       </div>

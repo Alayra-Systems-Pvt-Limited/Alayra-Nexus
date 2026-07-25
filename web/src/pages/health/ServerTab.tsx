@@ -61,7 +61,14 @@ export function ServerTab() {
       <div class={s.banner}>
         <div class={s.bannerLeft}>
           <span class={`${s.bannerState} ${s['st_' + d.status]}`}><span class={s.pulse} />{d.summary.split(' · ')[0]}</span>
-          <span class={s.bannerSub}>{d.summary.includes(' · ') ? d.summary.split(' · ')[1] : 'Redis, PostgreSQL and the process itself'}</span>
+          {/* The fallback names the stores the server reports, not the two this gateway used to be
+              hardcoded to. On a standalone gateway "Redis, PostgreSQL and the process itself" was
+              simply a description of something else. */}
+          <span class={s.bannerSub}>
+            {d.summary.includes(' · ')
+              ? d.summary.split(' · ')[1]
+              : `${d.backend?.kvLabel ?? 'Redis'}, ${d.backend?.dbLabel ?? 'PostgreSQL'} and the process itself`}
+          </span>
         </div>
         <div class={s.bannerMid}>
           <div class={s.stripLab}>
@@ -185,9 +192,14 @@ export function ServerTab() {
           </div>
           <div class={s.depFoot}>
             <span>{d.postgres.stats?.version ? `v${d.postgres.stats.version}` : 'version —'}</span>
+            {/* A file has no connection pool, so "conns —" on SQLite reads as a failed measurement of
+                something that does not exist. The journal mode is the equivalent fact worth the slot. */}
             <span>
-              {d.postgres.stats?.connections && d.postgres.stats.maxConnections
-                ? `${d.postgres.stats.connections.total} / ${d.postgres.stats.maxConnections} conns` : 'conns —'}
+              {d.backend?.db === 'sqlite'
+                ? (d.postgres.stats?.journalMode ? `${d.postgres.stats.journalMode.toLowerCase()} journal` : 'journal —')
+                : d.postgres.stats?.connections && d.postgres.stats.maxConnections
+                  ? `${d.postgres.stats.connections.total} / ${d.postgres.stats.maxConnections} conns`
+                  : 'conns —'}
             </span>
             <span>{fmtBytes(d.postgres.stats?.databaseBytes ?? null)}</span>
           </div>
@@ -197,7 +209,7 @@ export function ServerTab() {
       {/* ── Deep panels ── */}
       <div class={`${p.grid} ${p.cols2} ${p.section}`}>
         <RedisPanel d={d} sampledAgo={sampledAgo} />
-        <PostgresPanel d={d} sampledAgo={sampledAgo} />
+        <DatabasePanel d={d} sampledAgo={sampledAgo} />
       </div>
 
       <div class={p.section}><ProcessPanel d={d} sampledAgo={sampledAgo} /></div>
@@ -229,12 +241,18 @@ function SampledMeta({ sampledAgo }: { sampledAgo: number | null }) {
 }
 
 function RedisPanel({ d, sampledAgo }: { d: HealthOverview; sampledAgo: number | null }) {
+  // S1's in-process store implements INFO, so this panel genuinely renders in standalone mode —
+  // which is why every label in it has to be named from the server rather than assumed.
+  const kvName = d.backend?.kvLabel ?? 'Redis';
   const info = d.redis.info;
   const frag = info?.fragmentationRatio ?? null;
   return (
     <Card>
       <div class={s.panelHead}>
-        <span class={s.depIco}><Zap size={13} /></span><b>Redis</b>
+        {/* Named from the server, like the dependency card above it. S1 fixed the card and left this
+            panel behind, so a standalone gateway showed "In-process memory · Healthy" in the card and
+            a panel titled "Redis" directly underneath. */}
+        <span class={s.depIco}><Zap size={13} /></span><b>{d.backend?.kvLabel ?? 'Redis'}</b>
         <span class={s.panelTag}>in-memory store</span>
         <SampledMeta sampledAgo={sampledAgo} />
       </div>
@@ -248,7 +266,7 @@ function RedisPanel({ d, sampledAgo }: { d: HealthOverview; sampledAgo: number |
                   pct={(info.usedMemoryBytes / info.maxMemoryBytes) * 100}
                   value={`${Math.round((info.usedMemoryBytes / info.maxMemoryBytes) * 100)}%`}
                   sub="memory"
-                  label={`Redis memory ${fmtBytes(info.usedMemoryBytes)} of ${fmtBytes(info.maxMemoryBytes)}`}
+                  label={`${kvName} memory ${fmtBytes(info.usedMemoryBytes)} of ${fmtBytes(info.maxMemoryBytes)}`}
                 />
                 <div class={s.gaugeCap}>
                   {fmtBytes(info.usedMemoryBytes)} / {fmtBytes(info.maxMemoryBytes)}<br />
@@ -269,11 +287,11 @@ function RedisPanel({ d, sampledAgo }: { d: HealthOverview; sampledAgo: number |
                   value={`${(d.redis.hitRate * 100).toFixed(1)}%`}
                   sub="hit rate"
                   warnAt={101 /* a high hit rate is good — never tint it amber */}
-                  label={`Redis keyspace hit rate ${(d.redis.hitRate * 100).toFixed(1)} percent`}
+                  label={`${kvName} keyspace hit rate ${(d.redis.hitRate * 100).toFixed(1)} percent`}
                 />
                 <div class={s.gaugeCap}>
                   {fmtCount(info.keyspaceHits)} hits / {fmtCount(info.keyspaceMisses)} misses<br />
-                  <span class={s.gaugeFree}>since Redis restart</span>
+                  <span class={s.gaugeFree}>since {kvName.toLowerCase() === "redis" ? "Redis" : "the process"} restarted</span>
                 </div>
               </div>
             ) : (
@@ -306,7 +324,7 @@ function RedisPanel({ d, sampledAgo }: { d: HealthOverview; sampledAgo: number |
         </>
       ) : (
         <p class={p.setDesc}>
-          This Redis does not expose <code>INFO</code> (managed instances sometimes restrict it), so the
+          This {kvName} does not expose <code>INFO</code> (managed instances sometimes restrict it), so the
           detail here is unavailable — the PING probe above still verifies it is alive and fast.
         </p>
       )}
@@ -314,23 +332,97 @@ function RedisPanel({ d, sampledAgo }: { d: HealthOverview; sampledAgo: number |
   );
 }
 
-function PostgresPanel({ d, sampledAgo }: { d: HealthOverview; sampledAgo: number | null }) {
-  const st = d.postgres.stats;
+/**
+ * The durable store's panel.
+ *
+ * Titled and shaped from the engine the server reports, never hardcoded. The two engines expose
+ * genuinely different facts — a client/server database has connections and a shared buffer cache,
+ * a single file has a journal mode and free pages — so this branches rather than rendering one
+ * layout with half its readings blank. A wall of "—" reads as "your database is unreachable",
+ * which for a perfectly healthy SQLite file would be both alarming and wrong.
+ */
+function DatabasePanel({ d, sampledAgo }: { d: HealthOverview; sampledAgo: number | null }) {
+  const st       = d.postgres.stats;
+  const isSqlite = d.backend?.db === 'sqlite';
+  const dbName   = d.backend?.dbLabel ?? 'PostgreSQL';
   const maxTable = st?.largestTables.length ? Math.max(...st.largestTables.map((t) => t.bytes), 1) : 1;
   const rollbackNote = (() => {
     if (st?.rollbacks === null || st?.commits === null || !st) return null;
     const total = (st.commits ?? 0) + (st.rollbacks ?? 0);
     return total > 0 ? `${(((st.rollbacks ?? 0) / total) * 100).toFixed(1)}% of txns` : null;
   })();
+
+  // Shared by both engines: dbstat and pg_stat_user_tables answer the same question.
+  const largestTables = st && st.largestTables.length > 0 ? (
+    <div class={s.tblRows}>
+      <div class={`${s.tblRow} ${s.tblHead}`}><span>Largest tables</span><span>rows</span><span>size</span></div>
+      {st.largestTables.map((t) => (
+        <div key={t.name} class={s.tblRow}>
+          <span class={s.tblName}>{t.name}</span>
+          <span>{fmtCount(t.rows)}</span>
+          <span class={s.tblBar}><i style={{ width: `${Math.max(2, Math.round((t.bytes / maxTable) * 100))}%` }} />{fmtBytes(t.bytes)}</span>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   return (
     <Card>
       <div class={s.panelHead}>
-        <span class={s.depIco}><Database size={13} /></span><b>PostgreSQL</b>
+        <span class={s.depIco}><Database size={13} /></span><b>{dbName}</b>
         <span class={s.panelTag}>durable store</span>
         <SampledMeta sampledAgo={sampledAgo} />
       </div>
 
-      {st ? (
+      {!st ? (
+        <p class={p.setDesc}>
+          {dbName} introspection is unavailable on this instance — the query probe above still verifies
+          it answers. No “disk free” is shown anywhere here on purpose: neither engine can report free
+          disk from SQL, so a fullness bar would be invented.
+        </p>
+      ) : isSqlite ? (
+        <>
+          <div class={s.kpiGrid}>
+            <span class={s.kpi}>
+              <span class={s.kpiLbl}>Database file</span>
+              <span class={s.kpiVal}>{fmtBytes(st.databaseBytes)}</span>
+              <span class={s.kpiNote}>on disk</span>
+            </span>
+            <span class={s.kpi}>
+              <span class={s.kpiLbl}>Journal mode</span>
+              <span class={s.kpiVal}>{st.journalMode ? st.journalMode.toUpperCase() : '—'}</span>
+              {/* The one setting an operator of a file-backed gateway can act on: under WAL a read
+                  proceeds during a write, under DELETE it waits. Judged, not merely displayed. */}
+              {st.journalMode && (
+                <span class={`${s.kpiNote} ${st.journalMode.toLowerCase() === 'wal' ? s.ok : s.wn}`}>
+                  {st.journalMode.toLowerCase() === 'wal' ? 'reads run during writes' : 'reads wait for writes'}
+                </span>
+              )}
+            </span>
+            <span class={s.kpi}>
+              <span class={s.kpiLbl}>Reclaimable</span>
+              <span class={s.kpiVal}>{fmtBytes(st.reclaimableBytes)}</span>
+              {st.reclaimableBytes !== null && (
+                <span class={s.kpiNote}>{st.reclaimableBytes > 0 ? 'freed by VACUUM' : 'nothing to reclaim'}</span>
+              )}
+            </span>
+            <span class={s.kpi}>
+              <span class={s.kpiLbl}>Page size</span>
+              <span class={s.kpiVal}>{fmtBytes(st.pageSize)}</span>
+            </span>
+          </div>
+
+          {largestTables}
+
+          {/* Says WHY the client/server numbers are absent. Without this the panel reads as a
+              Postgres card with its readings missing, rather than a complete SQLite one. */}
+          <p class={p.setDesc}>
+            Connection counts, buffer-cache hit ratio and cumulative transaction totals are not shown
+            because {dbName} has none — it is a file opened by this process, not a server with a
+            connection pool and a shared cache. The row counts above are exact rather than estimated.
+          </p>
+        </>
+      ) : (
         <>
           <div class={s.gaugeRow}>
             {st.connections && st.maxConnections ? (
@@ -391,25 +483,8 @@ function PostgresPanel({ d, sampledAgo }: { d: HealthOverview; sampledAgo: numbe
             </span>
           </div>
 
-          {st.largestTables.length > 0 && (
-            <div class={s.tblRows}>
-              <div class={`${s.tblRow} ${s.tblHead}`}><span>Largest tables</span><span>rows</span><span>size</span></div>
-              {st.largestTables.map((t) => (
-                <div key={t.name} class={s.tblRow}>
-                  <span class={s.tblName}>{t.name}</span>
-                  <span>{fmtCount(t.rows)}</span>
-                  <span class={s.tblBar}><i style={{ width: `${Math.max(2, Math.round((t.bytes / maxTable) * 100))}%` }} />{fmtBytes(t.bytes)}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {largestTables}
         </>
-      ) : (
-        <p class={p.setDesc}>
-          Postgres introspection is unavailable on this instance — the query probe above still verifies
-          it answers. No “disk free” is shown anywhere here on purpose: Postgres cannot report free
-          disk from SQL, so a fullness bar would be invented.
-        </p>
       )}
     </Card>
   );

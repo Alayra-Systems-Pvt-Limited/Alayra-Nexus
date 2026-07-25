@@ -211,3 +211,50 @@ describe('sampleStatus', () => {
     expect(sampleStatus(sample({ redisOk: false, redisMs: null }))).toBe('down');
   });
 });
+
+// The readiness labels name the stores actually probed (S1 for the KV, S2.3 for the database).
+// /ready is read by orchestrators and by humans during an incident; a label there that names an
+// engine the gateway is not running is worse than no label at all.
+describe('evaluateChecks — labels name what was really probed', () => {
+  const base = {
+    redisOk: true, redisMs: 1, pgOk: true, pgMs: 5,
+    loopP99Ms: 2, heapUsedBytes: 10, heapLimitBytes: 100,
+  };
+  const labelOf = (checks: ReturnType<typeof evaluateChecks>, id: string) =>
+    checks.find((c) => c.id === id)!.label;
+
+  it('keeps the historical labels when no engine is named', () => {
+    // Every caller before standalone mode passed neither, and must be unaffected.
+    const c = evaluateChecks(base);
+    expect(labelOf(c, 'redis')).toBe('Redis PING');
+    expect(labelOf(c, 'postgres')).toBe('Postgres SELECT 1');
+  });
+
+  it('keeps them when the engines ARE the historical ones', () => {
+    const c = evaluateChecks({ ...base, kvLabel: 'Redis', dbLabel: 'PostgreSQL' });
+    expect(labelOf(c, 'redis')).toBe('Redis PING');
+    expect(labelOf(c, 'postgres')).toBe('Postgres SELECT 1');
+  });
+
+  it('names the durable store when it is not PostgreSQL', () => {
+    // The bug S1 left behind: a SQLite gateway reported "Postgres SELECT 1" to every orchestrator.
+    const c = evaluateChecks({ ...base, dbLabel: 'SQLite' });
+    expect(labelOf(c, 'postgres')).toBe('SQLite SELECT 1');
+    expect(labelOf(c, 'postgres')).not.toMatch(/postgres/i);
+  });
+
+  it('names the KV store when it is not Redis', () => {
+    const c = evaluateChecks({ ...base, kvLabel: 'In-process memory' });
+    expect(labelOf(c, 'redis')).toBe('In-process memory read');
+    expect(labelOf(c, 'redis')).not.toMatch(/redis/i);
+  });
+
+  it('names both at once on a fully standalone gateway', () => {
+    const c = evaluateChecks({ ...base, kvLabel: 'In-process memory', dbLabel: 'SQLite' });
+    expect(c.map((x) => x.label)).toEqual([
+      'In-process memory read', 'SQLite SELECT 1', 'Event-loop lag p99', 'Heap saturation',
+    ]);
+    // And the ids never change — the UI and /ready consumers key off those, not the labels.
+    expect(c.map((x) => x.id)).toEqual(['redis', 'postgres', 'eventLoop', 'heap']);
+  });
+});

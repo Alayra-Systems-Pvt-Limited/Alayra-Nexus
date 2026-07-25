@@ -250,10 +250,18 @@ export function evaluateChecks(args: {
    * orchestrators, so a label there has to name the thing that was really probed.
    */
   kvLabel?: string;
+  /**
+   * What the durable store actually is (S2.3). S1 made the KV label above honest and left this one
+   * hardcoded, so a gateway on SQLite still told every orchestrator reading /ready that it had just
+   * run "Postgres SELECT 1" — naming a database that is not there. Same rule, one layer down.
+   */
+  dbLabel?: string;
 }): ReadyCheck[] {
   const heapPct = args.heapLimitBytes > 0 ? (args.heapUsedBytes / args.heapLimitBytes) * 100 : 0;
   const ms = (v: number | null) => (v === null ? 'no response' : `${v.toFixed(1)} ms`);
   const kvCheckLabel = args.kvLabel && args.kvLabel !== 'Redis' ? `${args.kvLabel} read` : 'Redis PING';
+  // The probe is the same `SELECT 1` on either engine, so only the name in front of it changes.
+  const dbCheckLabel = args.dbLabel && args.dbLabel !== 'PostgreSQL' ? `${args.dbLabel} SELECT 1` : 'Postgres SELECT 1';
   return [
     {
       id: 'redis', label: kvCheckLabel,
@@ -261,7 +269,7 @@ export function evaluateChecks(args: {
       status: probeStatus(args.redisOk, args.redisMs, THRESHOLDS.redisPingMs),
     },
     {
-      id: 'postgres', label: 'Postgres SELECT 1',
+      id: 'postgres', label: dbCheckLabel,
       measured: ms(args.pgMs), threshold: `< ${THRESHOLDS.postgresMs} ms`,
       status: probeStatus(args.pgOk, args.pgMs, THRESHOLDS.postgresMs),
     },

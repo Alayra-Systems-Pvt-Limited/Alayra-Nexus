@@ -29,7 +29,8 @@ import { monitorEventLoopDelay, type IntervalHistogram } from 'perf_hooks';
 import { readFileSync } from 'fs';
 import v8 from 'v8';
 import { redis }  from '../lib/redis';
-import { prisma } from '../lib/prisma';
+import { prisma, dbEngine } from '../lib/prisma';
+import { readDbStats, type DbStats } from '../lib/dbStats';
 import {
   resolveMode, describeMode, ephemeralWarning, DB_LABEL, KV_LABEL,
   type NexusMode, type DbEngine, type KvEngine,
@@ -171,7 +172,7 @@ export async function runReadyChecks(): Promise<{ ready: boolean; status: Health
     loopP99Ms: last?.loopP99Ms ?? 0,
     heapUsedBytes: process.memoryUsage().heapUsed,
     heapLimitBytes: heapLimitBytes(),
-    kvLabel: KV_LABEL[resolveMode().kv],
+    kvLabel: KV_LABEL[resolveMode().kv], dbLabel: DB_LABEL[resolveMode().db],
   });
   const { status } = summarize(checks);
   // Only a dead dependency refuses traffic. "Degraded" still serves — pulling a slow-but-working
@@ -181,73 +182,6 @@ export async function runReadyChecks(): Promise<{ ready: boolean; status: Health
 
 // ── The dashboard read (GET /admin/health/overview) ──────────────────────────
 
-interface PgStats {
-  version:        string | null;
-  maxConnections: number | null;
-  connections:    { total: number; active: number; idle: number } | null;
-  cacheHitRatio:  number | null;
-  commits:        number | null;   // cumulative, since pg stats reset
-  rollbacks:      number | null;
-  deadlocks:      number | null;
-  tempBytes:      number | null;
-  databaseBytes:  number | null;
-  longestTxnSeconds: number | null;
-  largestTables:  { name: string; rows: number; bytes: number }[];
-}
-
-/** Postgres introspection, each query independently guarded: a managed instance that refuses one
- *  view must not blank the whole panel — absent facts are null, present ones still show. */
-async function readPgStats(): Promise<PgStats> {
-  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-
-  const [versionRow, settingsRow, connRows, dbRows, sizeRow, txnRow, tableRows] = await Promise.all([
-    prisma.$queryRaw<{ v: string }[]>`SELECT version() AS v`.catch(() => []),
-    prisma.$queryRaw<{ v: string }[]>`SELECT setting AS v FROM pg_settings WHERE name = 'max_connections'`.catch(() => []),
-    prisma.$queryRaw<{ total: number; active: number; idle: number }[]>`
-      SELECT COUNT(*)::int AS total,
-             COUNT(*) FILTER (WHERE state = 'active')::int AS active,
-             COUNT(*) FILTER (WHERE state = 'idle')::int   AS idle
-      FROM pg_stat_activity WHERE datname = current_database()`.catch(() => []),
-    prisma.$queryRaw<{ commits: number; rollbacks: number; blksRead: number; blksHit: number; deadlocks: number; tempBytes: number }[]>`
-      SELECT xact_commit::float8 AS commits, xact_rollback::float8 AS rollbacks,
-             blks_read::float8 AS "blksRead", blks_hit::float8 AS "blksHit",
-             deadlocks::float8 AS deadlocks, temp_bytes::float8 AS "tempBytes"
-      FROM pg_stat_database WHERE datname = current_database()`.catch(() => []),
-    prisma.$queryRaw<{ bytes: number }[]>`SELECT pg_database_size(current_database())::float8 AS bytes`.catch(() => []),
-    prisma.$queryRaw<{ secs: number | null }[]>`
-      SELECT EXTRACT(EPOCH FROM MAX(now() - xact_start))::float8 AS secs
-      FROM pg_stat_activity WHERE state <> 'idle' AND xact_start IS NOT NULL`.catch(() => []),
-    prisma.$queryRaw<{ name: string; rows: number; bytes: number }[]>`
-      SELECT relname AS name, n_live_tup::float8 AS rows, pg_total_relation_size(relid)::float8 AS bytes
-      FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 5`.catch(() => []),
-  ]);
-
-  const db = dbRows[0];
-  const blksRead = num(db?.blksRead), blksHit = num(db?.blksHit);
-  const reads = (blksRead ?? 0) + (blksHit ?? 0);
-  // "PostgreSQL 16.2 on x86_64…" → "16.2"
-  //
-  // Both `?.`s are load-bearing. The first guards a missing row (the query is `.catch(() => [])`, so
-  // a failure arrives as an empty array); the second guards a row whose column is null or absent. It
-  // was `?.v.match(...)` — row-guarded but column-unguarded — which turns any unexpected shape from
-  // `SELECT version()` into a TypeError that takes the whole Health response down, rather than the
-  // "version —" the UI already knows how to render.
-  const version = versionRow[0]?.v?.match(/PostgreSQL\s+([\d.]+)/)?.[1] ?? null;
-
-  return {
-    version,
-    maxConnections: settingsRow[0] ? Number(settingsRow[0].v) || null : null,
-    connections:    connRows[0] ?? null,
-    cacheHitRatio:  blksHit !== null && reads > 0 ? blksHit / reads : null,
-    commits:        num(db?.commits),
-    rollbacks:      num(db?.rollbacks),
-    deadlocks:      num(db?.deadlocks),
-    tempBytes:      num(db?.tempBytes),
-    databaseBytes:  num(sizeRow[0]?.bytes),
-    longestTxnSeconds: num(txnRow[0]?.secs),
-    largestTables:  tableRows.map((t) => ({ name: t.name, rows: t.rows, bytes: t.bytes })),
-  };
-}
 
 async function readRedisStats(): Promise<RedisInfoStats | null> {
   try { return parseRedisInfo(await withTimeout(redis.info())); }
@@ -294,7 +228,7 @@ export interface HealthOverview {
   };
   postgres: {
     up: boolean; queryMs: number | null; p50Ms: number | null; p95Ms: number | null; p99Ms: number | null;
-    stats: PgStats | null;
+    stats: DbStats | null;
   };
   process: {
     node: string; uptimeSeconds: number; pid: number;
@@ -309,7 +243,7 @@ export async function getHealthOverview(now: number = Date.now()): Promise<Healt
   const all  = samples.values();
   const last = all.at(-1) ?? null;
 
-  const [redisInfo, pgStats] = await Promise.all([readRedisStats(), readPgStats()]);
+  const [redisInfo, pgStats] = await Promise.all([readRedisStats(), readDbStats(prisma, dbEngine)]);
 
   const redisSeries = all.map((s) => s.redisMs).filter((v): v is number => v !== null);
   const pgSeries    = all.map((s) => s.pgMs).filter((v): v is number => v !== null);
@@ -320,7 +254,7 @@ export async function getHealthOverview(now: number = Date.now()): Promise<Healt
     loopP99Ms: last?.loopP99Ms ?? 0,
     heapUsedBytes: last?.heapUsedBytes ?? process.memoryUsage().heapUsed,
     heapLimitBytes: heapLimitBytes(),
-    kvLabel: KV_LABEL[resolveMode().kv],
+    kvLabel: KV_LABEL[resolveMode().kv], dbLabel: DB_LABEL[resolveMode().db],
   });
   const { status, summary } = summarize(checks);
 
