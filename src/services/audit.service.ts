@@ -24,6 +24,7 @@
 import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { createManyIgnoringDuplicates } from '../lib/bulkInsert';
 import { getSetting, setSetting } from './settings.service';
 import { pruneNotifications } from './notificationFeed.service';
 import { anonymizeIp, clampRetentionDays, DEFAULT_RETENTION_DAYS, MAX_RETENTION_DAYS } from '../lib/audit';
@@ -177,7 +178,7 @@ export async function flush(): Promise<number> {
     if (await isUsageAnonymized()) {
       for (const row of batch) row.ip = anonymizeIp(row.ip ?? null);
     }
-    await prisma.auditLog.createMany({ data: batch, skipDuplicates: true });
+    await createManyIgnoringDuplicates(prisma.auditLog, batch);
     return batch.length;
   } catch {
     buffer = batch.concat(buffer).slice(0, BUFFER_CAP); // re-queue, still bounded

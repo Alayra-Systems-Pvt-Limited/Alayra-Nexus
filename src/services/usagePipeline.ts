@@ -15,6 +15,7 @@
  */
 
 import { prisma } from '../lib/prisma';
+import { createManyIgnoringDuplicates } from '../lib/bulkInsert';
 
 // ── Async analytics pipeline ──────────────────────────────────────────────────
 // Usage events are buffered in-process and flushed to Postgres in a single batched
@@ -66,12 +67,15 @@ export interface UsagePipelineOptions {
   autoStart?:  boolean;
 }
 
-// Postgres caps parameters per statement (~65535); chunk so a large drain can't
-// blow past it. skipDuplicates makes a re-queued retry idempotent (ids are UUIDs).
+// Postgres caps parameters per statement (~65535); chunk so a large drain can't blow past it.
+// SQLite's limit is lower still (999 variables by default), and TokenUsage is a wide row, so the
+// same chunk size serves both. The insert is idempotent so a re-queued retry cannot duplicate a
+// row — ids are UUIDs, so a collision is always a row we already wrote. See lib/bulkInsert.ts:
+// SQLite has no skipDuplicates, and reaching for it there is a validation error, not a no-op.
 const INSERT_CHUNK = 500;
 const defaultInsert = async (rows: UsageEvent[]): Promise<void> => {
   for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
-    await prisma.tokenUsage.createMany({ data: rows.slice(i, i + INSERT_CHUNK), skipDuplicates: true });
+    await createManyIgnoringDuplicates(prisma.tokenUsage, rows.slice(i, i + INSERT_CHUNK));
   }
 };
 

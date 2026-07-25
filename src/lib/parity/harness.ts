@@ -36,6 +36,27 @@ export interface Engines {
   dispose: () => Promise<void>;
 }
 
+/**
+ * Create the per-file database, tolerating one that is already there.
+ *
+ * Done through psql-less raw SQL on a client pointed at the configured database, because CREATE
+ * DATABASE cannot run inside a transaction and Prisma's migrate engine will not create a database
+ * whose name it was not given. "already exists" is the normal case on a second run.
+ */
+function createDatabase(name: string): void {
+  execFileSync(
+    'node',
+    ['-e', `
+      const { PrismaClient } = require('@prisma/client');
+      const p = new PrismaClient({ datasources: { db: { url: process.env.URL } }, log: [] });
+      p.$executeRawUnsafe('CREATE DATABASE "' + process.env.NAME.replace(/"/g, '""') + '"')
+        .catch((e) => { if (!String(e.message).includes('already exists')) { console.error(e.message); process.exit(1); } })
+        .finally(() => p.$disconnect());
+    `],
+    { env: { ...process.env, URL: PARITY_DATABASE_URL, NAME: name }, stdio: 'pipe', cwd: ROOT },
+  );
+}
+
 function push(schema: string, url: string): void {
   execFileSync(
     'npx',
@@ -45,22 +66,46 @@ function push(schema: string, url: string): void {
 }
 
 /**
+ * Point a Postgres URL at a differently-named database on the same server.
+ *
+ * Every parity file needs its own, because `--force-reset` drops and recreates the schema and
+ * vitest runs files concurrently: two of them resetting one database is a race that shows up as an
+ * occasional, unreproducible CI failure. The SQLite side gets this for free from mkdtemp.
+ */
+function withDatabase(url: string, name: string): string {
+  const u = new URL(url);
+  u.pathname = `/${name}`;
+  return u.toString();
+}
+
+/** `nexus_parity` → `nexus_parity_analytics`. Restricted to an identifier we built ourselves. */
+function databaseFor(namespace: string): string {
+  const base = new URL(PARITY_DATABASE_URL).pathname.replace(/^\//, '') || 'nexus_parity';
+  return `${base}_${namespace.replace(/[^a-z0-9_]/gi, '_').toLowerCase()}`;
+}
+
+/**
  * Stand up both engines with the schema applied.
  *
  * `--force-reset` on the Postgres side is why PARITY_DATABASE_URL must name a throwaway database
  * and never a real one: it drops everything before recreating it.
+ *
+ * @param namespace a short name unique to the calling test file, so concurrent files cannot reset
+ *                  each other's database out from under them.
  */
-export function startEngines(): Engines {
+export function startEngines(namespace: string): Engines {
   const dir     = mkdtempSync(join(tmpdir(), 'nexus-parity-'));
   const fileUrl = `file:${join(dir, 'parity.db')}`;
+  const pgUrl   = withDatabase(PARITY_DATABASE_URL, databaseFor(namespace));
 
   push('schema.sqlite.prisma', fileUrl);
-  push('schema.prisma', PARITY_DATABASE_URL);
+  createDatabase(databaseFor(namespace));
+  push('schema.prisma', pgUrl);
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const SqliteClient = (require('.prisma/client-sqlite') as { PrismaClient: new (o?: unknown) => PrismaClient }).PrismaClient;
 
-  const pg     = new PrismaClient({ datasources: { db: { url: PARITY_DATABASE_URL } }, log: ['error'] });
+  const pg     = new PrismaClient({ datasources: { db: { url: pgUrl } }, log: ['error'] });
   const sqlite = new SqliteClient({ datasources: { db: { url: fileUrl } }, log: ['error'] });
 
   return {

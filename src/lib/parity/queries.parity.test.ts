@@ -48,7 +48,7 @@ describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the analytics aggregates agree
   let e: Engines;
 
   beforeAll(async () => {
-    e = startEngines();
+    e = startEngines('analytics');
     await seedBoth(e);
   }, 120_000);
 
@@ -196,7 +196,7 @@ describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the analytics aggregates agree
 
 describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the cache and usage aggregates agree', () => {
   let e: Engines;
-  beforeAll(async () => { e = startEngines(); await seedBoth(e); }, 120_000);
+  beforeAll(async () => { e = startEngines('usage'); await seedBoth(e); }, 120_000);
   afterAll(async () => { await e?.dispose(); });
 
   it('cache stats: hits, successes and savings', async () => {
@@ -235,7 +235,7 @@ describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the cache and usage aggregates
 
 describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the per-team aggregates agree', () => {
   let e: Engines;
-  beforeAll(async () => { e = startEngines(); await seedBoth(e); }, 120_000);
+  beforeAll(async () => { e = startEngines('team'); await seedBoth(e); }, 120_000);
   afterAll(async () => { await e?.dispose(); });
 
   it('team totals', async () => {

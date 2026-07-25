@@ -14,7 +14,8 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-import { prisma } from '../lib/prisma';
+import { prisma, dbEngine } from '../lib/prisma';
+import { emptyEveryTable } from '../lib/resetTables';
 import { safeEqual } from '../lib/timingSafe';
 import { createUser, isUnclaimed, AdminUserError, type AdminUserView } from './adminUsers.service';
 import { deleteKeys } from '../lib/redisScan';
@@ -139,6 +140,7 @@ export async function claimGateway(input: ClaimInput): Promise<ClaimResult> {
 /** The phrase the operator must type, verbatim. Exported so the dashboard and the check agree. */
 export const RESET_CONFIRM_PHRASE = 'RESET THIS GATEWAY';
 
+
 /**
  * Return the gateway to the moment after first install: every table emptied, every Redis key
  * of ours gone — pools, keys, teams, usage, audit, accounts, invites, settings, sessions. The
@@ -155,26 +157,16 @@ export const RESET_CONFIRM_PHRASE = 'RESET THIS GATEWAY';
 export async function factoryReset(): Promise<{ tablesCleared: number; redisKeysCleared: number }> {
   await Promise.all([drainAudit(), drainUsage()]);
 
-  // Every application table, discovered from the live schema rather than listed by hand — a
-  // hand-written list is a wipe that silently spares whatever model ships next. Only the
-  // migrations ledger survives: the schema itself is not what is being reset.
-  const rows = await prisma.$queryRaw<{ tablename: string }[]>`
-    SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
-  `;
-  if (rows.length > 0) {
-    const tables = rows.map((r) => `"public"."${r.tablename.replace(/"/g, '""')}"`).join(', ');
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE`);
-  }
+  const tablesCleared = await emptyEveryTable(prisma, dbEngine);
 
   // Sessions, rate-limit counters, breaker state, budgets, cache — and the caller's own
   // session with them: the person who pressed the button lands on the claim screen too.
   const redisKeysCleared = await deleteKeys('nexus:*');
 
   console.log('\n🧨  FACTORY RESET performed by an owner with the master password.');
-  console.log(`    ${rows.length} tables emptied, ${redisKeysCleared} Redis keys cleared.`);
+  console.log(`    ${tablesCleared} tables emptied, ${redisKeysCleared} Redis keys cleared.`);
   console.log('    This event cannot appear in the audit trail — the reset empties the very table');
   console.log('    the record would be written to — so this log line is its only witness.\n');
 
-  return { tablesCleared: rows.length, redisKeysCleared };
+  return { tablesCleared, redisKeysCleared };
 }
