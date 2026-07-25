@@ -61,6 +61,23 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      # And a throwaway PostgreSQL, for the same reason (Phase S2.1): the SQL dialect twins are
+      # checked by running both halves against both real engines. Without it that suite skips, the
+      # SQLite variants are never executed, and a mistranslation ships — four of the seven ways they
+      # can be wrong produce no error at all, just a wrong number on the dashboard. The harness
+      # drops and recreates this database's schema, so it must never be anything but disposable.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus
+          POSTGRES_DB: nexus_parity
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nexus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -74,6 +91,7 @@ jobs:
       - run: npm test
         env:
           PARITY_REDIS_URL: redis://localhost:6379
+          PARITY_DATABASE_URL: postgresql://nexus:nexus@localhost:5432/nexus_parity
 
   build:
     name: Build

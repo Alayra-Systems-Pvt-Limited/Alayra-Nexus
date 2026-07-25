@@ -24,7 +24,7 @@ import { vi } from 'vitest';
 // helpers can be exercised end to end. redis.get returns undefined → every read misses the cache
 // and falls through to this store, which is what makes the writes observable.
 const { store } = vi.hoisted(() => ({ store: { value: '[]' } }));
-vi.mock('../lib/prisma', () => ({ prisma: {} }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: {} }));
 vi.mock('../lib/redis',  () => ({ redis: { get: vi.fn(), set: vi.fn(), del: vi.fn() } }));
 vi.mock('./settings.service', () => ({
   getSetting: vi.fn(async () => store.value),

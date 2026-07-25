@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // The service imports the real Redis/Prisma clients at module load; mock both so
 // no connection is attempted and every data path is controlled by the test.
 vi.mock('../lib/redis',  () => ({ redis:  { get: vi.fn(), set: vi.fn(), eval: vi.fn() } }));
-vi.mock('../lib/prisma', () => ({ prisma: { tokenUsage: { aggregate: vi.fn() } } }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: { tokenUsage: { aggregate: vi.fn() } } }));
 
 import { redis }  from '../lib/redis';
 import { prisma } from '../lib/prisma';

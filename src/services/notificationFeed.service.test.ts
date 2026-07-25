@@ -39,7 +39,7 @@ const { claimed, redisSet, prismaMock } = vi.hoisted(() => {
   };
 });
 vi.mock('../lib/redis',  () => ({ redis: { set: (...a: unknown[]) => redisSet(...(a as [string])) } }));
-vi.mock('../lib/prisma', () => ({ prisma: prismaMock }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 
 import {
   recordNotification, listNotifications, markNotificationRead, markAllNotificationsRead, pruneNotifications,

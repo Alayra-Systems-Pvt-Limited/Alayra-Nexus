@@ -37,7 +37,7 @@
 import { PrismaClient } from '@prisma/client';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { resolveMode, resolveDatabaseUrl } from './mode';
+import { resolveMode, resolveDatabaseUrl, type DbEngine } from './mode';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -71,10 +71,26 @@ function constructSqlite(): PrismaClient {
   return new mod.PrismaClient({ log, datasources: { db: { url } } }) as PrismaClient;
 }
 
-function construct(): PrismaClient {
-  return resolveMode().db === 'sqlite' ? constructSqlite() : new PrismaClient({ log });
+function construct(): { client: PrismaClient; engine: DbEngine } {
+  const engine = resolveMode().db;
+  return engine === 'sqlite'
+    ? { client: constructSqlite(), engine }
+    : { client: new PrismaClient({ log }), engine };
 }
 
-export const prisma = globalForPrisma.prisma || construct();
+const built = construct();
+
+/**
+ * Which engine the client above ACTUALLY is.
+ *
+ * Produced by the same call that built the client, rather than by asking resolveMode() a second
+ * time wherever a dialect is needed. The two would almost always agree, and the once they did not —
+ * an env var mutated after import, a test that swapped a client — SQL would be written for one
+ * engine and executed on the other, which is the failure mode with no error message. Deriving both
+ * from one decision makes disagreement unrepresentable.
+ */
+export const dbEngine: DbEngine = built.engine;
+
+export const prisma = globalForPrisma.prisma || built.client;
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;

@@ -23,7 +23,8 @@
 // rows to pull into memory and fold in JavaScript; each query below returns a fixed, tiny result
 // regardless of how many rows it scanned.
 
-import { prisma } from '../lib/prisma';
+import { Prisma } from '@prisma/client';
+import { dual, dualQuery, dayKey, num, sqliteDay, type DualSql } from '../lib/dialect';
 import { dateRange, fillSeries } from '../lib/series';
 
 export type AnalyticsPeriod = 'today' | '7d' | '30d' | '90d';
@@ -78,11 +79,175 @@ type TotalsRow = {
   cacheHits: number; avgLatencyMs: number | null; p95LatencyMs: number | null;
 };
 type DayRow = {
-  day: Date; requests: number; successes: number;
+  // Postgres `date_trunc` returns a timestamp; SQLite's `date(…, 'unixepoch')` returns a
+  // `YYYY-MM-DD` string. `dayKey()` reduces both to the same day, and is the only thing that
+  // should ever read this field.
+  day: Date | string; requests: number; successes: number;
   usd: number | null; savedUsd: number | null; cacheHits: number; avgLatencyMs: number | null;
 };
 
-const num = (v: number | null | undefined): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+// ── Queries ──────────────────────────────────────────────────────────────────────────────────
+// Declared as engine pairs and exported so the parity suite executes these exact texts against a
+// real PostgreSQL and a real SQLite and compares the answers.
+//
+// The Postgres half is what production has been running since 7.5, with ONE deliberate change: the
+// four `ORDER BY requests DESC` clauses gained a tiebreaker on the group key. The parity suite
+// found that ties were being broken differently by the two engines, which meant they had never been
+// broken deterministically at all — with LIMIT 8 on the model and provider breakdowns, tied rows
+// could change which entries appeared in the top eight from one query to the next. Postgres has
+// never promised an order it was not asked for; it simply happened to be stable in practice. The
+// tiebreaker is two words per query and makes the result reproducible on both engines.
+
+export const ANALYTICS_TOTALS = (since: Date, until: Date): DualSql => dual(
+  Prisma.sql`
+      SELECT COUNT(*)::int                                             AS requests,
+             COUNT(*) FILTER (WHERE "outcome" = 'success')::int        AS successes,
+             SUM("inputTokens")::float8                                AS "inputTokens",
+             SUM("outputTokens")::float8                               AS "outputTokens",
+             SUM("totalTokens")::float8                                AS "totalTokens",
+             SUM("estimatedUsd")::float8                               AS "estimatedUsd",
+             SUM("savedUsd")::float8                                   AS "savedUsd",
+             COUNT(*) FILTER (WHERE "cached")::int                     AS "cacheHits",
+             AVG("latencyMs") FILTER (WHERE "latencyMs" > 0)::float8   AS "avgLatencyMs",
+             (percentile_cont(0.95) WITHIN GROUP (ORDER BY "latencyMs")
+               FILTER (WHERE "latencyMs" > 0))::float8                 AS "p95LatencyMs"
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}`,
+
+  // SQLite has no percentile_cont, so p95 is a correlated nearest-rank pick instead: order the
+  // measured latencies and take the sample at the 95th position. This is a REAL difference, not an
+  // implementation detail — Postgres interpolates between the two samples straddling the boundary,
+  // this returns the nearer observed one. Over a realistic window they agree to a millisecond or
+  // two; over a handful of requests they can differ visibly. The alternative was pulling every
+  // latency into memory to interpolate in JS, which buys precision nobody can act on at a cost that
+  // grows with the table. The parity suite bounds the disagreement rather than ignoring it.
+  Prisma.sql`
+      SELECT CAST(COUNT(*) AS REAL)                                            AS requests,
+             CAST(COUNT(*) FILTER (WHERE "outcome" = 'success') AS REAL)       AS successes,
+             CAST(SUM("inputTokens") AS REAL)                                  AS "inputTokens",
+             CAST(SUM("outputTokens") AS REAL)                                 AS "outputTokens",
+             CAST(SUM("totalTokens") AS REAL)                                  AS "totalTokens",
+             CAST(SUM("estimatedUsd") AS REAL)                                 AS "estimatedUsd",
+             CAST(SUM("savedUsd") AS REAL)                                     AS "savedUsd",
+             CAST(COUNT(*) FILTER (WHERE "cached") AS REAL)                    AS "cacheHits",
+             CAST(AVG("latencyMs") FILTER (WHERE "latencyMs" > 0) AS REAL)     AS "avgLatencyMs",
+             (SELECT CAST(p."latencyMs" AS REAL) FROM "TokenUsage" p
+               WHERE p."latencyMs" > 0 AND p."createdAt" >= ${since} AND p."createdAt" <= ${until}
+               ORDER BY p."latencyMs"
+               LIMIT 1 OFFSET MAX(0, CAST((SELECT COUNT(*) FROM "TokenUsage" q
+                 WHERE q."latencyMs" > 0 AND q."createdAt" >= ${since} AND q."createdAt" <= ${until}
+               ) * 0.95 AS INTEGER) - 1))                                      AS "p95LatencyMs"
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}`,
+);
+
+export const ANALYTICS_BY_DAY = (since: Date, until: Date): DualSql => dual(
+  Prisma.sql`
+      SELECT date_trunc('day', "createdAt")                            AS day,
+             COUNT(*)::int                                             AS requests,
+             COUNT(*) FILTER (WHERE "outcome" = 'success')::int        AS successes,
+             SUM("estimatedUsd")::float8                               AS usd,
+             SUM("savedUsd")::float8                                   AS "savedUsd",
+             COUNT(*) FILTER (WHERE "cached")::int                     AS "cacheHits",
+             AVG("latencyMs") FILTER (WHERE "latencyMs" > 0)::float8   AS "avgLatencyMs"
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
+      GROUP BY day ORDER BY day ASC`,
+
+  Prisma.sql`
+      SELECT ${Prisma.raw(sqliteDay('"createdAt"'))}                        AS day,
+             CAST(COUNT(*) AS REAL)                                         AS requests,
+             CAST(COUNT(*) FILTER (WHERE "outcome" = 'success') AS REAL)    AS successes,
+             CAST(SUM("estimatedUsd") AS REAL)                              AS usd,
+             CAST(SUM("savedUsd") AS REAL)                                  AS "savedUsd",
+             CAST(COUNT(*) FILTER (WHERE "cached") AS REAL)                 AS "cacheHits",
+             CAST(AVG("latencyMs") FILTER (WHERE "latencyMs" > 0) AS REAL)  AS "avgLatencyMs"
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
+      GROUP BY day ORDER BY day ASC`,
+);
+
+// A failed request records no model, so the empty string is excluded rather than shown as a
+// nameless row.
+export const ANALYTICS_BY_MODEL = (since: Date, until: Date): DualSql => dual(
+  Prisma.sql`
+      SELECT "modelName"                AS model,
+             COUNT(*)::int              AS requests,
+             SUM("totalTokens")::float8 AS tokens,
+             SUM("estimatedUsd")::float8 AS usd
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until} AND "modelName" <> ''
+      GROUP BY "modelName" ORDER BY requests DESC, "modelName" ASC LIMIT ${TOP_N}`,
+
+  Prisma.sql`
+      SELECT "modelName"                      AS model,
+             CAST(COUNT(*) AS REAL)           AS requests,
+             CAST(SUM("totalTokens") AS REAL) AS tokens,
+             CAST(SUM("estimatedUsd") AS REAL) AS usd
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until} AND "modelName" <> ''
+      GROUP BY "modelName" ORDER BY requests DESC, "modelName" ASC LIMIT ${TOP_N}`,
+);
+
+export const ANALYTICS_BY_PROVIDER = (since: Date, until: Date): DualSql => dual(
+  Prisma.sql`
+      SELECT "provider"                                          AS provider,
+             COUNT(*)::int                                       AS requests,
+             COUNT(*) FILTER (WHERE "outcome" <> 'success')::int AS errors,
+             SUM("totalTokens")::float8                          AS tokens,
+             SUM("estimatedUsd")::float8                         AS usd
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until} AND "provider" <> ''
+      GROUP BY "provider" ORDER BY requests DESC, "provider" ASC LIMIT ${TOP_N}`,
+
+  Prisma.sql`
+      SELECT "provider"                                                 AS provider,
+             CAST(COUNT(*) AS REAL)                                     AS requests,
+             CAST(COUNT(*) FILTER (WHERE "outcome" <> 'success') AS REAL) AS errors,
+             CAST(SUM("totalTokens") AS REAL)                           AS tokens,
+             CAST(SUM("estimatedUsd") AS REAL)                          AS usd
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until} AND "provider" <> ''
+      GROUP BY "provider" ORDER BY requests DESC, "provider" ASC LIMIT ${TOP_N}`,
+);
+
+// Modality mix (token / image / character / transcription). Only successful requests bought
+// anything, so a failure would otherwise inflate the "token" bucket with rows that did nothing.
+export const ANALYTICS_BY_MODALITY = (since: Date, until: Date): DualSql => dual(
+  Prisma.sql`
+      SELECT "unit"                     AS unit,
+             COUNT(*)::int              AS requests,
+             SUM("quantity")::float8    AS quantity,
+             SUM("totalTokens")::float8 AS tokens,
+             SUM("estimatedUsd")::float8 AS usd
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until} AND "outcome" = 'success'
+      GROUP BY "unit" ORDER BY requests DESC, "unit" ASC`,
+
+  Prisma.sql`
+      SELECT "unit"                           AS unit,
+             CAST(COUNT(*) AS REAL)           AS requests,
+             CAST(SUM("quantity") AS REAL)    AS quantity,
+             CAST(SUM("totalTokens") AS REAL) AS tokens,
+             CAST(SUM("estimatedUsd") AS REAL) AS usd
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until} AND "outcome" = 'success'
+      GROUP BY "unit" ORDER BY requests DESC, "unit" ASC`,
+);
+
+export const ANALYTICS_BY_OUTCOME = (since: Date, until: Date): DualSql => dual(
+  Prisma.sql`
+      SELECT "outcome" AS outcome, COUNT(*)::int AS requests
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
+      GROUP BY "outcome" ORDER BY requests DESC, "outcome" ASC`,
+
+  Prisma.sql`
+      SELECT "outcome" AS outcome, CAST(COUNT(*) AS REAL) AS requests
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
+      GROUP BY "outcome" ORDER BY requests DESC, "outcome" ASC`,
+);
 
 /**
  * One aggregate for the Analytics page.
@@ -100,71 +265,15 @@ export async function getAnalyticsOverview(
   const until = customUntil ?? new Date();
 
   const [totalsRows, dayRows, modelRows, providerRows, modalityRows, outcomeRows] = await Promise.all([
-    prisma.$queryRaw<TotalsRow[]>`
-      SELECT COUNT(*)::int                                             AS requests,
-             COUNT(*) FILTER (WHERE "outcome" = 'success')::int        AS successes,
-             SUM("inputTokens")::float8                                AS "inputTokens",
-             SUM("outputTokens")::float8                               AS "outputTokens",
-             SUM("totalTokens")::float8                                AS "totalTokens",
-             SUM("estimatedUsd")::float8                               AS "estimatedUsd",
-             SUM("savedUsd")::float8                                   AS "savedUsd",
-             COUNT(*) FILTER (WHERE "cached")::int                     AS "cacheHits",
-             AVG("latencyMs") FILTER (WHERE "latencyMs" > 0)::float8   AS "avgLatencyMs",
-             (percentile_cont(0.95) WITHIN GROUP (ORDER BY "latencyMs")
-               FILTER (WHERE "latencyMs" > 0))::float8                 AS "p95LatencyMs"
-      FROM "TokenUsage"
-      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}`,
-
-    prisma.$queryRaw<DayRow[]>`
-      SELECT date_trunc('day', "createdAt")                            AS day,
-             COUNT(*)::int                                             AS requests,
-             COUNT(*) FILTER (WHERE "outcome" = 'success')::int        AS successes,
-             SUM("estimatedUsd")::float8                               AS usd,
-             SUM("savedUsd")::float8                                   AS "savedUsd",
-             COUNT(*) FILTER (WHERE "cached")::int                     AS "cacheHits",
-             AVG("latencyMs") FILTER (WHERE "latencyMs" > 0)::float8   AS "avgLatencyMs"
-      FROM "TokenUsage"
-      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
-      GROUP BY day ORDER BY day ASC`,
-
-    // A failed request records no model, so the empty string is excluded rather than shown as a
-    // nameless row.
-    prisma.$queryRaw<{ model: string; requests: number; tokens: number | null; usd: number | null }[]>`
-      SELECT "modelName"                AS model,
-             COUNT(*)::int              AS requests,
-             SUM("totalTokens")::float8 AS tokens,
-             SUM("estimatedUsd")::float8 AS usd
-      FROM "TokenUsage"
-      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until} AND "modelName" <> ''
-      GROUP BY "modelName" ORDER BY requests DESC LIMIT ${TOP_N}`,
-
-    prisma.$queryRaw<{ provider: string; requests: number; errors: number; tokens: number | null; usd: number | null }[]>`
-      SELECT "provider"                                          AS provider,
-             COUNT(*)::int                                       AS requests,
-             COUNT(*) FILTER (WHERE "outcome" <> 'success')::int AS errors,
-             SUM("totalTokens")::float8                          AS tokens,
-             SUM("estimatedUsd")::float8                         AS usd
-      FROM "TokenUsage"
-      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until} AND "provider" <> ''
-      GROUP BY "provider" ORDER BY requests DESC LIMIT ${TOP_N}`,
-
-    // Modality mix (token / image / character / transcription). Only successful requests bought
-    // anything, so a failure would otherwise inflate the "token" bucket with rows that did nothing.
-    prisma.$queryRaw<{ unit: string; requests: number; quantity: number | null; tokens: number | null; usd: number | null }[]>`
-      SELECT "unit"                     AS unit,
-             COUNT(*)::int              AS requests,
-             SUM("quantity")::float8    AS quantity,
-             SUM("totalTokens")::float8 AS tokens,
-             SUM("estimatedUsd")::float8 AS usd
-      FROM "TokenUsage"
-      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until} AND "outcome" = 'success'
-      GROUP BY "unit" ORDER BY requests DESC`,
-
-    prisma.$queryRaw<{ outcome: string; requests: number }[]>`
-      SELECT "outcome" AS outcome, COUNT(*)::int AS requests
-      FROM "TokenUsage"
-      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
-      GROUP BY "outcome" ORDER BY requests DESC`,
+    dualQuery<TotalsRow>(ANALYTICS_TOTALS(since, until)),
+    dualQuery<DayRow>(ANALYTICS_BY_DAY(since, until)),
+    dualQuery<{ model: string; requests: number; tokens: number | null; usd: number | null }>(
+      ANALYTICS_BY_MODEL(since, until)),
+    dualQuery<{ provider: string; requests: number; errors: number; tokens: number | null; usd: number | null }>(
+      ANALYTICS_BY_PROVIDER(since, until)),
+    dualQuery<{ unit: string; requests: number; quantity: number | null; tokens: number | null; usd: number | null }>(
+      ANALYTICS_BY_MODALITY(since, until)),
+    dualQuery<{ outcome: string; requests: number }>(ANALYTICS_BY_OUTCOME(since, until)),
   ]);
 
   const t         = totalsRows[0] ?? ({} as TotalsRow);
@@ -194,7 +303,7 @@ export async function getAnalyticsOverview(
     dayRows.map((r) => {
       const reqs = num(r.requests), ok = num(r.successes);
       return {
-        date:         new Date(r.day).toISOString().slice(0, 10),
+        date:         dayKey(r.day),
         requests:     reqs,
         successes:    ok,
         errors:       reqs - ok,

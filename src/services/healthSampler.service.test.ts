@@ -21,7 +21,7 @@ const { redisMock, queryRaw } = vi.hoisted(() => ({
   queryRaw: vi.fn(async () => [{ '?column?': 1 }]),
 }));
 vi.mock('../lib/redis',  () => ({ redis: redisMock }));
-vi.mock('../lib/prisma', () => ({ prisma: { $queryRaw: queryRaw } }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: { $queryRaw: queryRaw } }));
 
 import {
   takeSample, runReadyChecks, getHealthOverview, stopHealthSampler,

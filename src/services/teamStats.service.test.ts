@@ -21,7 +21,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { queryRaw, findUnique, getCurrentSpend } = vi.hoisted(() => ({
   queryRaw: vi.fn(), findUnique: vi.fn(), getCurrentSpend: vi.fn(),
 }));
-vi.mock('../lib/prisma', () => ({ prisma: { $queryRaw: queryRaw, team: { findUnique } } }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: { $queryRaw: queryRaw, team: { findUnique } } }));
 vi.mock('./budget.service', () => ({ getCurrentSpend }));
 
 import { getTeamStats } from './teamStats.service';

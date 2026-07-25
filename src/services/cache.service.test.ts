@@ -23,7 +23,7 @@ const { queryRaw, countKeys, deleteKeys, getSetting, setSetting } = vi.hoisted((
   getSetting: vi.fn(),
   setSetting: vi.fn(),
 }));
-vi.mock('../lib/prisma', () => ({ prisma: { $queryRaw: queryRaw } }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: { $queryRaw: queryRaw } }));
 vi.mock('../lib/redisScan', () => ({ countKeys, deleteKeys }));
 // cache.service transitively imports lib/responseCache, which imports the real ioredis client.
 // It is never called here, so an empty stub keeps module load from opening a connection.

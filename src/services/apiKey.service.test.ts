@@ -27,7 +27,7 @@ vi.mock('./settings.service', () => ({
   getSetting: vi.fn(async (k: string) => settings.get(k) ?? null),
   setSetting: vi.fn(async (k: string, v: string) => { settings.set(k, v); }),
 }));
-vi.mock('../lib/prisma', () => ({
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres',
   prisma: {
     appSettings: {
       deleteMany: vi.fn(async ({ where }: { where: { key: string } }) => {

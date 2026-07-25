@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // The six aggregate queries run in one Promise.all, so the mock answers them in order.
 const { queryRaw } = vi.hoisted(() => ({ queryRaw: vi.fn() }));
-vi.mock('../lib/prisma', () => ({ prisma: { $queryRaw: queryRaw } }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: { $queryRaw: queryRaw } }));
 
 import { getAnalyticsOverview } from './analytics.service';
 

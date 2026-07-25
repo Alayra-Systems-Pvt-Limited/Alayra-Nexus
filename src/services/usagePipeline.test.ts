@@ -18,7 +18,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 // The module imports the Prisma client at load; mock it so no DB client spins up.
 // Every test injects its own `insert`, so the default sink is never exercised here.
-vi.mock('../lib/prisma', () => ({ prisma: { tokenUsage: { createMany: vi.fn() } } }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: { tokenUsage: { createMany: vi.fn() } } }));
 
 import { createUsagePipeline, type UsageEvent } from './usagePipeline';
 

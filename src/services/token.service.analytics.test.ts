@@ -27,7 +27,7 @@ const { prismaMock } = vi.hoisted(() => ({
     $queryRaw:    vi.fn(),
   },
 }));
-vi.mock('../lib/prisma', () => ({ prisma: prismaMock }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 vi.mock('../lib/redis', () => ({ redis: {} }));
 vi.mock('./notifications.service', () => ({ notificationsArmed: vi.fn(async () => false), notify: vi.fn(async () => {}) }));
 vi.mock('./model.service',        () => ({ getModelRegistry: vi.fn(async () => []) }));

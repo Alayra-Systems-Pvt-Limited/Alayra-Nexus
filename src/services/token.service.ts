@@ -14,7 +14,9 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
+import { Prisma }          from '@prisma/client';
 import { prisma }          from '../lib/prisma';
+import { dual, dualQuery, dayKey, sqliteDay, type DualSql } from '../lib/dialect';
 import { randomUUID }      from 'crypto';
 import { getModelRegistry } from './model.service';
 import { emit }            from './usagePipeline';
@@ -250,16 +252,8 @@ export async function getUsageSummary(period: Period = '30d', customSince?: Date
     // Day buckets can't be expressed with the typed groupBy (createdAt is a full timestamp),
     // so date_trunc is pushed down in raw SQL; sums are cast to float8 so the driver yields
     // plain numbers rather than BigInt/Decimal.
-    prisma.$queryRaw<{ day: Date; tokens: number; inputTokens: number; outputTokens: number; requests: number; usd: number }[]>`
-      SELECT date_trunc('day', "createdAt") AS day,
-             SUM("totalTokens")::float8    AS tokens,
-             SUM("inputTokens")::float8    AS "inputTokens",
-             SUM("outputTokens")::float8   AS "outputTokens",
-             COUNT(*)::int                 AS requests,
-             SUM("estimatedUsd")::float8   AS usd
-      FROM "TokenUsage"
-      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
-      GROUP BY day ORDER BY day ASC`,
+    dualQuery<{ day: Date | string; tokens: number; inputTokens: number; outputTokens: number; requests: number; usd: number }>(
+      USAGE_BY_DAY(since, until)),
   ]);
 
   const totals = {
@@ -291,7 +285,7 @@ export async function getUsageSummary(period: Period = '30d', customSince?: Date
   }
 
   const byDay = byDayRows.map((r) => ({
-    date:         new Date(r.day).toISOString().slice(0, 10),
+    date:         dayKey(r.day),
     tokens:       r.tokens       ?? 0,
     inputTokens:  r.inputTokens  ?? 0,
     outputTokens: r.outputTokens ?? 0,
@@ -333,12 +327,40 @@ export async function getUsageByTeamKey(period: Period = '30d', customSince?: Da
     .sort((a, b) => b.totalTokens - a.totalTokens);
 }
 
-export async function getTimeSeriesByTeam(period: Period = '30d', customSince?: Date, customUntil?: Date) {
-  const { since, until } = resolveRange(period, customSince, customUntil);
-  // Day × team-key buckets, aggregated in Postgres. The JOIN both attaches the display name
-  // and enforces "team traffic only" (a null team-key id cannot match). `teamId` preserves the
-  // existing shape, which labels the team-*key* id as teamId.
-  const rows = await prisma.$queryRaw<{ day: Date; teamKeyId: string; teamName: string; requests: number; tokens: number }[]>`
+// ── Day-bucketed queries ─────────────────────────────────────────────────────────────────────
+// Day buckets cannot be expressed through the typed groupBy (createdAt is a full timestamp), so the
+// truncation is pushed down as raw SQL — which is where the two engines diverge. See lib/dialect.ts;
+// the parity suite runs these exact texts against both.
+
+export const USAGE_BY_DAY = (since: Date, until: Date): DualSql => dual(
+  Prisma.sql`
+      SELECT date_trunc('day', "createdAt") AS day,
+             SUM("totalTokens")::float8    AS tokens,
+             SUM("inputTokens")::float8    AS "inputTokens",
+             SUM("outputTokens")::float8   AS "outputTokens",
+             COUNT(*)::int                 AS requests,
+             SUM("estimatedUsd")::float8   AS usd
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
+      GROUP BY day ORDER BY day ASC`,
+
+  Prisma.sql`
+      SELECT ${Prisma.raw(sqliteDay('"createdAt"'))} AS day,
+             CAST(SUM("totalTokens") AS REAL)        AS tokens,
+             CAST(SUM("inputTokens") AS REAL)        AS "inputTokens",
+             CAST(SUM("outputTokens") AS REAL)       AS "outputTokens",
+             CAST(COUNT(*) AS REAL)                  AS requests,
+             CAST(SUM("estimatedUsd") AS REAL)       AS usd
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
+      GROUP BY day ORDER BY day ASC`,
+);
+
+// The JOIN both attaches the display name and enforces "team traffic only" — a null team-key id
+// cannot match. Ordering carries a tiebreaker on the key id so two teams with traffic on the same
+// day come back in a stable order on both engines rather than whichever the planner preferred.
+export const USAGE_BY_TEAM = (since: Date, until: Date): DualSql => dual(
+  Prisma.sql`
     SELECT date_trunc('day', u."createdAt") AS day,
            u."nexusTeamKeyId"               AS "teamKeyId",
            k."name"                         AS "teamName",
@@ -348,10 +370,51 @@ export async function getTimeSeriesByTeam(period: Period = '30d', customSince?: 
     JOIN "NexusTeamKey" k ON k.id = u."nexusTeamKeyId"
     WHERE u."createdAt" >= ${since} AND u."createdAt" <= ${until}
     GROUP BY day, u."nexusTeamKeyId", k."name"
-    ORDER BY day ASC`;
+    ORDER BY day ASC, u."nexusTeamKeyId" ASC`,
+
+  Prisma.sql`
+    SELECT ${Prisma.raw(sqliteDay('u."createdAt"'))} AS day,
+           u."nexusTeamKeyId"                        AS "teamKeyId",
+           k."name"                                  AS "teamName",
+           CAST(COUNT(*) AS REAL)                    AS requests,
+           CAST(SUM(u."totalTokens") AS REAL)        AS tokens
+    FROM "TokenUsage" u
+    JOIN "NexusTeamKey" k ON k.id = u."nexusTeamKeyId"
+    WHERE u."createdAt" >= ${since} AND u."createdAt" <= ${until}
+    GROUP BY day, u."nexusTeamKeyId", k."name"
+    ORDER BY day ASC, u."nexusTeamKeyId" ASC`,
+);
+
+export const USAGE_BY_MODEL = (since: Date, until: Date): DualSql => dual(
+  Prisma.sql`
+    SELECT date_trunc('day', "createdAt") AS day,
+           "modelName"                    AS model,
+           SUM("totalTokens")::float8     AS tokens
+    FROM "TokenUsage"
+    WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
+    GROUP BY day, "modelName"
+    ORDER BY day ASC, "modelName" ASC`,
+
+  Prisma.sql`
+    SELECT ${Prisma.raw(sqliteDay('"createdAt"'))} AS day,
+           "modelName"                             AS model,
+           CAST(SUM("totalTokens") AS REAL)        AS tokens
+    FROM "TokenUsage"
+    WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
+    GROUP BY day, "modelName"
+    ORDER BY day ASC, "modelName" ASC`,
+);
+
+export async function getTimeSeriesByTeam(period: Period = '30d', customSince?: Date, customUntil?: Date) {
+  const { since, until } = resolveRange(period, customSince, customUntil);
+  // Day × team-key buckets, aggregated in Postgres. The JOIN both attaches the display name
+  // and enforces "team traffic only" (a null team-key id cannot match). `teamId` preserves the
+  // existing shape, which labels the team-*key* id as teamId.
+  const rows = await dualQuery<{ day: Date | string; teamKeyId: string; teamName: string; requests: number; tokens: number }>(
+    USAGE_BY_TEAM(since, until));
 
   return rows.map((r) => ({
-    date:      new Date(r.day).toISOString().slice(0, 10),
+    date:      dayKey(r.day),
     teamKeyId: r.teamKeyId,
     teamName:  r.teamName,
     // Legacy alias kept for backward compatibility; holds a team-key id, not a team id.
@@ -363,17 +426,11 @@ export async function getTimeSeriesByTeam(period: Period = '30d', customSince?: 
 
 export async function getTimeSeriesByModel(period: Period = '30d', customSince?: Date, customUntil?: Date) {
   const { since, until } = resolveRange(period, customSince, customUntil);
-  const rows = await prisma.$queryRaw<{ day: Date; model: string; tokens: number }[]>`
-    SELECT date_trunc('day', "createdAt") AS day,
-           "modelName"                    AS model,
-           SUM("totalTokens")::float8     AS tokens
-    FROM "TokenUsage"
-    WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
-    GROUP BY day, "modelName"
-    ORDER BY day ASC`;
+  const rows = await dualQuery<{ day: Date | string; model: string; tokens: number }>(
+    USAGE_BY_MODEL(since, until));
 
   return rows.map((r) => ({
-    date:   new Date(r.day).toISOString().slice(0, 10),
+    date:   dayKey(r.day),
     model:  r.model,
     tokens: r.tokens ?? 0,
   }));

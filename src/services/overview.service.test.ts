@@ -25,7 +25,7 @@ const { prismaMock } = vi.hoisted(() => ({
     team:       { count: vi.fn() },
   },
 }));
-vi.mock('../lib/prisma', () => ({ prisma: prismaMock }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 
 const { getUsageSummary, getUsageByTeamKey, queryAuditLogs, getModelRegistry } = vi.hoisted(() => ({
   getUsageSummary:  vi.fn(),

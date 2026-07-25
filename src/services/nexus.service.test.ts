@@ -70,7 +70,7 @@ const { state, prismaMock } = vi.hoisted(() => {
   return { state, prismaMock };
 });
 
-vi.mock('../lib/prisma',     () => ({ prisma: prismaMock }));
+vi.mock('../lib/prisma',     () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 vi.mock('../lib/encryption', () => ({ decrypt: (s: string) => `dec-${s}`, maskKey: (s: string) => s }));
 vi.mock('../lib/admission',  () => ({ admitKey: vi.fn(async () => true), admitUser: vi.fn(async () => true) }));
 vi.mock('../lib/breaker',    () => ({ acquire: vi.fn(async () => 'closed'), RATE_LIMIT_COOLDOWN_SECONDS: 60 }));

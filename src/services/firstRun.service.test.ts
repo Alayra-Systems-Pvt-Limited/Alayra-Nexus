@@ -27,7 +27,7 @@ const { prismaMock, usersMock } = vi.hoisted(() => ({
   usersMock: { createUser: vi.fn(), isUnclaimed: vi.fn() },
 }));
 
-vi.mock('../lib/prisma', () => ({ prisma: prismaMock }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 // The factory reset pulls in Redis scanning and both drain pipelines; none of the claim tests
 // exercise them, but importing the real modules would demand a live REDIS_URL at test time.
 vi.mock('../lib/redisScan', () => ({ deleteKeys: vi.fn(async () => 0) }));

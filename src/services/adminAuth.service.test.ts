@@ -31,7 +31,7 @@ const { store, prismaMock } = vi.hoisted(() => {
   return { store, prismaMock };
 });
 
-vi.mock('../lib/prisma', () => ({ prisma: prismaMock }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 vi.mock('../lib/redis', () => ({
   redis: {
     get:    vi.fn(async (k: string) => store.kv.get(k) ?? null),

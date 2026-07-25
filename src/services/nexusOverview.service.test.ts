@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { prismaMock } = vi.hoisted(() => ({
   prismaMock: { nexusProvider: { findMany: vi.fn() } },
 }));
-vi.mock('../lib/prisma', () => ({ prisma: prismaMock }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 
 const { getRoutingConfigForUI } = vi.hoisted(() => ({ getRoutingConfigForUI: vi.fn() }));
 vi.mock('./routing.service', () => ({ getRoutingConfigForUI }));

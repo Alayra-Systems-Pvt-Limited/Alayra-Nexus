@@ -26,7 +26,7 @@ const { prismaMock, settingsMock } = vi.hoisted(() => ({
   settingsMock: { getSetting: vi.fn(), setSetting: vi.fn() },
 }));
 
-vi.mock('../lib/prisma', () => ({ prisma: prismaMock }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 vi.mock('./settings.service', () => ({ getSetting: settingsMock.getSetting, setSetting: settingsMock.setSetting }));
 // runRetention prunes notifications, whose module reaches Redis for the record path. This suite
 // never records, so a bare stub is enough to keep the real client (which demands REDIS_URL at

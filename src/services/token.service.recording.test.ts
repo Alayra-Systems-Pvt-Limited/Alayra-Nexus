@@ -26,7 +26,7 @@ const REGISTRY = [
   { id: 'openai-tts',    modelString: 'tts-1',  speechPricePer1MChars: 15 },
 ];
 
-vi.mock('../lib/prisma', () => ({ prisma: { team: { findUnique: vi.fn(async () => null) } } }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: { team: { findUnique: vi.fn(async () => null) } } }));
 vi.mock('../lib/redis', () => ({ redis: {} }));
 vi.mock('./notifications.service', () => ({ notificationsArmed: vi.fn(async () => false), notify: vi.fn(async () => {}) }));
 vi.mock('./model.service',        () => ({ getModelRegistry: vi.fn(async () => REGISTRY) }));

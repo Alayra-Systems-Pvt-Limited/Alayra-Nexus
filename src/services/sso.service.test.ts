@@ -32,7 +32,7 @@ const { prismaMock, redisMock, joseMock, ssrfMock, sessionMock, usersMock } = vi
   usersMock: { provisionSsoUser: vi.fn() },
 }));
 
-vi.mock('../lib/prisma', () => ({ prisma: prismaMock }));
+vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 vi.mock('../lib/redis',  () => ({ redis: redisMock }));
 vi.mock('jose', () => ({ jwtVerify: joseMock.jwtVerify, createRemoteJWKSet: joseMock.createRemoteJWKSet }));
 // Reversible stand-ins so a test can assert the secret was wrapped and unwrapped.

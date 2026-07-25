@@ -15,7 +15,8 @@
  */
 
 import { getSetting, setSetting } from './settings.service';
-import { prisma } from '../lib/prisma';
+import { Prisma } from '@prisma/client';
+import { dual, dualQuery, type DualSql } from '../lib/dialect';
 import { countKeys, deleteKeys } from '../lib/redisScan';
 import { RESP_CACHE_PREFIX } from '../lib/responseCache';
 
@@ -82,17 +83,29 @@ export interface CacheStats {
   };
 }
 
-export async function getCacheStats(): Promise<CacheStats> {
-  const since = new Date(Date.now() - STATS_WINDOW_DAYS * 86_400_000);
-  const [config, entries, rows] = await Promise.all([
-    getCacheConfig(),
-    countKeys(RESP_CACHE_PATTERN),
-    prisma.$queryRaw<{ hits: number; successes: number; saved: number | null }[]>`
+/** Cache accounting over the stats window, in both dialects. See lib/dialect.ts. */
+export const CACHE_STATS = (since: Date): DualSql => dual(
+  Prisma.sql`
       SELECT COUNT(*) FILTER (WHERE "cached")::int              AS hits,
              COUNT(*) FILTER (WHERE "outcome" = 'success')::int AS successes,
              SUM("savedUsd")::float8                            AS saved
       FROM "TokenUsage"
       WHERE "createdAt" >= ${since}`,
+
+  Prisma.sql`
+      SELECT CAST(COUNT(*) FILTER (WHERE "cached") AS REAL)              AS hits,
+             CAST(COUNT(*) FILTER (WHERE "outcome" = 'success') AS REAL) AS successes,
+             CAST(SUM("savedUsd") AS REAL)                               AS saved
+      FROM "TokenUsage"
+      WHERE "createdAt" >= ${since}`,
+);
+
+export async function getCacheStats(): Promise<CacheStats> {
+  const since = new Date(Date.now() - STATS_WINDOW_DAYS * 86_400_000);
+  const [config, entries, rows] = await Promise.all([
+    getCacheConfig(),
+    countKeys(RESP_CACHE_PATTERN),
+    dualQuery<{ hits: number; successes: number; saved: number | null }>(CACHE_STATS(since)),
   ]);
 
   const r         = rows[0] ?? { hits: 0, successes: 0, saved: 0 };
