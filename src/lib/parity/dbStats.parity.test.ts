@@ -16,12 +16,12 @@
 // never "the query failed and nobody noticed".
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { startEngines, seedBoth, PARITY_DATABASE_URL, type Engines } from './harness';
+import { startEngines, seedBoth, PARITY_DATABASE_URL, PARITY_TIMEOUT, type Engines } from './harness';
 import { readDbStats } from '../dbStats';
 
 const enabled = !!PARITY_DATABASE_URL;
 
-describe.skipIf(!enabled)('database stats are real on both engines', () => {
+describe.skipIf(!enabled)('database stats are real on both engines', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
 
   beforeAll(async () => { e = startEngines('stats'); await seedBoth(e); }, 120_000);

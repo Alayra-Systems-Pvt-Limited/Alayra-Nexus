@@ -46,6 +46,18 @@ describe('route rate-limit tiers', () => {
   // was this file's long-standing rare flake under full-suite load. Fixing the key to one value
   // removes the only nondeterminism while proving exactly the same thing: the 4th in-window request
   // to this route is throttled.
+  //
+  // The explicit timeout is the second half of that story, and a different failure from the one
+  // above. Pinning the key removed a wrong ANSWER; this removes a spurious DEADLINE. Under a full
+  // parallel suite this test was seen to exceed Vitest's 5s default, and it cannot be slow on its
+  // own terms: @fastify/rate-limit's LocalStore.incr is an LRU read, an increment and a synchronous
+  // callback — no timers, no I/O, nothing to await — and the whole test measures ~150ms run alone.
+  // A 5s ceiling was therefore not measuring this code, it was measuring how many other workers
+  // happened to be competing for the machine at that instant.
+  //
+  // NOT a retry and NOT a raised bar on what is asserted: the assertions are four status codes, and
+  // none of them is about elapsed time. 15s still catches the thing a timeout is for — a request
+  // that never comes back — while sitting far outside the range scheduling noise can reach.
   it('returns 429 once a route’s per-route cap is exceeded', async () => {
     const app = Fastify();
     await app.register(rateLimit, { global: false, keyGenerator: () => 'probe-bucket' });
@@ -58,5 +70,5 @@ describe('route rate-limit tiers', () => {
     expect((await hit()).statusCode).toBe(429); // the fourth within the window is throttled
 
     await app.close();
-  });
+  }, 15_000);
 });

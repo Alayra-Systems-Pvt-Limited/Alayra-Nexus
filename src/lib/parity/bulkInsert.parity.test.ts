@@ -18,7 +18,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
-import { startEngines, PARITY_DATABASE_URL, type Engines } from './harness';
+import { startEngines, PARITY_DATABASE_URL, PARITY_TIMEOUT, type Engines } from './harness';
 import { isUniqueViolation, type BulkDelegate } from '../bulkInsert';
 
 const enabled = !!PARITY_DATABASE_URL;
@@ -50,7 +50,7 @@ async function insertAs<Row>(engine: 'postgres' | 'sqlite', delegate: BulkDelega
   return written;
 }
 
-describe.skipIf(!enabled)('batched inserts are idempotent on both engines', () => {
+describe.skipIf(!enabled)('batched inserts are idempotent on both engines', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
   beforeAll(() => { e = startEngines('bulk'); }, 120_000);
   afterAll(async () => { await e?.dispose(); });

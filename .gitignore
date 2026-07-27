@@ -76,3 +76,4 @@ e2e/.state/
 # Standalone mode (Phase S2): the local SQLite database and anything else the gateway
 # writes beside it. Never a thing to commit — it is a running deployment, not source.
 .nexus/
+.flake-hunt/

@@ -30,6 +30,26 @@ const ROOT = resolve(__dirname, '..', '..', '..');
 /** A real Postgres to compare against. Absent locally is tolerated; absent in CI is a failure. */
 export const PARITY_DATABASE_URL = process.env.PARITY_DATABASE_URL?.trim() || '';
 
+/**
+ * How long a test in these files may take.
+ *
+ * Vitest allows 5s by default, which is a sensible budget for a unit test and the wrong one for
+ * everything here: every test in this directory does real work against a real PostgreSQL and a real
+ * SQLite file, while the rest of the suite runs in parallel around it and competes for the same
+ * machine. A 16-table wipe that takes 200ms on an idle box was measured at over 5s during a full
+ * suite run, and failed — for no reason connected to what it was checking.
+ *
+ * THIS IS NOT A RETRY, AND IT IS NOT A FLAKE BEING PAPERED OVER. The distinction is whether the
+ * duration is part of what the test asserts. Nothing in these files asserts a deadline; they assert
+ * that two engines agree, and a test that fails on elapsed time is reporting the state of the
+ * machine, not of the code. What a timeout is genuinely for — catching something HUNG, a lock never
+ * released, a query that never returns — is preserved: 30s still fails, and fails fast enough to be
+ * useful, while being far outside the range contention can produce.
+ *
+ * If a parity test ever exceeds this, treat it as a real defect and not as a number to raise again.
+ */
+export const PARITY_TIMEOUT = 30_000;
+
 export interface Engines {
   pg: PrismaClient;
   sqlite: PrismaClient;

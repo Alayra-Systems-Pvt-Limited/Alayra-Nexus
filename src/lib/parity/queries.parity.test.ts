@@ -22,6 +22,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   startEngines, seedBoth, runBoth, normalise, PARITY_DATABASE_URL, T0, UNTIL, TEAM_A,
   type Engines,
+  PARITY_TIMEOUT,
 } from './harness';
 import {
   ANALYTICS_TOTALS, ANALYTICS_BY_DAY, ANALYTICS_BY_MODEL,
@@ -44,7 +45,7 @@ describe('database parity harness', () => {
   });
 });
 
-describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the analytics aggregates agree', () => {
+describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the analytics aggregates agree', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
 
   beforeAll(async () => {
@@ -194,7 +195,7 @@ describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the analytics aggregates agree
   });
 });
 
-describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the cache and usage aggregates agree', () => {
+describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the cache and usage aggregates agree', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
   beforeAll(async () => { e = startEngines('usage'); await seedBoth(e); }, 120_000);
   afterAll(async () => { await e?.dispose(); });
@@ -233,7 +234,7 @@ describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the cache and usage aggregates
   });
 });
 
-describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the per-team aggregates agree', () => {
+describe.skipIf(!enabled)('PostgreSQL ↔ SQLite: the per-team aggregates agree', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
   beforeAll(async () => { e = startEngines('team'); await seedBoth(e); }, 120_000);
   afterAll(async () => { await e?.dispose(); });

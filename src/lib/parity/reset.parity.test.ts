@@ -16,12 +16,12 @@
 // operator believes their keys and usage history are gone, and they are not.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { startEngines, seedBoth, PARITY_DATABASE_URL, type Engines } from './harness';
+import { startEngines, seedBoth, PARITY_DATABASE_URL, PARITY_TIMEOUT, type Engines } from './harness';
 import { emptyEveryTable } from '../resetTables';
 
 const enabled = !!PARITY_DATABASE_URL;
 
-describe.skipIf(!enabled)('factory reset empties everything, on both engines', () => {
+describe.skipIf(!enabled)('factory reset empties everything, on both engines', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
 
   beforeAll(async () => { e = startEngines('reset'); await seedBoth(e); }, 120_000);

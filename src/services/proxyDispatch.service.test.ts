@@ -62,6 +62,20 @@ let lastFetch: { url: string; init: Record<string, unknown> } | null = null;
 beforeEach(() => {
   vi.clearAllMocks();
   h.route = { ...okRoute };
+  // And the fetch stub, which was the one piece of shared state this hook did NOT reset.
+  //
+  // Ten tests below assign h.fetchImpl — 401s, 502s, 429s, image payloads — and none of them put it
+  // back. Every later test therefore inherited whatever the previous one left, so a test that sets
+  // no fetchImpl was not testing the default response at all; it was testing its predecessor's.
+  // "forwards to the provider path" is exactly such a test, and it passed only because the test
+  // declared above it happens to leave a 200 behind. Reorder the file, or insert a case between
+  // them, and it starts asserting 200 against a leftover 401.
+  //
+  // Found by running the suite with the test order shuffled (npm run test:hunt -- --shuffle-tests),
+  // where it failed as 401 and as 504 on different seeds — the giveaway, since a genuinely slow or
+  // racy test does not fail with a DIFFERENT wrong answer each time. It fails in ~20ms, so nothing
+  // about it was ever a timing problem.
+  h.fetchImpl = null;
   lastFetch = null;
   globalThis.fetch = vi.fn(async (url: string, init: Record<string, unknown>) => {
     lastFetch = { url, init };
