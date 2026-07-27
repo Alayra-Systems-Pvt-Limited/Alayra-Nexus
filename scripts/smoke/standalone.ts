@@ -192,8 +192,68 @@ async function main(): Promise<void> {
     const entries = audit.body?.entries ?? audit.body ?? [];
     check('audit entries were flushed to SQLite', Array.isArray(entries) && entries.length > 0, `${entries.length} entries`);
 
+    // ── Backup and restore (B1.3), over HTTP, against the real gateway ──────────────────────────
+    //
+    // The parity suite proves the engine by driving two databases directly. This proves the part
+    // only a running gateway can: the routes, the guards, the multipart upload and the streaming
+    // download, on a gateway that built its own database minutes ago.
+    const PASSPHRASE = 'a-long-enough-backup-passphrase';
+
+    const exported = await fetch(`${BASE}/admin/backup/export`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ passphrase: PASSPHRASE }),
+    });
+    check('export returns a file', exported.status === 200, `status ${exported.status}`);
+    check('it is sent as a download', /attachment; filename=".*\.nxb"/.test(exported.headers.get('content-disposition') ?? ''),
+      exported.headers.get('content-disposition') ?? 'no header');
+    check('it is never cached', (exported.headers.get('cache-control') ?? '').includes('no-store'));
+
+    const file = Buffer.from(await exported.arrayBuffer());
+    check('the file has content', file.length > 200, `${file.length} bytes`);
+
+    // The header is plaintext by necessity; everything after it must not be.
+    const headerLine = file.subarray(0, file.indexOf(0x0a)).toString('utf8');
+    check('it opens with a readable header', headerLine.includes('alayra-nexus-backup'), headerLine.slice(0, 60));
+    check('the body is encrypted', !file.subarray(file.indexOf(0x0a)).toString('binary').includes('Smoke Team'));
+
+    /** Upload the file back, as a browser would. */
+    const restore = async (fields: Record<string, string>) => {
+      const form = new FormData();
+      form.set('file', new Blob([new Uint8Array(file)]), 'backup.nxb');
+      for (const [k, v] of Object.entries(fields)) form.set(k, v);
+      const r = await fetch(`${BASE}/admin/backup/restore`, {
+        method: 'POST', headers: { authorization: `Bearer ${token}` }, body: form,
+      });
+      return { status: r.status, body: await r.json().catch(() => null) as any };  // eslint-disable-line @typescript-eslint/no-explicit-any
+    };
+
+    const dry = await restore({ passphrase: PASSPHRASE, mode: 'merge', dryRun: 'true' });
+    check('a dry run reports the plan', dry.status === 200, `status ${dry.status} ${JSON.stringify(dry.body).slice(0, 140)}`);
+    check('the plan counts the rows in the file', (dry.body?.totalRowsInFile ?? 0) > 0, `${dry.body?.totalRowsInFile} rows`);
+    check('a dry run writes nothing', dry.body?.totalWritten === 0);
+
+    const merged = await restore({ passphrase: PASSPHRASE, mode: 'merge', dryRun: 'false' });
+    check('a merge restore succeeds', merged.status === 200, `status ${merged.status}`);
+    // Every row is already present, so a merge of a gateway's own backup is a no-op — which is the
+    // cleanest possible demonstration that merge does not duplicate or overwrite.
+    check('restoring its own backup changes nothing', merged.body?.totalWritten === 0, `wrote ${merged.body?.totalWritten}`);
+
+    const wrong = await restore({ passphrase: 'the-wrong-passphrase-here', mode: 'merge', dryRun: 'true' });
+    check('a wrong passphrase is refused', wrong.status === 400, `status ${wrong.status}`);
+    check('and it says nothing was changed', /nothing was changed/i.test(wrong.body?.hint ?? ''), wrong.body?.hint ?? '');
+
+    const unconfirmed = await restore({ passphrase: PASSPHRASE, mode: 'replace', dryRun: 'false' });
+    check('a replace without the typed phrase is refused', unconfirmed.status === 400, `status ${unconfirmed.status}`);
+
+    const unauthorised = await restore({ passphrase: PASSPHRASE, mode: 'replace', dryRun: 'false', confirm: 'REPLACE ALL DATA' });
+    check('a replace without the master password is refused', unauthorised.status === 401, `status ${unauthorised.status}`);
+
     const out = await req('POST', '/admin/logout');
     check('sign out succeeds', out.status === 200, `status ${out.status}`);
+    check('export needs a session', (await fetch(`${BASE}/admin/backup/export`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ passphrase: PASSPHRASE }),
+    })).status === 401);
     const after = await req('GET', '/admin/users');
     check('the session is genuinely dead', after.status === 401, `status ${after.status}`);
   } catch (e) {
