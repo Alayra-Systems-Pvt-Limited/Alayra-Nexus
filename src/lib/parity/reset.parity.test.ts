@@ -21,7 +21,16 @@ import { emptyEveryTable } from '../resetTables';
 
 const enabled = !!PARITY_DATABASE_URL;
 
-describe.skipIf(!enabled)('factory reset empties everything, on both engines', { timeout: PARITY_TIMEOUT }, () => {
+// `shuffle: false` is load-bearing, not decoration. These tests are one narrative told in order —
+// seed, prove the seed landed, wipe, prove the wipe worked, prove the schema survived — and test 2
+// destroys the state test 1 checks. Vitest runs a file in declaration order, so this is normally
+// implicit; declaring it means the requirement lives in the code rather than in whoever remembers
+// it, and a run with shuffling turned on (npm run test:hunt -- --shuffle-tests) keeps this suite
+// intact instead of reporting a failure that cannot happen in CI.
+//
+// Seeding per test would remove the coupling outright, at the cost of a full PostgreSQL and SQLite
+// seed for each — not worth it for a file whose reason to exist is that a wipe is irreversible.
+describe.skipIf(!enabled)('factory reset empties everything, on both engines', { timeout: PARITY_TIMEOUT, shuffle: false }, () => {
   let e: Engines;
 
   beforeAll(async () => { e = startEngines('reset'); await seedBoth(e); }, 120_000);
