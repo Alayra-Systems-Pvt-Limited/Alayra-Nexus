@@ -17,6 +17,7 @@
 import { prisma } from '../lib/prisma';
 import { redis, suppressRedisErrorLog } from '../lib/redis';
 import { formatStartupFailure } from '../lib/startup';
+import { resolveDatabaseUrl } from '../lib/mode';
 
 /** Thrown when a hard dependency is unreachable. Carries a printable message only. */
 export class StartupCheckError extends Error {}
@@ -45,6 +46,9 @@ export async function assertDependencies(): Promise<void> {
   try {
     await prisma.$queryRaw`SELECT 1`;
   } catch (err) {
-    throw new StartupCheckError(formatStartupFailure('database', process.env.DATABASE_URL, err));
+    // The RESOLVED url, not the raw variable: in standalone mode DATABASE_URL is unset by
+    // design, and reporting a failure against an empty string tells the operator nothing about
+    // which file could not be opened.
+    throw new StartupCheckError(formatStartupFailure('database', resolveDatabaseUrl(), err));
   }
 }

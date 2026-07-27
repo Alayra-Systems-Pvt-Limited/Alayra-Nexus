@@ -17,6 +17,7 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke:standalone": "tsx scripts/smoke/standalone.ts",
     "seed": "tsx scripts/seed/seed.ts",
     "demo:fixtures": "tsx scripts/demo/buildFixtures.ts"
   },

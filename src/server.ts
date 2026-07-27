@@ -33,7 +33,6 @@ import proxyRoutes        from './routes/proxy';
 import adminRoutes        from './routes/admin';
 import brandingRoutes     from './routes/branding.routes';
 import { startHealthSampler, runReadyChecks } from './services/healthSampler.service';
-import { prisma }         from './lib/prisma';
 import { redis, usingMemoryKv } from './lib/redis';
 import { deriveRateLimitKey } from './lib/rateLimitKey';
 import { ensureApiKey }    from './services/apiKey.service';
@@ -43,6 +42,9 @@ import { drainAudit, runRetention } from './services/audit.service';
 import { metricsText, metricsContentType } from './lib/metrics';
 import { verifyMetricsToken } from './middleware/auth.middleware';
 import { assertDependencies, StartupCheckError } from './services/preflight.service';
+import { prisma, dbEngine } from './lib/prisma';
+import { ensureSqliteSchema } from './lib/sqliteBootstrap';
+import { resolveDatabaseUrl } from './lib/mode';
 import { isSpaNavigation } from './lib/spaFallback';
 import { normalizePublicUrl } from './lib/baseUrl';
 
@@ -59,8 +61,18 @@ const ABUSE_RATE_LIMIT_MAX    = parseInt(process.env.ABUSE_RATE_LIMIT_MAX ?? '12
 const ABUSE_RATE_LIMIT_WINDOW = process.env.ABUSE_RATE_LIMIT_WINDOW ?? '1 minute';
 
 async function bootstrap() {
-  // Fail with an instruction, not a retry storm, when Postgres or Redis is missing.
+  // Fail with an instruction, not a retry storm, when the database or Redis is missing.
   await assertDependencies();
+
+  // Standalone only (S2.4): build the database if this is a first run. It has to happen here rather
+  // than in a deploy step because `npx @alayra/nexus` has no deploy step — and it has to happen
+  // AFTER assertDependencies so an unreachable database is still reported as such, not as a failure
+  // to create a schema. `SELECT 1` passes against an empty SQLite file, so nothing before this point
+  // can tell the difference between a working gateway and one with no tables.
+  if (dbEngine === 'sqlite') {
+    const { created, tables } = await ensureSqliteSchema(prisma);
+    if (created) console.log(`  Database created → ${tables} tables at ${resolveDatabaseUrl().replace(/^file:/, '')}`);
+  }
 
   // PUBLIC_URL (P7.14): the operator's pin for every URL the gateway prints — the Connect page,
   // quick-start snippets, the SSO redirect_uri. Validated at boot and fatal when malformed: a bad

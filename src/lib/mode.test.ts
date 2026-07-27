@@ -153,20 +153,24 @@ describe('resolveMode — malformed input', () => {
 });
 
 describe('resolveMode — what is actually buildable today', () => {
-  // S1 shipped the in-memory KV, so either counter store works. SQLite is S2 and does not exist
-  // yet, so a resolution naming it must still be refused at boot rather than half-run.
+  // S1 shipped the in-memory KV and S2 shipped SQLite, so every pairing this function can resolve
+  // is now one the gateway can really run. Until S2.4 the last two of these were refused at boot.
   it.each([
-    ['Postgres + Redis',  { DATABASE_URL: PG, REDIS_URL: REDIS }],
-    ['Postgres + memory', { DATABASE_URL: PG }],
+    ['Postgres + Redis',            { DATABASE_URL: PG, REDIS_URL: REDIS }],
+    ['Postgres + memory',           { DATABASE_URL: PG }],
+    ['SQLite + Redis',              { DATABASE_URL: FILE, REDIS_URL: REDIS }],
+    ['standalone (SQLite + memory)', {}],
   ])('marks %s as implemented', (_label, e) => {
     expect(resolveMode(env(e)).isImplemented).toBe(true);
   });
 
-  it.each([
-    ['standalone (SQLite + memory)', {}],
-    ['SQLite + Redis',               { DATABASE_URL: FILE, REDIS_URL: REDIS }],
-  ])('marks %s as not yet implemented — the database is what is missing', (_label, e) => {
-    expect(resolveMode(env(e)).isImplemented).toBe(false);
+  it('never claims a configuration is buildable when the configuration itself is an error', () => {
+    // isImplemented is about which ENGINES this build supports, and errors are about whether the
+    // environment makes sense. The boot guard checks errors first, so a contradiction must still
+    // stop the process even though both engines named in it are supported.
+    const m = resolveMode(env({ NEXUS_MODE: 'standalone', DATABASE_URL: PG }));
+    expect(m.errors).not.toEqual([]);
+    expect(m.isImplemented).toBe(true);
   });
 });
 

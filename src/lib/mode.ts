@@ -165,9 +165,15 @@ export function resolveMode(env: NodeJS.ProcessEnv = process.env): ResolvedMode 
   // panel call a perfectly persistent file "not durable".
   const durable = kv !== 'memory';
 
-  // The in-memory KV shipped in S1, so either KV is buildable. SQLite is S2 and is not, so a
-  // resolution naming it must still be an honest refusal rather than a broken boot.
-  const isImplemented = db === 'postgres';
+  // Both substitutes have now shipped: the in-memory KV in S1, SQLite in S2. Every combination this
+  // function can resolve is one the gateway can actually run.
+  //
+  // This flag stayed false through S2.0–S2.3 on purpose, while the SQLite path was being built. It
+  // was flipped only once a compiled gateway had been booted on a SQLite file with no DATABASE_URL,
+  // created its own schema, claimed an account, signed in, served the dashboard and signed out —
+  // because a type check said the S1 in-memory KV was ready too, right up until it crashed a real
+  // boot on a command nothing in our code calls.
+  const isImplemented = true;
 
   return { mode, db, kv, durable, isImplemented, reasons, errors };
 }

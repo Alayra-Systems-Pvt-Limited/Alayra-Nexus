@@ -32,11 +32,14 @@
 //   npm run db:sqlite-schema -- --check exit 1 if it is out of date (CI)
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 const ROOT   = resolve(__dirname, '..', '..');
 const SOURCE = resolve(ROOT, 'prisma', 'schema.prisma');
 const TARGET = resolve(ROOT, 'prisma', 'schema.sqlite.prisma');
+/** The DDL a standalone gateway runs against an empty database file. See src/lib/sqliteBootstrap.ts. */
+const DDL    = resolve(ROOT, 'prisma', 'sqlite-schema.sql');
 
 /** Where the second client is generated. Inside node_modules/.prisma so that it resolves as a bare
  *  specifier from both `src/` (tsx) and `dist/` (compiled) without a path that escapes rootDir —
@@ -83,6 +86,33 @@ export function toSqliteSchema(postgresSchema: string): string {
   return BANNER + out;
 }
 
+const DDL_BANNER =
+`-- GENERATED FILE — DO NOT EDIT.
+--
+-- The schema a standalone gateway creates on first run, emitted by \`prisma migrate diff\` from
+-- prisma/schema.sqlite.prisma and executed by src/lib/sqliteBootstrap.ts.
+--
+-- It is committed rather than produced at runtime because a gateway started with \`npx\` has no
+-- Prisma CLI to hand and no network to fetch one — and the first thing it must do is create its own
+-- database. Regenerate with \`npm run db:sqlite-schema\`; a drift test fails if this falls behind.
+
+`;
+
+/** The whole DDL, from Prisma rather than hand-written, so it cannot disagree with the schema. */
+function generateDdl(): string {
+  const sql = execFileSync(
+    'npx',
+    ['prisma', 'migrate', 'diff', '--from-empty', '--to-schema-datamodel', TARGET, '--script'],
+    { cwd: ROOT, encoding: 'utf8', shell: true },
+  );
+  if (!/CREATE TABLE/i.test(sql)) {
+    // An empty or error-shaped result would otherwise be committed as a "schema" that creates
+    // nothing, and the failure would surface as "no such table" on someone's first run.
+    throw new Error(`prisma migrate diff produced no CREATE TABLE statements:\n${sql.slice(0, 400)}`);
+  }
+  return DDL_BANNER + sql.replace(/\r\n/g, '\n');
+}
+
 function main(): void {
   const check    = process.argv.includes('--check');
   const expected = toSqliteSchema(readFileSync(SOURCE, 'utf8'));
@@ -95,12 +125,28 @@ function main(): void {
       console.error('Run `npm run db:sqlite-schema` and commit the result.');
       process.exit(1);
     }
-    console.log('prisma/schema.sqlite.prisma is up to date.');
+
+    // And the DDL, which is the one a running gateway executes. A stale schema file is caught by a
+    // unit test; a stale DDL is not, because nothing can tell it is stale without regenerating it —
+    // and its failure mode is a first-time user whose brand-new database is missing a column.
+    let actualDdl = '';
+    try { actualDdl = readFileSync(DDL, 'utf8'); } catch { /* missing counts as out of date */ }
+    if (actualDdl !== generateDdl()) {
+      console.error('prisma/sqlite-schema.sql is out of date with prisma/schema.prisma.');
+      console.error('Run `npm run db:sqlite-schema` and commit the result.');
+      process.exit(1);
+    }
+
+    console.log('prisma/schema.sqlite.prisma and prisma/sqlite-schema.sql are both up to date.');
     return;
   }
 
   writeFileSync(TARGET, expected);
   console.log(`Wrote ${TARGET}`);
+
+  // Second, because migrate diff reads the file just written.
+  writeFileSync(DDL, generateDdl());
+  console.log(`Wrote ${DDL}`);
 }
 
 if (require.main === module) main();

@@ -172,6 +172,33 @@ jobs:
           fi
           echo "docs/demo matches a fresh build."
 
+  # Standalone proof (S2.4): the compiled gateway started in an empty directory with no
+  # DATABASE_URL and no REDIS_URL — exactly what `npx @alayra/nexus` does — then driven over HTTP.
+  # It builds its own SQLite database, claims an owner, serves every dashboard read, writes, and
+  # signs out.
+  #
+  # Deliberately has NO service containers: no Postgres, no Redis, no Docker pull. That makes it the
+  # cheapest job here and the only one that proves the zero-configuration path a first-time user
+  # takes — and it is the job that would have caught S1's in-memory KV crashing a real boot on a
+  # Redis command nothing in our code calls, which every unit test and type check had passed.
+  standalone:
+    name: Standalone (SQLite + in-memory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run db:generate
+      # The DDL a standalone gateway executes on first run is a committed artefact. A unit test can
+      # tell that the schema FILE is stale; only regenerating can tell that this is.
+      - name: Check the generated SQLite schema and DDL are current
+        run: npm run db:sqlite-schema -- --check
+      - run: npm run build
+      - run: npm run smoke:standalone
+
   # End-to-end proof (P7.15): the compiled gateway, a real PostgreSQL, a real Redis, and a
   # real browser. Everything above tests our code with stand-ins; this job is the one that
   # would have caught the bugs humans kept finding by clicking — /v1/v1 on the Connect page,

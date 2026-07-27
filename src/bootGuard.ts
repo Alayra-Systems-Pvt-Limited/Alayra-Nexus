@@ -48,22 +48,23 @@ function check(): ResolvedMode {
     ]);
   }
 
-  // Resolution understands SQLite and in-memory counters; the gateway cannot run on them yet. Saying
-  // so plainly beats booting half-configured, and beats the bare "REDIS_URL is not set" this replaces
-  // — the operator learns what is supported and exactly which variables to set.
+  // Kept as a backstop, not as live behaviour (S2.4). Every combination `resolveMode` can return is
+  // now buildable, so this branch is unreachable today — and it stays because the next engine added
+  // to those unions will make it reachable again, and the alternative to an honest refusal is a
+  // gateway that boots half-configured.
   if (!m.isImplemented) {
     die([
-      `Alayra Nexus needs PostgreSQL for its durable store. This environment resolves to ${describeMode(m)}.`,
+      `This build cannot run on ${describeMode(m)}.`,
       '',
       ...m.reasons,
       '',
-      'A SQLite database is in development and not available in this build. Redis is now optional —',
-      'without REDIS_URL the gateway keeps counters and sessions in memory — but a database is not.',
-      'Set:',
+      'Supported: PostgreSQL or SQLite for the durable store, Redis or in-process memory for',
+      'counters and sessions. Unset both URLs for a zero-configuration standalone gateway, or set:',
       '',
       '  DATABASE_URL=postgresql://user:password@host:5432/dbname',
+      '  REDIS_URL=redis://host:6379',
       '',
-      'The three-line Docker Compose quick start in the README brings one up for you.',
+      'The three-line Docker Compose quick start in the README brings both up for you.',
     ]);
   }
 
