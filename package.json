@@ -19,7 +19,9 @@
     "test:watch": "vitest",
     "smoke:standalone": "tsx scripts/smoke/standalone.ts",
     "seed": "tsx scripts/seed/seed.ts",
-    "demo:fixtures": "tsx scripts/demo/buildFixtures.ts"
+    "demo:fixtures": "tsx scripts/demo/buildFixtures.ts",
+    "bench:sqlite-journal": "tsx scripts/bench/sqliteJournal.ts",
+    "test:hunt": "tsx scripts/test/huntFlakes.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",

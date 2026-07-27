@@ -236,7 +236,12 @@ export function ephemeralWarning(m: ResolvedMode): string | null {
     return 'Counters and sessions are held in memory: everyone is signed out and rate-limit windows reset when the gateway restarts. A single process only — a second instance would enforce its own separate limits.';
   }
   if (m.db === 'sqlite') {
-    return 'The database is a local SQLite file: one writer at a time, no replication, and backups are file copies rather than pg_dump.';
+    // Says "three files" rather than the older "backups are file copies" on purpose. Standalone runs
+    // in WAL mode (S2.5), so a running gateway's database is nexus.db plus a -wal sidecar holding
+    // commits not yet folded in — and copying only the .db yields a backup that restores to an
+    // earlier state while looking complete. That is the worst shape a backup can take, so the
+    // warning has to name it.
+    return 'The database is a local SQLite file: one writer at a time and no replication. It runs in WAL mode, so the live database is nexus.db plus its -wal sidecar — copying only the .db file while the gateway is running loses the most recent writes.';
   }
   return null;
 }

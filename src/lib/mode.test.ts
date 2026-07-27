@@ -214,7 +214,11 @@ describe('ephemeralWarning', () => {
   it('warns about single-writer and backups when only the database is SQLite', () => {
     const w = ephemeralWarning(resolveMode(env({ DATABASE_URL: FILE, REDIS_URL: REDIS })))!;
     expect(w).toMatch(/one writer/i);
-    expect(w).toMatch(/pg_dump/);
+    // The backup caution must name the -wal sidecar (S2.5), not merely say "file copies". Standalone
+    // runs in WAL, so copying nexus.db alone produces a backup that silently omits the most recent
+    // writes — and a warning that leaves that out is what would talk someone into doing it.
+    expect(w).toMatch(/-wal/);
+    expect(w).toMatch(/loses the most recent writes/i);
   });
 
   it('says plainly that full standalone is not for production', () => {

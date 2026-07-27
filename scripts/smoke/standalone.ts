@@ -171,7 +171,10 @@ async function main(): Promise<void> {
     check('it admits it is not durable', b?.durable === false && typeof b?.warning === 'string');
     check('the SQLite version is real', typeof st?.version === 'string' && st.version.startsWith('3.'), st?.version);
     check('the database size is real', typeof st?.databaseBytes === 'number' && st.databaseBytes > 0, String(st?.databaseBytes));
-    check('the journal mode is reported', typeof st?.journalMode === 'string', st?.journalMode);
+    // WAL specifically, not merely "some mode was reported" (S2.5). This is the one check that
+    // proves the boot-time tuning ran against the real database rather than a test fixture — and
+    // `delete` here would mean every background write is queueing behind every dashboard read.
+    check('the database is in WAL mode', st?.journalMode === 'wal', String(st?.journalMode));
     check('the largest tables are listed', Array.isArray(st?.largestTables) && st.largestTables.length > 0);
     // Null, never 0: a file has no connection pool, and 0 would be a lie rather than an absence.
     check('connection stats are null, not zero', st?.connections === null && st?.maxConnections === null);

@@ -44,6 +44,7 @@ import { verifyMetricsToken } from './middleware/auth.middleware';
 import { assertDependencies, StartupCheckError } from './services/preflight.service';
 import { prisma, dbEngine } from './lib/prisma';
 import { ensureSqliteSchema } from './lib/sqliteBootstrap';
+import { configureSqlite } from './lib/sqlitePragma';
 import { resolveDatabaseUrl } from './lib/mode';
 import { isSpaNavigation } from './lib/spaFallback';
 import { normalizePublicUrl } from './lib/baseUrl';
@@ -72,6 +73,12 @@ async function bootstrap() {
   if (dbEngine === 'sqlite') {
     const { created, tables } = await ensureSqliteSchema(prisma);
     if (created) console.log(`  Database created → ${tables} tables at ${resolveDatabaseUrl().replace(/^file:/, '')}`);
+
+    // And put it into WAL (S2.5), so background writes stop queueing behind dashboard reads. After
+    // the schema, because there is no point configuring a database that does not exist yet — and
+    // never fatal: a file that will not take WAL is slower, not unusable.
+    const tuning = await configureSqlite(prisma);
+    if (tuning.warning) console.warn(`  ⚠ ${tuning.warning}`);
   }
 
   // PUBLIC_URL (P7.14): the operator's pin for every URL the gateway prints — the Connect page,
@@ -247,6 +254,8 @@ async function shutdown() {
   // still in an in-process pipeline is lost on restart/redeploy.
   try { await drainUsage(); } catch { /* best effort */ }
   try { await drainAudit(); } catch { /* best effort */ }
+  // No explicit WAL checkpoint here, deliberately — see the note in lib/sqlitePragma.ts. $disconnect
+  // closes the last connection, and SQLite folds the -wal back in and removes it as part of that.
   await prisma.$disconnect();
   process.exit(0);
 }
