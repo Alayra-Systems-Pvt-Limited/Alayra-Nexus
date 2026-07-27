@@ -68,7 +68,7 @@ one for you silently would mean every install shared a key we published.</sub>
 
 ## Contents
 
-**Get started** · [Live demo](https://alayra-systems-pvt-limited.github.io/Alayra-Nexus/demo/) · [Why Alayra Nexus?](#why-alayra-nexus) · [Features](#features) · [Screens](#screens) · [How it compares](#how-it-compares) · [Supported providers](#supported-providers) · [Architecture](#architecture) · [Quick start](#quick-start) · [Connect your tools](#connect-your-tools) · [Environment variables](#environment-variables)
+**Get started** · [Live demo](https://alayra-systems-pvt-limited.github.io/Alayra-Nexus/demo/) · [Why Alayra Nexus?](#why-alayra-nexus) · [Features](#features) · [Screens](#screens) · [How it compares](#how-it-compares) · [Supported providers](#supported-providers) · [Architecture](#architecture) · [Quick start](#quick-start) · [Standalone mode](#standalone-mode--no-postgres-no-redis) · [Connect your tools](#connect-your-tools) · [Environment variables](#environment-variables)
 
 **How it works** · [Rate limits, explained](#rate-limits-explained) · [Resilience & routing](#resilience--routing) · [Teams & budgets](#teams--budgets) · [BYOK](#byok--bring-your-own-key) · [API reference](#api-reference) · [Dashboard](#dashboard) · [Observability](#observability)
 
@@ -248,6 +248,11 @@ tier and cache affinity, the circuit breaker keeps a failing provider out of rot
 usage is batched to PostgreSQL while live metrics land in Redis — all behind a single
 OpenAI-compatible URL.
 
+Only the two stores at the bottom are swappable: configure neither and the same request path runs
+against a local SQLite file and in-process counters instead — see
+[Standalone mode](#standalone-mode--no-postgres-no-redis). Everything between the client and the
+providers is identical either way.
+
 <details>
 <summary>Same diagram as plain text</summary>
 
@@ -420,15 +425,141 @@ npm run build && npm start   # production
 Dashboard is live at `http://localhost:3000`
 
 > [!TIP]
-> **`Cannot reach Redis` / `Cannot reach PostgreSQL` on startup?** Both are hard
+> **`Cannot reach Redis` / `Cannot reach PostgreSQL` on startup?** In server mode both are hard
 > dependencies — Redis holds rate-limit counters, circuit-breaker state, sticky
 > routing, budgets and the response cache; Postgres holds everything else. The
 > startup error names the one that's missing and the command that starts it.
+>
+> A gateway is only ever demoted to the local substitutes when you configure **neither** — never as
+> a reaction to an outage. If you set `DATABASE_URL` and it is unreachable, the gateway refuses to
+> start rather than quietly accepting traffic it is going to lose. See
+> [Standalone mode](#standalone-mode--no-postgres-no-redis).
 >
 > The dashboard is a Vite + Preact app in `web/`, built to static assets that the
 > gateway serves at `/` — there is no separate web server to run. To work on the
 > dashboard with hot reload, `cd web && npm run dev` (it proxies API calls to a
 > gateway running on `:3000`).
+
+---
+
+## Standalone mode — no Postgres, no Redis
+
+> [!NOTE]
+> **On `main`, not yet in a published image.** Standalone runs from a source checkout today and
+> ships in the next release. The `docker run` and Compose recipes above are server mode.
+
+Set neither `DATABASE_URL` nor `REDIS_URL` and the gateway runs on a local **SQLite file** and
+**in-process memory** instead. One process, one directory, nothing to provision — for trying Nexus
+out, for local development against a real gateway, and for CI.
+
+```bash
+# In any empty directory.
+MASTER_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))") \
+ADMIN_PASSWORD=change-me \
+node /path/to/alayra-nexus/dist/server.js
+```
+
+```
+  Database created → 16 tables at ./.nexus/nexus.db
+  Storage → SQLite + in-process memory (data is not durable)
+```
+
+**No feature is disabled by engine.** There is no standalone-only build and no feature flag that
+turns things off — the request path, the router, the breaker and both API surfaces are the same
+code, reading and writing through the same interfaces. What differs is the two stores underneath,
+and the consequences of that are below.
+
+Every release proves it rather than asserting it: CI boots the compiled gateway in an empty
+directory with no `DATABASE_URL` and no `REDIS_URL`, then drives it over HTTP — it builds its own
+database, claims an owner, signs in, serves every dashboard read, writes, and signs out.
+
+### It is not zero-configuration
+
+Two secrets are still required, and they fail differently:
+
+| | If missing |
+|---|---|
+| `MASTER_ENCRYPTION_KEY` | **The process will not start.** It exits with a Node stack trace rather than a guided message — the check runs at module load, before the startup checks that normally explain themselves |
+| `ADMIN_PASSWORD` | Starts, but you cannot claim the owner account. The claim endpoint explains why |
+
+Both are the same requirements server mode has. Keep the encryption key backed up somewhere other
+than the machine — **without it the provider keys in your database can never be decrypted again**,
+and standalone puts that database on one disk.
+
+### What you give up
+
+| | |
+|---|---|
+| **Sessions and rate-limit windows reset on restart** | Counters live in memory. Everyone is signed out, and every RPM window starts over |
+| **One process only** | A second instance keeps its own counters, so an RPM limit would be enforced at roughly 2×. There is no horizontal scaling |
+| **One writer at a time** | SQLite serialises writes. WAL keeps readers from blocking (see below), but concurrent *writers* still queue |
+| **No replication, no managed backups, no failover** | The data is a file on one machine's disk |
+| **Analytics slow down on large tables** | No parallel query and a weaker planner than Postgres |
+| **Some Health readings are absent** | Connection-pool stats, cache hit ratio and deadlock counts are Postgres concepts. The panel shows them as unavailable rather than as zero |
+| **Memory grows with use** | Active keys, tracked users and cached responses all live in the process. There is no eviction to a separate store to fall back on |
+
+**Budgets are the exception** — spend is re-derived from usage history rather than held in a
+counter, so it stays correct across a restart.
+
+### Backups: copy the whole directory, not the database file
+
+Standalone runs SQLite in **WAL** mode, so the live database is **three files** — `nexus.db`, plus
+a `-wal` sidecar holding commits not yet folded in, plus `-shm`.
+
+> [!WARNING]
+> Copying `nexus.db` on its own while the gateway is running produces a backup that restores to an
+> **earlier state while looking complete**. Stop the gateway first, or copy the whole `.nexus/`
+> directory. A proper export/restore with encryption is the next thing being built.
+
+WAL is why background writes stay off the dashboard's back. Measured with six concurrent aggregates
+over 120k rows while 60 writes landed underneath them:
+
+| Journal mode | Total | Slowest background write |
+|---|---|---|
+| `delete` (SQLite's default) | ~2100 ms | ~2000 ms |
+| `wal` (what Nexus sets) | ~600 ms | ~260 ms |
+
+Re-run it yourself with `npm run bench:sqlite-journal`.
+
+> [!IMPORTANT]
+> **WAL cannot work on a network filesystem** — NFS, SMB, and some container volume drivers lack the
+> shared memory it needs. SQLite refuses silently and stays in `delete` mode, where a write blocks
+> every read. Nexus detects this, warns at startup, and the Health page shows the mode actually in
+> force. Keep the data directory on local disk.
+
+### Where the data goes
+
+| | |
+|---|---|
+| Default | `./.nexus/` in the working directory the gateway was started from |
+| Override | `NEXUS_DATA_DIR=/var/lib/nexus` |
+
+A dot-directory rather than loose files, so it is one thing to back up and one thing to delete to
+start over. In a container it **must** be a mounted volume, or removing the container destroys the
+gateway.
+
+### Checking what you are actually running
+
+Never assume from the configuration — ask the gateway:
+
+```bash
+curl -s localhost:3000/ready | jq '.checks[].label'
+# "In-process memory read"   ← standalone
+# "SQLite SELECT 1"
+```
+
+**Health → Server** names the store in use, reports the SQLite version, file size, journal mode and
+reclaimable space, and marks the Postgres-only readings as unavailable rather than showing zeros.
+
+### When to move to server mode
+
+Move when any of these becomes true: you need **more than one instance**, you need **rate limits
+enforced accurately** across them, you need **backups and failover you did not build yourself**, or
+your analytics tables have grown enough that the dashboard feels slow.
+
+Point `DATABASE_URL` and `REDIS_URL` at real servers and restart. Migrating existing standalone
+data into Postgres is being built — until it lands, treat a standalone gateway as one you are
+willing to start over from.
 
 ---
 
@@ -525,10 +656,12 @@ curl http://<your-host>:3000/v1/chat/completions \
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | Yes | PostgreSQL connection string (`postgresql://user:pass@host:5432/db`) |
-| `REDIS_URL` | Yes | Redis connection string (`redis://localhost:6379`) |
-| `MASTER_ENCRYPTION_KEY` | Yes | 64 hex characters (32 bytes) — encrypts all stored API keys |
+| `DATABASE_URL` | Server mode | PostgreSQL connection string (`postgresql://user:pass@host:5432/db`). Leave unset for a local SQLite file — see [Standalone mode](#standalone-mode--no-postgres-no-redis) |
+| `REDIS_URL` | Server mode | Redis connection string (`redis://localhost:6379`). Leave unset for in-process counters |
+| `MASTER_ENCRYPTION_KEY` | Yes | 64 hex characters (32 bytes) — encrypts all stored API keys. Required in **both** modes |
 | `ADMIN_PASSWORD` | Yes | The gateway's deployment secret. Claims the first owner account on first run, and authorises a full reset. **Not** a day-to-day login once an owner exists — see [Accounts and roles](#accounts-and-roles). |
+| `NEXUS_MODE` | No | `server` or `standalone`. Normally unset — the mode is inferred from whether `DATABASE_URL` / `REDIS_URL` are set. Setting it makes the intent explicit, and the gateway **refuses to start** if it contradicts what you configured, rather than guessing which you meant |
+| `NEXUS_DATA_DIR` | No | Where standalone keeps its SQLite database (default: `.nexus` in the working directory). Ignored in server mode |
 | `PORT` | No | HTTP port (default: `3000`) |
 | `PUBLIC_URL` | No | The address the outside world reaches this gateway at — pins what the **Connect** page, quick-start snippets, and SSO `redirect_uri` print. Leave unset and the gateway infers it from the proxy's `X-Forwarded-Proto` / `X-Forwarded-Host` headers, or the Host header. Set it (e.g. `https://gateway.example.com`) when a proxy forwards the host but not the scheme, so a TLS deployment would otherwise print `http://`. |
 | `LOG_LEVEL` | No | Pino log level: `info`, `debug`, `warn` (default: `info`) |
