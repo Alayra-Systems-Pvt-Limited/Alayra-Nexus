@@ -43,38 +43,61 @@ import type { DbEngine } from './mode';
 const quote = (name: string): string => name.replace(/"/g, '""');
 
 /**
+ * The two raw calls this needs, named structurally so a Prisma CLIENT and a Prisma TRANSACTION
+ * client are equally acceptable. The transaction client is not assignable to PrismaClient — it
+ * deliberately lacks `$transaction` — and restore has to reuse this from inside its own.
+ */
+export interface RawExecutor {
+  $queryRawUnsafe<T = unknown>(sql: string): Promise<T>;
+  $executeRawUnsafe(sql: string): Promise<number>;
+}
+
+/**
+ * Empty every application table, using whatever executor it is handed.
+ *
+ * Separate from `emptyEveryTable` so a caller that is ALREADY in a transaction can reuse it —
+ * restore wipes and reloads as one unit, and Prisma has no nested transactions, so a version that
+ * opened its own would throw there. The two paths below are otherwise unchanged.
+ */
+export async function emptyEveryTableIn(tx: RawExecutor, engine: DbEngine): Promise<number> {
+  if (engine === 'sqlite') {
+    // `sqlite_%` covers sqlite_master, sqlite_sequence and the per-table autoindex entries — none
+    // of which are ours to delete, and one of which cannot be deleted at all.
+    const rows = await tx.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> '_prisma_migrations'`);
+    if (rows.length === 0) return 0;
+
+    // Defer foreign keys to commit rather than disabling them: every table ends empty, so nothing
+    // is actually violated at commit, and a bug that WOULD leave a dangling reference still fails
+    // loudly instead of being waved through.
+    //
+    // This is per-transaction in SQLite, which is why it belongs here beside the deletes and not in
+    // the wrapper — set outside one, it would apply to nothing.
+    await tx.$executeRawUnsafe('PRAGMA defer_foreign_keys = ON');
+    for (const r of rows) await tx.$executeRawUnsafe(`DELETE FROM "${quote(r.name)}"`);
+    return rows.length;
+  }
+
+  const rows = await tx.$queryRawUnsafe<{ tablename: string }[]>(
+    `SELECT tablename FROM pg_tables
+     WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`);
+  if (rows.length === 0) return 0;
+
+  const tables = rows.map((r) => `"public"."${quote(r.tablename)}"`).join(', ');
+  await tx.$executeRawUnsafe(`TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE`);
+  return rows.length;
+}
+
+/**
  * Empty every application table. Returns how many were cleared.
  *
  * Only the migrations ledger and the engine's internal bookkeeping survive: the schema itself is
  * not what is being reset.
  */
 export async function emptyEveryTable(client: PrismaClient, engine: DbEngine): Promise<number> {
-  if (engine === 'sqlite') {
-    // `sqlite_%` covers sqlite_master, sqlite_sequence and the per-table autoindex entries — none
-    // of which are ours to delete, and one of which cannot be deleted at all.
-    const rows = await client.$queryRaw<{ name: string }[]>`
-      SELECT name FROM sqlite_master
-      WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> '_prisma_migrations'
-    `;
-    if (rows.length === 0) return 0;
+  // Postgres does the whole wipe in one TRUNCATE, so it is already atomic and needs no wrapper.
+  if (engine !== 'sqlite') return emptyEveryTableIn(client, engine);
 
-    await client.$transaction(async (tx) => {
-      // Defer foreign keys to commit rather than disabling them: every table ends empty, so nothing
-      // is actually violated at commit, and a bug that WOULD leave a dangling reference still fails
-      // loudly instead of being waved through.
-      await tx.$executeRawUnsafe('PRAGMA defer_foreign_keys = ON');
-      for (const r of rows) await tx.$executeRawUnsafe(`DELETE FROM "${quote(r.name)}"`);
-    });
-    return rows.length;
-  }
-
-  const rows = await client.$queryRaw<{ tablename: string }[]>`
-    SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
-  `;
-  if (rows.length === 0) return 0;
-
-  const tables = rows.map((r) => `"public"."${quote(r.tablename)}"`).join(', ');
-  await client.$executeRawUnsafe(`TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE`);
-  return rows.length;
+  return client.$transaction((tx) => emptyEveryTableIn(tx as unknown as RawExecutor, engine));
 }

@@ -19,35 +19,23 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
 import { startEngines, PARITY_DATABASE_URL, PARITY_TIMEOUT, type Engines } from './harness';
-import { isUniqueViolation, type BulkDelegate } from '../bulkInsert';
+import { isUniqueViolation, createManyIgnoringDuplicates, type BulkDelegate } from '../bulkInsert';
 
 const enabled = !!PARITY_DATABASE_URL;
 
 type AuditRow = { id: string; action: string };
 
 /**
- * The production function with its engine decided by argument rather than by module state.
+ * The production function, driven at whichever engine the test names.
  *
- * `createManyIgnoringDuplicates` reads `dbEngine` from lib/prisma, which is fixed at import — so
- * calling it directly could only ever test one engine per process. This mirrors it exactly; the
- * assertions below check the two stay in step.
+ * This used to be a hand-copied mirror of `createManyIgnoringDuplicates`, because that function read
+ * `dbEngine` from module state and could therefore only ever be tested at one engine per process.
+ * A second implementation that both engines' tests passed against, while the real one went
+ * unexercised on SQLite, is the same shape of bug as the `instanceof` this file was written to catch.
+ * The function now takes the engine as an argument, so the thing under test is the thing that ships.
  */
 async function insertAs<Row>(engine: 'postgres' | 'sqlite', delegate: BulkDelegate<Row>, rows: Row[]): Promise<number> {
-  if (rows.length === 0) return 0;
-  if (engine !== 'sqlite') {
-    return (await delegate.createMany({ data: rows, skipDuplicates: true })).count;
-  }
-  try {
-    return (await delegate.createMany({ data: rows })).count;
-  } catch (e) {
-    if (!isUniqueViolation(e)) throw e;
-  }
-  let written = 0;
-  for (const row of rows) {
-    try { await delegate.create({ data: row }); written++; }
-    catch (e) { if (!isUniqueViolation(e)) throw e; }
-  }
-  return written;
+  return createManyIgnoringDuplicates(delegate, rows, engine);
 }
 
 describe.skipIf(!enabled)('batched inserts are idempotent on both engines', { timeout: PARITY_TIMEOUT }, () => {
@@ -65,6 +53,26 @@ describe.skipIf(!enabled)('batched inserts are idempotent on both engines', { ti
     await expect(
       (e.sqlite.auditLog as unknown as BulkDelegate<AuditRow>).createMany({ data: rows(['x']), skipDuplicates: true }),
     ).rejects.toThrow(/skipDuplicates/i);
+  });
+
+  it.each([['postgres'], ['sqlite']] as const)('%s: isUniqueViolation recognises a real duplicate error', async (engine) => {
+    // Tested DIRECTLY, against an error each engine's own client actually threw, because the whole
+    // hazard is that the two generated clients carry separate Prisma runtimes and therefore separate
+    // error classes. The original `instanceof PrismaClientKnownRequestError` returned false for every
+    // SQLite error, and the audit writer would have re-queued forever and shed the compliance trail.
+    //
+    // Previously this was covered only through the hand-copied mirror above; deleting that left it
+    // with no test at all, which is worse than the duplication it removed.
+    const db = engine === 'sqlite' ? e.sqlite : e.pg;
+    await db.auditLog.deleteMany({});
+    await db.auditLog.create({ data: { id: 'dup-1', action: 'test.action' } });
+
+    const err = await db.auditLog.create({ data: { id: 'dup-1', action: 'test.action' } }).catch((x: unknown) => x);
+    expect(isUniqueViolation(err)).toBe(true);
+    // And it does not fire on anything else, or the fallback would swallow real failures.
+    expect(isUniqueViolation(new Error('connection lost'))).toBe(false);
+    expect(isUniqueViolation({ code: 'P2003' })).toBe(false);
+    expect(isUniqueViolation(null)).toBe(false);
   });
 
   it.each([['postgres'], ['sqlite']] as const)('%s: inserts a clean batch and reports the count', async (engine) => {

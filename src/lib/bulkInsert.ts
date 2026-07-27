@@ -32,6 +32,7 @@
 // single batched insert on both engines.
 
 import { dbEngine } from './prisma';
+import type { DbEngine } from './mode';
 
 /** The two methods this needs from a Prisma model delegate, named structurally. */
 export interface BulkDelegate<Row> {
@@ -66,10 +67,22 @@ export function isUniqueViolation(e: unknown): boolean {
 export async function createManyIgnoringDuplicates<Row>(
   delegate: BulkDelegate<Row>,
   rows: Row[],
+  /**
+   * Which engine the delegate belongs to. Defaults to the gateway's own, which is what every
+   * production caller wants and keeps their call sites unchanged.
+   *
+   * It is a parameter at all because module state can only ever describe ONE engine per process,
+   * and two callers need otherwise: the parity suite, which drives a real PostgreSQL and a real
+   * SQLite in the same run, and restore, which is handed a client rather than importing one. Before
+   * this existed the parity test held a hand-copied mirror of the logic below — a second
+   * implementation that could drift from this one while both stayed green, which is precisely the
+   * failure this file was written to prevent.
+   */
+  engine: DbEngine = dbEngine,
 ): Promise<number> {
   if (rows.length === 0) return 0;
 
-  if (dbEngine !== 'sqlite') {
+  if (engine !== 'sqlite') {
     const { count } = await delegate.createMany({ data: rows, skipDuplicates: true });
     return count;
   }
