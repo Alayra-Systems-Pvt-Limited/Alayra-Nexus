@@ -52,7 +52,8 @@ import { createManyIgnoringDuplicates, type BulkDelegate } from '../bulkInsert';
 import { MODEL_ORDER } from './modelOrder';
 import { rekeyRow, countSecrets } from './secrets';
 import { decodeRow } from './rowCodec';
-import { missingEnvNames, type SchemaShape } from './provenance';
+import { missingEnvNames, schemaShape, type SchemaShape } from './provenance';
+import { assertRestorable, type Difference } from './schemaDrift';
 import {
   findCollisions, mergeCollisions, MODELS_WITH_UNIQUE_COLUMNS,
   type Collision, type CollisionClient,
@@ -139,6 +140,14 @@ export interface RestorePlan {
    * quietly dead because SSO_CLIENT_ID lives in an environment that did not come with it.
    */
   missingEnv: string[];
+  /**
+   * Differences between the file's schema and this gateway's that do NOT prevent the restore (C4).
+   *
+   * Blocking differences never reach here — those throw. What is left is the additive drift a
+   * restore absorbs: columns added since, which take their defaults, and models that will be left
+   * empty. Worth showing, not worth stopping for.
+   */
+  schemaDrift: Difference[];
 }
 
 export interface RestoreResult extends RestorePlan {
@@ -281,6 +290,31 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
 
   const lines = decryptedLines(opts.input, opts.passphrase);
 
+  // ── The manifest, pulled BEFORE anything else happens (C4) ─────────────────────────────────
+  //
+  // Deliberately consumed on its own rather than inside the loop below, and the reason is the
+  // ordering: `replace` empties every table as the first act inside its transaction, so a schema
+  // check that ran when the manifest came round in the loop would run AFTER the truncate. The
+  // transaction would still roll it back — nothing would be lost — but the gateway would have taken
+  // ACCESS EXCLUSIVE on every table, entered maintenance mode and refused live traffic, all to
+  // reach a conclusion it could have drawn from the first line of the file.
+  //
+  // Async generators resume where they were left, so the loops below continue from line two.
+  const first = await lines.next();
+  if (first.done) throw new Error('This backup file is empty.');
+  const firstRow = decodeRow(first.value);
+  if (firstRow.kind !== 'manifest') {
+    throw new Error('This backup file has no manifest — it may not be an Alayra Nexus backup.');
+  }
+  manifest = firstRow as unknown as Manifest;
+
+  // Throws, changing nothing, when the schema has moved too far. Returns the non-blocking
+  // differences so the plan can mention them — a column that will take its default is worth
+  // knowing about and is not a reason to refuse.
+  const schemaDrift = assertRestorable(
+    manifest.schema ?? null, schemaShape(), manifest.gatewayVersion ?? 'an unknown version',
+  );
+
   // ── Dry run: read everything, prove it opens, write nothing ────────────────────────────────
   if (opts.dryRun) {
     // `replace` empties every table before inserting, so nothing it writes can collide with
@@ -318,7 +352,7 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
 
     assertComplete(manifest, trailer, rowsInFile, totalRowsInFile);
     return {
-      ...plan(manifest, rowsInFile, totalRowsInFile, secretsInFile),
+      ...plan(manifest, rowsInFile, totalRowsInFile, secretsInFile, schemaDrift),
       mode: opts.mode, dryRun: true,
       written, totalWritten: 0,
       // Not `rowsInFile - written`: a dry run writes nothing on purpose, so reporting every row as
@@ -408,7 +442,7 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
   for (const m of MODEL_ORDER) skipped[m] = rowsInFile[m] - written[m];
 
   return {
-    ...plan(manifest, rowsInFile, totalRowsInFile, secretsInFile),
+    ...plan(manifest, rowsInFile, totalRowsInFile, secretsInFile, schemaDrift),
     mode: opts.mode, dryRun: false,
     written,
     totalWritten: Object.values(written).reduce((a, b) => a + b, 0),
@@ -485,6 +519,7 @@ function zeroed(): Record<string, number> {
 
 function plan(
   manifest: Manifest | null, rowsInFile: Record<string, number>, totalRowsInFile: number, secretsInFile: number,
+  schemaDrift: Difference[],
 ): RestorePlan {
   return {
     gatewayVersion: manifest?.gatewayVersion ?? 'unknown',
@@ -493,6 +528,7 @@ function plan(
     rowsInFile, totalRowsInFile, secretsInFile,
     sourceSchema: manifest?.schema ?? null,
     missingEnv: missingEnvNames(manifest?.env),
+    schemaDrift,
   };
 }
 

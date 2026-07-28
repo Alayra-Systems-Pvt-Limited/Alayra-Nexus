@@ -51,6 +51,7 @@ import { envInt } from '../../lib/envNumber';
 import { exportBackup, restoreBackup, backupFilename, RESTORE_TIMEOUT_ENV } from '../../services/backup.service';
 import { passphraseProblem } from '../../lib/backup/format';
 import { RestoreTimeoutError, type RestoreMode } from '../../lib/backup/restore';
+import { SchemaDriftError } from '../../lib/backup/schemaDrift';
 
 /** Typed exactly as the factory reset's, so the two destructive actions feel the same. */
 export const RESTORE_CONFIRM_PHRASE = 'REPLACE ALL DATA';
@@ -262,20 +263,29 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
         // problem that does not exist — and quite possibly throw the only copy away. 503, because
         // the same request retried against a gateway configured for it would succeed.
         const timedOut = err instanceof RestoreTimeoutError;
+        // A schema refusal is a third distinct outcome, and conflating it with a damaged file would
+        // repeat exactly the mistake A3 fixed for timeouts. The file is intact, the passphrase was
+        // right, and retrying will never help — the fix is a gateway of the matching version.
+        const drifted = err instanceof SchemaDriftError;
         const status = timedOut ? 503 : 400;
 
         recordAudit({
           action: dryRun ? 'backup.restore.dryrun' : 'backup.restore', method: 'POST', ...actor(request), status,
           detail: JSON.stringify({
-            outcome: timedOut ? 'timed_out' : 'failed', mode, error: (err as Error).message,
+            outcome: timedOut ? 'timed_out' : drifted ? 'schema_drift' : 'failed',
+            mode, error: (err as Error).message,
             ...(timedOut ? { timeoutMs: (err as RestoreTimeoutError).timeoutMs } : {}),
+            ...(drifted ? { blocking: (err as SchemaDriftError).differences.filter((d) => d.blocking).length } : {}),
           }),
         });
         return reply.code(status).send({
           error: (err as Error).message,
+          ...(drifted ? { schemaDrift: (err as SchemaDriftError).differences } : {}),
           hint: timedOut
             ? `Nothing was changed. Raise ${RESTORE_TIMEOUT_ENV} and restore again — the file is fine.`
-            : 'Nothing was changed. If the passphrase is right, the file may be damaged or incomplete.',
+            : drifted
+              ? 'Nothing was changed. The backup is intact — this gateway’s schema has moved on from it.'
+              : 'Nothing was changed. If the passphrase is right, the file may be damaged or incomplete.',
         });
       }
     } finally {

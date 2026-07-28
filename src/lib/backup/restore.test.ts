@@ -26,6 +26,8 @@ import type { PrismaClient } from '@prisma/client';
 import { assertNothingDropped, readBackup } from './restore';
 import { writeBackup } from './export';
 import { MODEL_ORDER } from './modelOrder';
+import { schemaShape, type SchemaShape } from './provenance';
+import { SchemaDriftError } from './schemaDrift';
 
 /** Per-model counts, defaulting every other model to zero the way readBackup does. */
 function counts(over: Record<string, number> = {}): Record<string, number> {
@@ -91,7 +93,7 @@ describe('assertNothingDropped', () => {
 const PASS = 'a-long-enough-backup-passphrase';
 
 /** A backup file with two secret-free rows in it, built in memory. */
-async function tinyBackup(): Promise<Buffer> {
+async function tinyBackup(over: { schema?: SchemaShape } = {}): Promise<Buffer> {
   const rows: Record<string, Record<string, unknown>[]> = {
     team:        [{ id: 't1', name: 'Team' }],
     appSettings: [{ id: 's1', key: 'SOMETHING_HARMLESS', value: '{}' }],
@@ -109,6 +111,8 @@ async function tinyBackup(): Promise<Buffer> {
   await writeBackup({
     client: client as unknown as PrismaClient, engine: 'postgres', passphrase: PASS,
     out, gatewayVersion: 'test', includeGatewayRecipient: false,
+    env: [],
+    ...over,
   });
   return Buffer.concat(chunks);
 }
@@ -163,5 +167,69 @@ describe('the transaction options a restore asks for', () => {
     });
 
     expect(options().timeout).toBe(120_000);
+  });
+});
+
+describe('a backup whose schema has drifted (C4)', () => {
+  // Built as a REAL encrypted backup carrying a doctored schema shape, then opened by the real
+  // reader. Nothing is stubbed between the two, so this exercises the same path an operator would.
+  const stale: SchemaShape = { Team: ['id:String:req:def', 'departmentId:String:req:nodef'] };
+
+  it('is refused, naming the column that cannot be filled', async () => {
+    const { client } = recordingClient();
+    await expect(readBackup({
+      client, engine: 'postgres', passphrase: PASS,
+      input: Readable.from(await tinyBackup({ schema: stale })), mode: 'replace',
+    })).rejects.toThrow(SchemaDriftError);
+  });
+
+  it('refuses BEFORE the transaction opens, so no table is ever emptied', async () => {
+    // The point of pulling the manifest out of the read loop. Inside the loop, the check would run
+    // after `replace` had already taken ACCESS EXCLUSIVE on every table and entered maintenance
+    // mode -- rolled back, but a self-inflicted outage to reach a conclusion available from line
+    // one of the file.
+    const { client, options } = recordingClient();
+    await expect(readBackup({
+      client, engine: 'postgres', passphrase: PASS,
+      input: Readable.from(await tinyBackup({ schema: stale })), mode: 'replace',
+    })).rejects.toThrow();
+
+    expect(options()).toEqual({});   // $transaction was never called
+  });
+
+  it('is refused on a dry run too, rather than reporting a plan that cannot happen', async () => {
+    const { client } = recordingClient();
+    await expect(readBackup({
+      client, engine: 'postgres', passphrase: PASS,
+      input: Readable.from(await tinyBackup({ schema: stale })), mode: 'merge', dryRun: true,
+    })).rejects.toThrow(SchemaDriftError);
+  });
+
+  it('restores fine when the drift is only additive', async () => {
+    // A model the file never heard of. The rows still land; the new table is simply left empty.
+    const older: SchemaShape = { ...schemaShape() };
+    delete older.DomainAlias;
+
+    const { client } = recordingClient();
+    const r = await readBackup({
+      client, engine: 'postgres', passphrase: PASS,
+      input: Readable.from(await tinyBackup({ schema: older })), mode: 'merge',
+    });
+
+    expect(r.totalWritten).toBe(2);
+    expect(r.schemaDrift.map((d) => d.kind)).toContain('new-model');
+    expect(r.schemaDrift.every((d) => !d.blocking)).toBe(true);
+  });
+
+  it('reports the source schema it was checked against', async () => {
+    const { client } = recordingClient();
+    const r = await readBackup({
+      client, engine: 'postgres', passphrase: PASS,
+      input: Readable.from(await tinyBackup()), mode: 'merge',
+    });
+
+    expect(r.sourceSchema).not.toBeNull();
+    expect(Object.keys(r.sourceSchema!).length).toBe(Object.keys(schemaShape()).length);
+    expect(r.schemaDrift).toEqual([]);
   });
 });
