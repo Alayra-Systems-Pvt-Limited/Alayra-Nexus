@@ -198,6 +198,10 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
           action: dryRun ? 'backup.restore.dryrun' : 'backup.restore', method: 'POST', ...actor(request), status: 200,
           detail: JSON.stringify({
             mode, rowsInFile: result.totalRowsInFile, written: result.totalWritten,
+            // Recorded because a merge that dropped rows is otherwise indistinguishable in the
+            // trail from one that had nothing to drop — and that is the whole failure mode.
+            skipped: result.totalSkipped,
+            collisions: result.collisions.map((c) => `${c.model}.${c.column}×${c.count}`),
             secrets: result.secretsRekeyed, tablesCleared: result.tablesCleared,
             from: result.gatewayVersion, takenAt: result.createdAt,
           }),

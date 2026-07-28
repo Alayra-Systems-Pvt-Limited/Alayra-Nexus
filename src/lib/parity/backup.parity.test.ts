@@ -276,3 +276,79 @@ describe.skipIf(!enabled)('a backup can be wrapped for the gateway as well', { t
     })).rejects.toThrow(/No passphrase was given/i);
   });
 });
+
+describe.skipIf(!enabled)('a merge says which rows it would silently drop', { timeout: PARITY_TIMEOUT }, () => {
+  // The defect, against real unique indexes on both engines: `createMany({ skipDuplicates: true })`
+  // skips a row that violates ANY unique constraint, not only the primary key. So a merge can drop
+  // real data, return a smaller count than it was handed, and report success at every layer above.
+  //
+  // AppSettings is used deliberately. Its `key` is unique and NOTHING references the table, so a
+  // dropped row is a silent loss rather than a foreign-key error — which is the case that needs
+  // catching. A collision on NexusProvider would at least fail loudly when its keys lost their
+  // parent; a collision here just quietly costs you your branding.
+  let e: Engines;
+  let file: Buffer;
+
+  beforeAll(async () => {
+    e = startEngines('backup-collisions');
+    await e.pg.appSettings.create({ data: { id: 's-source', key: 'BRANDING', value: '{"from":"source"}' } });
+    await e.pg.appSettings.create({ data: { id: 's-shared', key: 'AI_MODEL_REGISTRY', value: '{"models":[]}' } });
+    file = await exportFrom(e.pg, 'postgres');
+
+    // The destination already uses that key, under a DIFFERENT id: two gateways that each set their
+    // branding independently. Which is precisely the situation someone reaches for merge to solve.
+    await e.sqlite.appSettings.create({ data: { id: 's-local', key: 'BRANDING', value: '{"from":"destination"}' } });
+  }, 120_000);
+  afterAll(async () => { await e?.dispose(); });
+
+  it('names the collision in a dry run, before anything is touched', async () => {
+    const plan = await readBackup({
+      client: e.sqlite, engine: 'sqlite', passphrase: PASS, input: Readable.from(file), mode: 'merge', dryRun: true,
+    });
+
+    expect(plan.collisions).toEqual([
+      { model: 'appSettings', column: 'key', count: 1, examples: ['BRANDING'] },
+    ]);
+    // The row that shares BOTH id and key is the same row arriving again, which merge is for.
+    expect(plan.totalRowsInFile).toBe(2);
+  });
+
+  it('reports it on the PostgreSQL path too, which skips duplicates differently', async () => {
+    // Postgres uses createMany({ skipDuplicates: true }); SQLite has no such option and falls back
+    // to row-at-a-time inserts that swallow P2002. Two unrelated code paths, the same silent drop,
+    // so both are checked rather than assumed to agree.
+    const back = await exportFrom(e.sqlite, 'sqlite');
+    const plan = await readBackup({
+      client: e.pg, engine: 'postgres', passphrase: PASS, input: Readable.from(back), mode: 'merge', dryRun: true,
+    });
+
+    expect(plan.collisions).toEqual([
+      { model: 'appSettings', column: 'key', count: 1, examples: ['BRANDING'] },
+    ]);
+  });
+
+  it('reports nothing for a replace, which empties the table first', async () => {
+    const plan = await readBackup({
+      client: e.sqlite, engine: 'sqlite', passphrase: PASS, input: Readable.from(file), mode: 'replace', dryRun: true,
+    });
+    expect(plan.collisions).toEqual([]);
+  });
+
+  it('the drop is real, and the count now admits it', async () => {
+    const r = await readBackup({
+      client: e.sqlite, engine: 'sqlite', passphrase: PASS, input: Readable.from(file), mode: 'merge',
+    });
+
+    expect(r.totalRowsInFile).toBe(2);
+    expect(r.totalWritten).toBe(1);          // only AI_MODEL_REGISTRY landed
+    expect(r.totalSkipped).toBe(1);          // BRANDING did not — and this is what used to be silent
+    expect(r.skipped.appSettings).toBe(1);
+
+    // The proof that it was a loss and not an error: the destination's row is untouched, the
+    // source's version of it is simply gone, and nothing anywhere threw.
+    const rows = await e.sqlite.appSettings.findMany({ where: { key: 'BRANDING' } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('s-local');
+    expect(rows[0].value).toBe('{"from":"destination"}');
+  });
+});

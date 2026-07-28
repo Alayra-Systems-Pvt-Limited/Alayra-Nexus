@@ -52,10 +52,17 @@ import { createManyIgnoringDuplicates, type BulkDelegate } from '../bulkInsert';
 import { MODEL_ORDER } from './modelOrder';
 import { rekeyRow, countSecrets } from './secrets';
 import { decodeRow } from './rowCodec';
+import {
+  findCollisions, mergeCollisions, MODELS_WITH_UNIQUE_COLUMNS,
+  type Collision, type CollisionClient,
+} from './collisions';
 import { CIPHER, TAG_BYTES, parseHeader, unwrapFileKey, passphraseProblem } from './format';
 
 /** Rows held before being written. Bounded so a large table never becomes a large heap. */
 const WRITE_BATCH = 500;
+
+/** Rows held before their unique values are checked against what is already here. */
+const CHECK_BATCH = 500;
 
 export type RestoreMode = 'merge' | 'replace';
 
@@ -97,6 +104,22 @@ export interface RestoreResult extends RestorePlan {
   /** Rows actually inserted, per model. Under `merge` this is legitimately lower. */
   written: Record<string, number>;
   totalWritten: number;
+  /**
+   * Rows the file held that this gateway did not insert, per model.
+   *
+   * Under `merge` this is expected and usually means the row was already here. Under `replace` it
+   * must be zero, and the restore refuses if it is not — see `assertNothingDropped`.
+   *
+   * Always zero for a dry run, which writes nothing by design; `collisions` is a dry run's answer.
+   */
+  skipped: Record<string, number>;
+  totalSkipped: number;
+  /**
+   * Rows whose unique value already belongs to a DIFFERENT row on this gateway, and which a merge
+   * would therefore drop without saying so. Populated by a `merge` dry run only — see collisions.ts
+   * for why this cannot be answered during the restore itself.
+   */
+  collisions: Collision[];
   /** Secrets re-encrypted with this gateway's key — counted, not assumed. */
   secretsRekeyed: number;
   /** Tables emptied, when the mode was `replace`. */
@@ -190,9 +213,9 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
     if (problem) throw new Error(problem);
   }
 
-  const rowsInFile: Record<string, number> = {};
-  const written: Record<string, number> = {};
-  for (const m of MODEL_ORDER) { rowsInFile[m] = 0; written[m] = 0; }
+  const rowsInFile = zeroed();
+  const written = zeroed();
+  const collisions: Collision[] = [];
 
   let manifest: Manifest | null = null;
   let trailer: Trailer | null = null;
@@ -205,6 +228,18 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
 
   // ── Dry run: read everything, prove it opens, write nothing ────────────────────────────────
   if (opts.dryRun) {
+    // `replace` empties every table before inserting, so nothing it writes can collide with
+    // anything. Only `merge` lands rows alongside data that is already here, and only merge can
+    // therefore lose a row to a unique constraint it did not expect.
+    const checking = opts.mode === 'merge';
+    let batch: Pending | null = null;
+
+    const check = async (): Promise<void> => {
+      if (!batch || batch.rows.length === 0) return;
+      mergeCollisions(collisions, await findCollisions(opts.client as unknown as CollisionClient, batch.model, batch.rows));
+      batch.rows = [];
+    };
+
     for await (const line of lines) {
       const row = decodeRow(line);
       if (row.kind === 'manifest') { manifest = row as unknown as Manifest; continue; }
@@ -214,12 +249,28 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
       rowsInFile[model]++;
       totalRowsInFile++;
       secretsInFile += countSecrets(model, row);
+
+      // Nine of the sixteen models have no unique column but their primary key, tokenUsage — the
+      // largest by far — among them. Skipping those is what keeps a dry run's cost proportional to
+      // the part of the schema that can actually collide.
+      if (!checking || !MODELS_WITH_UNIQUE_COLUMNS.has(model)) continue;
+      if (batch && batch.model !== model) await check();
+      if (!batch || batch.model !== model) batch = { model, rows: [] };
+      batch.rows.push(row);
+      if (batch.rows.length >= CHECK_BATCH) await check();
     }
+    await check();
+
     assertComplete(manifest, trailer, rowsInFile, totalRowsInFile);
     return {
       ...plan(manifest, rowsInFile, totalRowsInFile, secretsInFile),
       mode: opts.mode, dryRun: true,
-      written, totalWritten: 0, secretsRekeyed: 0, tablesCleared: 0,
+      written, totalWritten: 0,
+      // Not `rowsInFile - written`: a dry run writes nothing on purpose, so reporting every row as
+      // "skipped" would describe the dry run rather than what a real restore would do.
+      skipped: zeroed(), totalSkipped: 0,
+      collisions,
+      secretsRekeyed: 0, tablesCleared: 0,
     };
   }
 
@@ -275,15 +326,56 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
     // Checked INSIDE the transaction, so a file that turns out to be incomplete rolls back
     // everything already written rather than leaving a partial gateway behind.
     assertComplete(manifest, trailer, rowsInFile, totalRowsInFile);
+    if (opts.mode === 'replace') assertNothingDropped(rowsInFile, written);
   }, { timeout: opts.timeoutMs ?? 120_000, maxWait: opts.timeoutMs ?? 120_000 });
+
+  const skipped = zeroed();
+  for (const m of MODEL_ORDER) skipped[m] = rowsInFile[m] - written[m];
 
   return {
     ...plan(manifest, rowsInFile, totalRowsInFile, secretsInFile),
     mode: opts.mode, dryRun: false,
     written,
     totalWritten: Object.values(written).reduce((a, b) => a + b, 0),
+    skipped,
+    totalSkipped: Object.values(skipped).reduce((a, b) => a + b, 0),
+    // A real restore cannot answer this: by the time a row is skipped the transaction is open and
+    // "stop and look at this" is no longer on offer. `totalSkipped` is the signal here, and a dry
+    // run is what turns that number into which rows and why.
+    collisions: [],
     secretsRekeyed, tablesCleared,
   };
+}
+
+/**
+ * On `replace`, every row in the file must land — so refuse if any did not.
+ *
+ * The tables were emptied moments earlier inside this same transaction, which means there is
+ * nothing left for a row to collide WITH. A shortfall is therefore not a duplicate being tolerated;
+ * it is rows disappearing, and the only honest response is to roll the whole thing back.
+ *
+ * This is the guard that would have caught the defect collisions.ts documents, had it been on the
+ * destructive path: `skipDuplicates` returning a smaller count than it was handed, and every layer
+ * above it reporting success.
+ *
+ * Exported only so it can be tested. The condition it guards against cannot be produced through
+ * `readBackup` — that is the point of it — so the alternative is a safety check that has never once
+ * been observed to fire, which is indistinguishable from one that does not work.
+ */
+export function assertNothingDropped(rowsInFile: Record<string, number>, written: Record<string, number>): void {
+  const lost = MODEL_ORDER
+    .filter((m) => written[m] < rowsInFile[m])
+    .map((m) => `${m} (${rowsInFile[m] - written[m]} of ${rowsInFile[m]} missing)`);
+  if (lost.length === 0) return;
+
+  throw new Error(
+    `Restore did not write every row it read: ${lost.join(', ')}. ` +
+    'Every table was emptied first, so nothing should have been skipped. Nothing has been changed.');
+}
+
+/** A per-model counter starting at zero, so every model appears in the report even at zero rows. */
+function zeroed(): Record<string, number> {
+  return Object.fromEntries(MODEL_ORDER.map((m) => [m, 0]));
 }
 
 function plan(
