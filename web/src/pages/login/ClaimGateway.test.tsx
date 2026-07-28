@@ -177,7 +177,7 @@ describe('the Recovery Kit (C6)', () => {
     fireEvent.click(screen.getByRole('button', { name: /create owner account/i }));
     await screen.findByText('Your owner account is ready.');
 
-    expect(screen.getByRole('button', { name: /download your kit to continue/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /confirm your passphrase to continue/i })).toBeDisabled();
     expect(onAuthed).not.toHaveBeenCalled();
   });
 

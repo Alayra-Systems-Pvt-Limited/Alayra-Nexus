@@ -53,7 +53,6 @@ export function ClaimGateway({
   const [backupPassphrase, setBackupPassphrase] = useState(() => generatePassphrase());
   const [chosen, setChosen] = useState('');
   const [masterKey, setMasterKey] = useState('');
-  const [kitDownloaded, setKitDownloaded] = useState(false);
   const [pasteBack, setPasteBack] = useState('');
 
   const passphrase = generated ? backupPassphrase : chosen;
@@ -136,7 +135,7 @@ export function ClaimGateway({
           <Button
             type="button"
             variant="secondary"
-            onClick={() => { download('alayra-nexus-recovery-kit.txt', kit); setKitDownloaded(true); }}
+            onClick={() => download('alayra-nexus-recovery-kit.txt', kit)}
           >
             <Download size={14} /> Download Recovery Kit
           </Button>
@@ -171,10 +170,11 @@ export function ClaimGateway({
             ever need it, resets it.
           </p>
 
+          {/* The label names the ACTUAL gate. An earlier draft said "Download your kit to
+              continue" while the button was in fact waiting on the paste-back — a instruction that
+              does not unblock the thing it points at is worse than no instruction. */}
           <Button variant="primary" disabled={!savedProof} onClick={onAuthed}>
-            {savedProof
-              ? 'Continue to your gateway'
-              : kitDownloaded ? 'Confirm your passphrase to continue' : 'Download your kit to continue'}
+            {savedProof ? 'Continue to your gateway' : 'Confirm your passphrase to continue'}
           </Button>
         </div>
       </div>
