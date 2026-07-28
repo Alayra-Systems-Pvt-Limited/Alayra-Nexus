@@ -69,3 +69,49 @@ describe('deleteKeys', () => {
     expect(unlink).not.toHaveBeenCalled();
   });
 });
+
+describe('deleteKeys with keys to spare (A2)', () => {
+  // A restore wipes `nexus:*` after it commits, which would take the maintenance flag with it and
+  // drop the gateway back into service partway through the operation the flag exists to announce.
+  it('leaves a spared key alone and deletes the rest of the page', async () => {
+    scan.mockResolvedValueOnce(['0', ['nexus:adminsession:a', 'nexus:maintenance', 'nexus:budget:t1']]);
+    unlink.mockResolvedValueOnce(2);
+
+    expect(await deleteKeys('nexus:*', ['nexus:maintenance'])).toBe(2);
+    expect(unlink).toHaveBeenCalledWith('nexus:adminsession:a', 'nexus:budget:t1');
+  });
+
+  it('spares across every page, not just the first', async () => {
+    scan
+      .mockResolvedValueOnce(['9', ['nexus:maintenance', 'a']])
+      .mockResolvedValueOnce(['0', ['nexus:maintenance', 'b']]);
+    unlink.mockResolvedValue(1);
+
+    expect(await deleteKeys('nexus:*', ['nexus:maintenance'])).toBe(2);
+    expect(unlink).toHaveBeenNthCalledWith(1, 'a');
+    expect(unlink).toHaveBeenNthCalledWith(2, 'b');
+  });
+
+  it('does not call unlink when a page held nothing but spared keys', async () => {
+    scan.mockResolvedValueOnce(['0', ['nexus:maintenance']]);
+    expect(await deleteKeys('nexus:*', ['nexus:maintenance'])).toBe(0);
+    expect(unlink).not.toHaveBeenCalled();
+  });
+
+  it('matches by exact name, never as a prefix', async () => {
+    // `nexus:maintenance:history` is a different key. Sparing it too would be a matcher that is
+    // quietly too generous — the mirror of the glob problem, and just as silent.
+    scan.mockResolvedValueOnce(['0', ['nexus:maintenance', 'nexus:maintenance:history']]);
+    unlink.mockResolvedValueOnce(1);
+
+    expect(await deleteKeys('nexus:*', ['nexus:maintenance'])).toBe(1);
+    expect(unlink).toHaveBeenCalledWith('nexus:maintenance:history');
+  });
+
+  it('behaves exactly as before when nothing is spared', async () => {
+    scan.mockResolvedValueOnce(['0', ['a', 'b']]);
+    unlink.mockResolvedValueOnce(2);
+    expect(await deleteKeys('x:*')).toBe(2);
+    expect(unlink).toHaveBeenCalledWith('a', 'b');
+  });
+});

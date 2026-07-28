@@ -203,6 +203,9 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
             skipped: result.totalSkipped,
             collisions: result.collisions.map((c) => `${c.model}.${c.column}×${c.count}`),
             secrets: result.secretsRekeyed, tablesCleared: result.tablesCleared,
+            // Sessions died with these. "Everyone was signed out at 14:02" is a question an
+            // auditor will ask, and the trail should not require inferring it from the mode.
+            kvKeysCleared: result.kvKeysCleared,
             from: result.gatewayVersion, takenAt: result.createdAt,
           }),
         });

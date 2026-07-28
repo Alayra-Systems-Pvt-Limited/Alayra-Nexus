@@ -42,14 +42,21 @@ export async function countKeys(pattern: string): Promise<number> {
  * Delete every key matching a glob pattern, page by page, with UNLINK — which reclaims the memory on
  * a background thread so a large purge never blocks the event loop other requests share. Returns the
  * number of keys removed.
+ *
+ * `keep` names keys to spare, by EXACT name rather than by pattern (A2). Exact, because the only
+ * caller that needs it — a restore wiping `nexus:*` — is sparing a specific coordination flag, and a
+ * second glob would be a second thing that can be subtly too greedy. `glob.ts` already explains what
+ * that costs when the pattern being matched decides what gets deleted.
  */
-export async function deleteKeys(pattern: string): Promise<number> {
+export async function deleteKeys(pattern: string, keep: readonly string[] = []): Promise<number> {
+  const spared = new Set(keep);
   let cursor = '0';
   let deleted = 0;
   do {
     const [next, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', SCAN_PAGE);
     cursor = next;
-    if (keys.length > 0) deleted += await redis.unlink(...keys);
+    const doomed = spared.size === 0 ? keys : keys.filter((k) => !spared.has(k));
+    if (doomed.length > 0) deleted += await redis.unlink(...doomed);
   } while (cursor !== '0');
   return deleted;
 }
