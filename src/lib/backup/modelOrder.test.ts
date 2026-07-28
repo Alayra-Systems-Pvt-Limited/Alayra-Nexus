@@ -16,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MODEL_ORDER, DELETE_ORDER, delegateName, modelName } from './modelOrder';
+import { dmmfModels } from './provenance';
 
 const schema = readFileSync(resolve(__dirname, '..', '..', '..', 'prisma', 'schema.prisma'), 'utf8');
 
@@ -95,6 +96,46 @@ describe('the write order satisfies every foreign key', () => {
 
   it('puts the largest table last, so a partial restore is diagnosable', () => {
     expect(MODEL_ORDER[MODEL_ORDER.length - 1]).toBe('tokenUsage');
+  });
+});
+
+describe('every backed-up model can actually be paged (C3)', () => {
+  // export.ts hardcodes `orderBy: { id: 'asc' }` and `cursor: { id }`. A model whose key is not a
+  // single scalar `id` would satisfy every other test here, ship, and then fail at the first backup
+  // any operator took — with a Prisma error about an unknown argument rather than anything that
+  // points at this decision.
+  //
+  // Checked against the DMMF rather than by parsing the schema text, because `@@id([a, b])` is a
+  // block attribute that a field-line regex does not see at all.
+  const models = dmmfModels();
+
+  it('found the models it claims to be checking', () => {
+    expect(models.length).toBe(MODEL_ORDER.length);
+  });
+
+  it('gives every model exactly one id field, named id', () => {
+    for (const model of models) {
+      const ids = model.fields.filter((f) => f.isId);
+      expect(ids.map((f) => f.name), `${model.name} must be keyed by a single scalar "id"`).toEqual(['id']);
+    }
+  });
+
+  it('gives no model a composite primary key', () => {
+    // `@@id([teamId, day])` leaves `primaryKey` non-null and no field marked isId, so a composite
+    // would slip past the check above on its own.
+    const composite = models.filter((m) => m.primaryKey !== null).map((m) => m.name);
+    expect(
+      composite,
+      `${composite.join(', ')} use a composite key. export.ts pages on a single "id" column — ` +
+      'teach it the composite cursor shape before removing this assertion.',
+    ).toEqual([]);
+  });
+
+  it('keys every model on a scalar, not a relation', () => {
+    for (const model of models) {
+      const id = model.fields.find((f) => f.isId);
+      expect(id?.kind, `${model.name}.id must be a scalar`).toBe('scalar');
+    }
   });
 });
 

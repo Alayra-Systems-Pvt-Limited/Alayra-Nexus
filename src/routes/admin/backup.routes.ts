@@ -249,6 +249,9 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
             // Sessions died with these. "Everyone was signed out at 14:02" is a question an
             // auditor will ask, and the trail should not require inferring it from the mode.
             kvKeysCleared: result.kvKeysCleared,
+            // Named in the trail because it is the difference between a restore that worked and one
+            // that looked like it did: the rows arrive, and SSO is quietly dead.
+            ...(result.missingEnv.length ? { missingEnv: result.missingEnv } : {}),
             from: result.gatewayVersion, takenAt: result.createdAt,
           }),
         });

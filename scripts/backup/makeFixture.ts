@@ -72,6 +72,12 @@ async function main(): Promise<void> {
   const summary = await writeBackup({
     client: fakeClient(), engine: 'postgres', passphrase: PASSPHRASE,
     out, gatewayVersion: 'fixture', includeGatewayRecipient: false,
+    // Pinned, not read from this process (C1, C5). A fixture that recorded the real schema shape
+    // would change every time the schema did, and one that recorded this machine's environment
+    // would open here and fail on a colleague's — a format fixture failing for reasons that have
+    // nothing to do with the format.
+    schema: { Fixture: ['id:String:req:def'] },
+    env: [],
   });
 
   mkdirSync(dirname(OUT), { recursive: true });

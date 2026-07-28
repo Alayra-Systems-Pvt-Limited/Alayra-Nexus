@@ -42,6 +42,7 @@ import type { PrismaClient } from '@prisma/client';
 import { decrypt } from '../encryption';
 import type { DbEngine } from '../mode';
 import { MODEL_ORDER } from './modelOrder';
+import { schemaShape, configuredEnvNames, type SchemaShape } from './provenance';
 import { rekeyRow, countSecrets } from './secrets';
 import { encodeRow } from './rowCodec';
 import {
@@ -71,6 +72,16 @@ export interface ExportOptions {
    * leaves the building, and a second way in only helps someone who already has the .env.
    */
   includeGatewayRecipient?: boolean;
+  /**
+   * Overrides for what the manifest records about the source (C1, C5).
+   *
+   * Both default to reading this process. They exist because the format fixture is generated from a
+   * fake client and must stay byte-reproducible — a fixture carrying whichever environment
+   * variables happened to be set on the machine that built it would open on one machine and fail on
+   * another, which is a test that fails for a reason unrelated to the format.
+   */
+  schema?: SchemaShape;
+  env?: string[];
 }
 
 export interface ExportSummary {
@@ -90,6 +101,16 @@ interface Manifest {
   /** The engine that WROTE it. Informational — a backup restores onto either. */
   engine: DbEngine;
   models: readonly string[];
+  /**
+   * The source gateway's column map (C1). What makes a backup checkable against a schema that has
+   * moved on, instead of failing partway through with a Prisma error naming one column.
+   */
+  schema: SchemaShape;
+  /**
+   * Which of the gateway's own settings were configured, BY NAME ONLY (C5). Never values — this
+   * file leaves the building. Lets a restore warn that the source had SSO and this gateway does not.
+   */
+  env: string[];
 }
 
 /** The last line. Its presence is what proves the export ran to completion. */
@@ -161,6 +182,8 @@ export async function writeBackup(opts: ExportOptions): Promise<ExportSummary> {
     gatewayVersion: opts.gatewayVersion,
     engine: opts.engine,
     models: MODEL_ORDER,
+    schema: opts.schema ?? schemaShape(),
+    env: opts.env ?? configuredEnvNames(),
   };
   await write(cipher, `${JSON.stringify(manifest)}\n`);
 

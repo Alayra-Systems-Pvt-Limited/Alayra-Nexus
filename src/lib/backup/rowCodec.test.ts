@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+
 import { encodeRow, decodeRow } from './rowCodec';
 
 const round = (row: Record<string, unknown>) => decodeRow(encodeRow(row));
@@ -99,5 +100,55 @@ describe('decodeRow refuses what it cannot trust', () => {
   it('leaves an object that merely resembles a tag alone when it has other keys', () => {
     const out = decodeRow('{"v":{"$d":"2026-01-01T00:00:00.000Z","other":1}}');
     expect(out.v).toEqual({ $d: '2026-01-01T00:00:00.000Z', other: 1 });
+  });
+});
+
+describe('binary columns (C2)', () => {
+  // Defensive: no Bytes column exists in this schema today. It is here because adding a tag costs
+  // an hour now and is a format change once backup files exist in the world -- and because the
+  // failure without it is the worst kind: export SUCCEEDS and restore fails, so an operator learns
+  // their backups were unusable at the moment they needed one.
+  it('round-trips a Buffer as a Buffer', () => {
+    const row = round({ id: 'k1', blob: Buffer.from([0x00, 0xff, 0x10, 0x7f]) });
+    expect(Buffer.isBuffer(row.blob)).toBe(true);
+    expect((row.blob as Buffer).equals(Buffer.from([0x00, 0xff, 0x10, 0x7f]))).toBe(true);
+  });
+
+  it('does not fall back to Buffer own toJSON', () => {
+    // Untagged, JSON.stringify calls Buffer.toJSON and writes {"type":"Buffer","data":[0,255,...]} --
+    // roughly twice the size of the bytes it describes, and JSON.parse hands that back as a plain
+    // object that Prisma will not accept.
+    const line = encodeRow({ blob: Buffer.from([1, 2, 3]) });
+    expect(line).not.toContain('"type"');
+    expect(line).not.toContain('"data"');
+    expect(JSON.parse(line).blob).toEqual({ $b: 'AQID' });
+  });
+
+  it('handles a Uint8Array, which has no toJSON at all', () => {
+    // A different wrong answer to the same question: untagged it serialises as {"0":1,"1":2,...}.
+    const row = round({ blob: new Uint8Array([1, 2, 3]) });
+    expect(Buffer.isBuffer(row.blob)).toBe(true);
+    expect((row.blob as Buffer).equals(Buffer.from([1, 2, 3]))).toBe(true);
+  });
+
+  it('survives bytes that are not valid text', () => {
+    const raw = Buffer.from([0xc3, 0x28, 0xa0, 0xa1, 0x00, 0xfe]);   // invalid UTF-8 on purpose
+    expect((round({ blob: raw }).blob as Buffer).equals(raw)).toBe(true);
+  });
+
+  it('round-trips an empty buffer as an empty buffer, not as null', () => {
+    const row = round({ blob: Buffer.alloc(0) });
+    expect(Buffer.isBuffer(row.blob)).toBe(true);
+    expect((row.blob as Buffer).length).toBe(0);
+  });
+
+  it('leaves a string that merely looks like a tag alone', () => {
+    // The same trap the date tagging avoids: a column genuinely holding that text must come back as
+    // that text, not as bytes.
+    expect(round({ note: '{"$b":"AQID"}' }).note).toBe('{"$b":"AQID"}');
+  });
+
+  it('stays out of the way of a row with no binary in it', () => {
+    expect(encodeRow({ id: 'x', n: 1, s: 'y' })).toBe('{"id":"x","n":1,"s":"y"}');
   });
 });

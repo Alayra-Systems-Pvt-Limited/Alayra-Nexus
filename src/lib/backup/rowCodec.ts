@@ -44,12 +44,17 @@
 interface DateTag { $d: string }
 /** A value that was a BigInt. */
 interface BigIntTag { $n: string }
+/** A value that was binary — a `Bytes` column. Base64, because JSON has no bytes. */
+interface BytesTag { $b: string }
 
 const isDateTag = (v: unknown): v is DateTag =>
   typeof v === 'object' && v !== null && typeof (v as DateTag).$d === 'string' && Object.keys(v).length === 1;
 
 const isBigIntTag = (v: unknown): v is BigIntTag =>
   typeof v === 'object' && v !== null && typeof (v as BigIntTag).$n === 'string' && Object.keys(v).length === 1;
+
+const isBytesTag = (v: unknown): v is BytesTag =>
+  typeof v === 'object' && v !== null && typeof (v as BytesTag).$b === 'string' && Object.keys(v).length === 1;
 
 /**
  * NOT an arrow function, and that is the whole point: `this` is the object being serialised, so
@@ -59,6 +64,13 @@ function replacer(this: Record<string, unknown>, key: string, value: unknown): u
   const raw = this?.[key];
   if (raw instanceof Date) return { $d: raw.toISOString() };
   if (typeof raw === 'bigint') return { $n: raw.toString() };
+  // Buffer has a toJSON too, so untagged binary arrives here as {type:"Buffer",data:[…]} — an array
+  // of numbers roughly twice the size of the bytes it describes, which JSON.parse then hands back
+  // as a plain object. Export would succeed and restore would fail on a value Prisma cannot accept.
+  // Uint8Array is checked as well: it has NO toJSON, so it would serialise as {"0":12,"1":255,…},
+  // which is a different wrong answer to the same question.
+  if (Buffer.isBuffer(raw)) return { $b: raw.toString('base64') };
+  if (raw instanceof Uint8Array) return { $b: Buffer.from(raw).toString('base64') };
   return value;
 }
 
@@ -76,6 +88,7 @@ function revive(value: unknown): unknown {
     return d;
   }
   if (isBigIntTag(value)) return BigInt(value.$n);
+  if (isBytesTag(value)) return Buffer.from(value.$b, 'base64');
   if (typeof value === 'object' && value !== null) {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) out[k] = revive(v);

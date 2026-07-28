@@ -52,6 +52,7 @@ import { createManyIgnoringDuplicates, type BulkDelegate } from '../bulkInsert';
 import { MODEL_ORDER } from './modelOrder';
 import { rekeyRow, countSecrets } from './secrets';
 import { decodeRow } from './rowCodec';
+import { missingEnvNames, type SchemaShape } from './provenance';
 import {
   findCollisions, mergeCollisions, MODELS_WITH_UNIQUE_COLUMNS,
   type Collision, type CollisionClient,
@@ -122,6 +123,22 @@ export interface RestorePlan {
   rowsInFile: Record<string, number>;
   totalRowsInFile: number;
   secretsInFile: number;
+  /**
+   * The source's column map, when the file carries one (C1).
+   *
+   * Null for anything written before C1 — reported rather than refused. A backup that predates the
+   * check is not a backup that failed it, and refusing every older file would be a data-loss policy
+   * dressed as caution. Acting on this is C4's job; this only surfaces it.
+   */
+  sourceSchema: SchemaShape | null;
+  /**
+   * Settings the source gateway had configured that this one does not (C5), by name.
+   *
+   * Empty when the file predates C5 or when nothing is missing. This is the difference between a
+   * restore that worked and one that looked like it did: the data arrives, and single sign-on is
+   * quietly dead because SSO_CLIENT_ID lives in an environment that did not come with it.
+   */
+  missingEnv: string[];
 }
 
 export interface RestoreResult extends RestorePlan {
@@ -219,7 +236,19 @@ async function* decryptedLines(input: Readable, passphrase?: string): AsyncGener
   if (carry.trim()) yield carry;
 }
 
-interface Manifest { kind: string; createdAt?: string; gatewayVersion?: string; engine?: string }
+/**
+ * Read structurally, and only for what is needed — which is what makes the format additive.
+ *
+ * A manifest written by a NEWER gateway carries fields this does not name, and they are ignored
+ * rather than refused, so a v1.4 backup still opens on a v1.3 gateway (without the checks v1.4
+ * added, which is the honest degradation). It is also why C1 and C5 did not need a version bump:
+ * nothing here breaks when the manifest grows.
+ */
+interface Manifest {
+  kind: string; createdAt?: string; gatewayVersion?: string; engine?: string;
+  schema?: SchemaShape;
+  env?: string[];
+}
 interface Trailer { kind: string; rowsByModel?: Record<string, number>; totalRows?: number; secrets?: number }
 
 /** A batch waiting to be written, and the model it belongs to. */
@@ -462,6 +491,8 @@ function plan(
     createdAt: manifest?.createdAt ?? 'unknown',
     sourceEngine: manifest?.engine ?? 'unknown',
     rowsInFile, totalRowsInFile, secretsInFile,
+    sourceSchema: manifest?.schema ?? null,
+    missingEnv: missingEnvNames(manifest?.env),
   };
 }
 
