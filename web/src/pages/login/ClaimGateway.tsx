@@ -1,10 +1,11 @@
 import { useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { ShieldCheck, KeyRound, Download, ShieldQuestion, UserPlus, Building2, ArrowLeft } from 'lucide-preact';
+import { ShieldCheck, KeyRound, Download, ShieldQuestion, UserPlus, Building2, ArrowLeft, Archive, RefreshCw } from 'lucide-preact';
 import { claimGateway, PUT } from '../../api';
 import { Button, Field, Input, PasswordInput, PasswordStrength, FormError, CopyButton } from '../../ui';
 import { download } from '../../lib/download';
-import { recoveryKeyFile } from './recoveryFile';
+import { recoveryKitFile } from './recoveryFile';
+import { generatePassphrase, PASSPHRASE_BITS } from './passphrase';
 import s from '../login.module.css';
 
 // First run (Phase 7.13a; restyled as a stepped wizard in 7.16b): the screen that turns a gateway
@@ -20,6 +21,8 @@ import s from '../login.module.css';
 // from first paint. Failing to save it never blocks onboarding.
 
 const MIN_PASSWORD = 12;
+/** Matches passphraseProblem() on the server; a shorter one would be accepted here and refused there. */
+const MIN_PASSPHRASE = 12;
 
 export function ClaimGateway({
   brand, carriesExistingTwoFactor, onAuthed,
@@ -28,7 +31,7 @@ export function ClaimGateway({
   carriesExistingTwoFactor: boolean;
   onAuthed: () => void;
 }) {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [masterPassword, setMasterPassword] = useState('');
   const [name, setName]         = useState('');
   const [email, setEmail]       = useState('');
@@ -44,10 +47,26 @@ export function ClaimGateway({
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [carried, setCarried] = useState(false);
 
+  // Step 4 (C6). `generated` is what decides whether the passphrase may be written into the kit:
+  // one we made exists nowhere else in this person's life, one they chose probably does.
+  const [generated, setGenerated] = useState(true);
+  const [backupPassphrase, setBackupPassphrase] = useState(() => generatePassphrase());
+  const [chosen, setChosen] = useState('');
+  const [masterKey, setMasterKey] = useState('');
+  const [kitDownloaded, setKitDownloaded] = useState(false);
+  const [pasteBack, setPasteBack] = useState('');
+
+  const passphrase = generated ? backupPassphrase : chosen;
+
   const mismatch  = confirm.length > 0 && confirm !== password;
   const step1Ok = masterPassword.length > 0;
   const step2Ok = name.trim().length > 0 && email.trim().length > 0
     && password.length >= MIN_PASSWORD && confirm === password;
+  const step4Ok = passphrase.length >= MIN_PASSPHRASE;
+
+  // The paste-back gate. A checkbox saying "I saved it" is a lie detector that does not work —
+  // everybody ticks it. You cannot paste what you did not save.
+  const savedProof = pasteBack.trim() === passphrase;
 
   const finish = async () => {
     if (busy) return;
@@ -55,8 +74,9 @@ export function ClaimGateway({
     // try/catch/finally so a thrown claim (network drop) surfaces an error and re-enables the button,
     // rather than leaving the wizard permanently stuck on "Creating your account…".
     try {
-      const r = await claimGateway({ masterPassword, name, email, password });
+      const r = await claimGateway({ masterPassword, name, email, password, backupPassphrase: passphrase });
       if (!r.ok) { setError(r.error ?? 'Could not create your account.'); return; }
+      setMasterKey(r.masterEncryptionKey ?? '');
       // The claim signed us in; name the workspace if one was given. Best-effort — a branding failure
       // must never strand a freshly-created owner outside their gateway.
       if (orgName.trim()) {
@@ -72,6 +92,15 @@ export function ClaimGateway({
   };
 
   if (recoveryKey !== null) {
+    const kit = recoveryKitFile({
+      organisation: orgName.trim(),
+      gatewayUrl: window.location.origin,
+      accountRecoveryKey: recoveryKey,
+      masterEncryptionKey: masterKey,
+      // Only ours goes in the file. See recoveryFile.ts for why a self-chosen one gets a blank line.
+      backupPassphrase: generated ? passphrase : null,
+    });
+
     return (
       <div class={s.wrap}>
         <div class={s.card}>
@@ -81,18 +110,53 @@ export function ClaimGateway({
             <span>Your owner account is ready.</span>
           </div>
 
-          <Field
-            label="Your recovery key"
-            hint="Save this somewhere safe. It is the only way back in if you forget your password — and this is the only time it is shown."
-          >
+          <p class={s.hint}>
+            One file holds everything needed to recover this gateway: your account recovery key, your
+            master encryption key, and{' '}
+            {generated ? 'your backup passphrase' : 'a blank line to write your backup passphrase on'}.
+            Keep it somewhere safe and offline.
+          </p>
+
+          <Field label="Your account recovery key" hint="Gets you back in if you forget your password. Shown only once.">
             <div class={s.keyRow}>
               <code class={s.key}>{recoveryKey}</code>
               <CopyButton value={recoveryKey} label="Copy" variant="secondary" />
-              <Button type="button" variant="secondary" onClick={() => download('nexus-recovery-key.txt', recoveryKeyFile(recoveryKey))}>
-                <Download size={14} /> Download
-              </Button>
             </div>
           </Field>
+
+          {generated && (
+            <Field label="Your backup passphrase" hint="Opens your backups on a new machine. Without it a backup cannot be opened at all.">
+              <div class={s.keyRow}>
+                <code class={s.key}>{passphrase}</code>
+                <CopyButton value={passphrase} label="Copy" variant="secondary" />
+              </div>
+            </Field>
+          )}
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => { download('alayra-nexus-recovery-kit.txt', kit); setKitDownloaded(true); }}
+          >
+            <Download size={14} /> Download Recovery Kit
+          </Button>
+
+          {/* The gate. Not a checkbox: you cannot paste what you did not save. */}
+          <Field
+            label="Confirm you saved it"
+            hint="Type or paste your backup passphrase back. We ask because we cannot recover it for you."
+          >
+            <Input
+              value={pasteBack}
+              autoComplete="off"
+              spellcheck={false}
+              placeholder={generated ? 'copper-lantern-drift-…' : 'Your backup passphrase'}
+              onInput={(e) => setPasteBack((e.target as HTMLInputElement).value)}
+            />
+          </Field>
+          {pasteBack.length > 0 && !savedProof && (
+            <p class={s.confirmErr}>That does not match. Check the kit you just downloaded.</p>
+          )}
 
           {carried && (
             <p class={s.hint}>
@@ -107,8 +171,10 @@ export function ClaimGateway({
             ever need it, resets it.
           </p>
 
-          <Button variant="primary" onClick={onAuthed}>
-            I’ve saved my recovery key — continue
+          <Button variant="primary" disabled={!savedProof} onClick={onAuthed}>
+            {savedProof
+              ? 'Continue to your gateway'
+              : kitDownloaded ? 'Confirm your passphrase to continue' : 'Download your kit to continue'}
           </Button>
         </div>
       </div>
@@ -125,8 +191,8 @@ export function ClaimGateway({
           <span>Set up your gateway</span>
         </div>
 
-        <div class={s.stepper} role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={3} aria-label={`Step ${step} of 3`}>
-          {[1, 2, 3].map((n) => (
+        <div class={s.stepper} role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={4} aria-label={`Step ${step} of 4`}>
+          {[1, 2, 3, 4].map((n) => (
             <span key={n} class={n === step ? s.stepDotActive : n < step ? s.stepDotDone : s.stepDot} />
           ))}
         </div>
@@ -212,12 +278,80 @@ export function ClaimGateway({
             <Field label="Organization name" hint="optional">
               <Input value={orgName} autoFocus placeholder="Acme Corp"
                 onInput={(e) => setOrgName((e.target as HTMLInputElement).value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void finish(); }} />
+                onKeyDown={(e) => { if (e.key === 'Enter') setStep(4); }} />
             </Field>
 
             <div class={s.stepActions}>
-              <Button variant="ghost" onClick={() => setStep(2)} disabled={busy}><ArrowLeft size={14} /> Back</Button>
-              <Button variant="primary" disabled={busy} onClick={finish}>
+              <Button variant="ghost" onClick={() => setStep(2)}><ArrowLeft size={14} /> Back</Button>
+              <Button variant="primary" onClick={() => setStep(4)}>Continue</Button>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div key="s4" class={s.step}>
+            <div class={s.stepHead}>
+              <div class={s.stepTitle}><Archive size={16} /> Protect your backups</div>
+              <p class={s.hint}>
+                This gateway will back itself up without anyone present. Your passphrase locks those
+                backups to you — the server keeps only the half that can lock them, never the half
+                that opens them. Even someone who steals the whole machine cannot read them.
+              </p>
+            </div>
+
+            <div class={s.stepActions}>
+              <Button
+                type="button"
+                variant={generated ? 'primary' : 'ghost'}
+                onClick={() => setGenerated(true)}
+              >
+                Generate one for me
+              </Button>
+              <Button
+                type="button"
+                variant={generated ? 'ghost' : 'primary'}
+                onClick={() => setGenerated(false)}
+              >
+                I’ll choose my own
+              </Button>
+            </div>
+
+            {generated ? (
+              <Field
+                label="Your backup passphrase"
+                hint={`${PASSPHRASE_BITS} bits of randomness. Because we generated it, it goes in your Recovery Kit — it exists nowhere else, so writing it down costs you nothing.`}
+              >
+                <div class={s.keyRow}>
+                  <code class={s.key}>{backupPassphrase}</code>
+                  <Button type="button" variant="secondary" onClick={() => setBackupPassphrase(generatePassphrase())}>
+                    <RefreshCw size={14} /> New one
+                  </Button>
+                </div>
+              </Field>
+            ) : (
+              <Field
+                label="Choose a backup passphrase"
+                hint="At least 12 characters. This one will NOT be written into your Recovery Kit — people reuse passwords, and a file that leaked would expose everything else it unlocks too. The kit leaves a line for you to write it on."
+              >
+                <Input
+                  value={chosen}
+                  autoFocus
+                  autoComplete="off"
+                  spellcheck={false}
+                  placeholder="Something you will still have in a year"
+                  onInput={(e) => setChosen((e.target as HTMLInputElement).value)}
+                />
+              </Field>
+            )}
+
+            <p class={s.note}>
+              We cannot recover this for you. There is no reset link — that is what makes a backup
+              worth taking.
+            </p>
+
+            <div class={s.stepActions}>
+              <Button variant="ghost" onClick={() => setStep(3)} disabled={busy}><ArrowLeft size={14} /> Back</Button>
+              <Button variant="primary" disabled={busy || !step4Ok} onClick={finish}>
                 {busy ? 'Creating your account…' : 'Create owner account'}
               </Button>
             </div>

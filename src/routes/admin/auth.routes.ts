@@ -242,6 +242,8 @@ export default async function adminAuthRoutes(fastify: FastifyInstance) {
       name:           z.string().min(1).max(80),
       email:          z.string().min(3).max(200),
       password:       z.string().min(1).max(200),
+      // Optional so a scripted claim still works and an upgrade is never blocked by it (C6).
+      backupPassphrase: z.string().min(12).max(200).optional(),
     });
     const parsed = schema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Fill in every field to create your account.' });
@@ -253,7 +255,12 @@ export default async function adminAuthRoutes(fastify: FastifyInstance) {
       recordAudit({
         action: 'admin.claim', method: 'POST', actorRole: 'owner', actor: 'password',
         actorId: result.user.id, actorName: result.user.name, ip: request.ip, status: 200,
-        detail: JSON.stringify({ twoFactorCarriedOver: result.twoFactorCarriedOver }),
+        detail: JSON.stringify({
+          twoFactorCarriedOver: result.twoFactorCarriedOver,
+          // Recorded because "were this gateway's backups ever protected by a key the server cannot
+          // open" is a question an auditor will ask, and the answer is decided exactly here.
+          backupRecoveryKey: result.recoveryKeySet,
+        }),
       });
       // Signed in immediately: making someone create an account and then type the password they
       // just chose is ceremony, not security.
@@ -265,6 +272,10 @@ export default async function adminAuthRoutes(fastify: FastifyInstance) {
         user: result.user,
         recoveryKey: result.recoveryKey,
         twoFactorCarriedOver: result.twoFactorCarriedOver,
+        // For the Recovery Kit, and returned only to a caller who has already proved they hold the
+        // environment this came from. Never cached or stored by an intermediary on the way.
+        masterEncryptionKey: result.masterEncryptionKey,
+        backupRecoveryKeySet: result.recoveryKeySet,
         token: session.token,
         expiresIn: session.expiresIn,
         role: result.user.role,

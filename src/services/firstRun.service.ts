@@ -21,6 +21,7 @@ import { createUser, isUnclaimed, AdminUserError, type AdminUserView } from './a
 import { deleteKeys } from '../lib/redisScan';
 import { drainAudit } from './audit.service';
 import { drainUsage } from './usagePipeline';
+import { createRecoveryKey, saveRecoveryKey } from './backupRecovery.service';
 
 // ── First run: claiming the gateway (Phase 7.13a) ─────────────────────────────
 //
@@ -60,6 +61,14 @@ export interface ClaimInput {
   name: string;
   email: string;
   password: string;
+  /**
+   * The backup passphrase, which mints this gateway's recovery key (C6).
+   *
+   * Optional so that an automated or scripted claim still works, and so an operator who upgrades
+   * into this version is not locked out of setting up. A gateway without one still takes backups —
+   * they simply have no recipient the server cannot open.
+   */
+  backupPassphrase?: string;
 }
 
 export interface ClaimResult {
@@ -67,6 +76,18 @@ export interface ClaimResult {
   recoveryKey: string;
   /** True when the operator's existing authenticator was carried across and still works. */
   twoFactorCarriedOver: boolean;
+  /**
+   * The gateway's own MASTER_ENCRYPTION_KEY, so the Recovery Kit can carry it (C6).
+   *
+   * Returned to a caller who has ALREADY proved they hold the server's environment, by presenting
+   * ADMIN_PASSWORD from it. Someone who can reach this endpoint successfully can read the .env this
+   * came from, so handing it back grants nothing new — and it is the difference between an operator
+   * who loses their server and one who loses their gateway, since without this key the data is
+   * undecryptable even with a perfect backup.
+   */
+  masterEncryptionKey: string;
+  /** Whether a recovery key was actually minted, so the kit does not promise one that is absent. */
+  recoveryKeySet: boolean;
 }
 
 /**
@@ -132,7 +153,28 @@ export async function claimGateway(input: ClaimInput): Promise<ClaimResult> {
     ]);
   }
 
-  return { user, recoveryKey: recoveryKey as string, twoFactorCarriedOver: carryOver };
+  // Mint the backup recovery key (C6). Deliberately AFTER the account exists and deliberately not
+  // fatal: a gateway with an owner and no recovery key still works and still takes backups, whereas
+  // failing the claim here would leave someone unable to finish setting up over a feature they can
+  // add later. The kit is told which of the two happened rather than promising a key that is absent.
+  let recoveryKeySet = false;
+  if (input.backupPassphrase) {
+    try {
+      await saveRecoveryKey(await createRecoveryKey(input.backupPassphrase));
+      recoveryKeySet = true;
+    } catch (e) {
+      console.error(`⚠️  Could not create this gateway's backup recovery key: ${(e as Error).message}`);
+    }
+  }
+
+  return {
+    user,
+    recoveryKey: recoveryKey as string,
+    twoFactorCarriedOver: carryOver,
+    // Read here rather than in the route so the whole result is assembled in one place.
+    masterEncryptionKey: process.env.MASTER_ENCRYPTION_KEY ?? '',
+    recoveryKeySet,
+  };
 }
 
 // ── Factory reset (Phase 7.13b) ───────────────────────────────────────────────

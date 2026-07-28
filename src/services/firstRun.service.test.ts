@@ -16,7 +16,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { prismaMock, usersMock } = vi.hoisted(() => ({
+const { prismaMock, usersMock, createRecoveryKey, saveRecoveryKey } = vi.hoisted(() => ({
   prismaMock: {
     adminAuth:         { findUnique: vi.fn(), update: vi.fn(() => 'update-auth') },
     adminUser:         { update: vi.fn(() => 'update-user') },
@@ -25,6 +25,8 @@ const { prismaMock, usersMock } = vi.hoisted(() => ({
     $transaction: vi.fn(async (ops: unknown[]) => ops),
   },
   usersMock: { createUser: vi.fn(), isUnclaimed: vi.fn() },
+  createRecoveryKey: vi.fn(async () => ({ publicDer: 'pub', sealed: {} })),
+  saveRecoveryKey: vi.fn(async () => undefined),
 }));
 
 vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
@@ -33,6 +35,7 @@ vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 vi.mock('../lib/redisScan', () => ({ deleteKeys: vi.fn(async () => 0) }));
 vi.mock('./audit.service', () => ({ drainAudit: vi.fn(async () => undefined) }));
 vi.mock('./usagePipeline', () => ({ drainUsage: vi.fn(async () => undefined) }));
+vi.mock('./backupRecovery.service', () => ({ createRecoveryKey, saveRecoveryKey }));
 vi.mock('./adminUsers.service', async () => {
   // The real error class travels through: the routes map its `status`, so a stub that threw a plain
   // Error would let a broken status mapping pass unnoticed.
@@ -138,5 +141,44 @@ describe('claimGateway — carrying an existing second factor across', () => {
     const result = await claimGateway(INPUT);
     expect(result.twoFactorCarriedOver).toBe(false);
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('the backup recovery key at claim time (C6)', () => {
+  it('mints one from the passphrase the operator chose', async () => {
+    const r = await claimGateway({ ...INPUT, backupPassphrase: 'a-long-enough-passphrase' });
+
+    expect(createRecoveryKey).toHaveBeenCalledWith('a-long-enough-passphrase');
+    expect(saveRecoveryKey).toHaveBeenCalled();
+    expect(r.recoveryKeySet).toBe(true);
+  });
+
+  it('does not mint one when no passphrase was given', async () => {
+    // A scripted claim, or an upgrade. The gateway still works and still takes backups -- they
+    // simply have no recipient the server cannot open.
+    const r = await claimGateway(INPUT);
+
+    expect(createRecoveryKey).not.toHaveBeenCalled();
+    expect(r.recoveryKeySet).toBe(false);
+  });
+
+  it('still creates the owner when the recovery key cannot be minted', async () => {
+    // Failing the whole claim here would leave someone unable to finish setting up their gateway
+    // over a feature they can add later. The result says which of the two happened rather than
+    // letting the kit promise a key that is absent.
+    saveRecoveryKey.mockRejectedValueOnce(new Error('database unavailable'));
+
+    const r = await claimGateway({ ...INPUT, backupPassphrase: 'a-long-enough-passphrase' });
+
+    expect(r.user).toEqual(OWNER);
+    expect(r.recoveryKeySet).toBe(false);
+  });
+
+  it('returns the master encryption key for the Recovery Kit', async () => {
+    // Handed back only to a caller who already proved they hold the environment it came from, by
+    // presenting ADMIN_PASSWORD out of that same .env.
+    process.env.MASTER_ENCRYPTION_KEY = 'ab'.repeat(32);
+    const r = await claimGateway(INPUT);
+    expect(r.masterEncryptionKey).toBe('ab'.repeat(32));
   });
 });

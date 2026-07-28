@@ -201,12 +201,16 @@ export interface ClaimOutcome {
   ok: boolean;
   recoveryKey?: string;
   twoFactorCarriedOver?: boolean;
+  /** MASTER_ENCRYPTION_KEY, for the Recovery Kit. Returned only to a caller who proved they hold it. */
+  masterEncryptionKey?: string;
+  /** Whether a backup recovery key was actually minted, so the kit does not promise an absent one. */
+  backupRecoveryKeySet?: boolean;
   error?: string;
 }
 
 /** Create the first owner account, proving control with the server's ADMIN_PASSWORD. */
 export async function claimGateway(input: {
-  masterPassword: string; name: string; email: string; password: string;
+  masterPassword: string; name: string; email: string; password: string; backupPassphrase?: string;
 }): Promise<ClaimOutcome> {
   let res: Response;
   try {
@@ -226,6 +230,8 @@ export async function claimGateway(input: {
       ok: true,
       recoveryKey: String(b.recoveryKey ?? ''),
       twoFactorCarriedOver: !!b.twoFactorCarriedOver,
+      masterEncryptionKey: String(b.masterEncryptionKey ?? ''),
+      backupRecoveryKeySet: !!b.backupRecoveryKeySet,
     };
   }
   return { ok: false, error: String(b.error ?? 'Could not create your account.') };
