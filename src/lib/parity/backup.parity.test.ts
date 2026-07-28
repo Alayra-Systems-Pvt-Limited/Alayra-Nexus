@@ -21,7 +21,7 @@ import type { PrismaClient } from '@prisma/client';
 import { startEngines, PARITY_DATABASE_URL, PARITY_TIMEOUT, type Engines } from './harness';
 import { encrypt, decrypt } from '../encryption';
 import { writeBackup } from '../backup/export';
-import { readBackup } from '../backup/restore';
+import { readBackup, RestoreTimeoutError } from '../backup/restore';
 
 const enabled = !!PARITY_DATABASE_URL;
 const PASS = 'a-long-enough-backup-passphrase';
@@ -274,6 +274,62 @@ describe.skipIf(!enabled)('a backup can be wrapped for the gateway as well', { t
     await expect(readBackup({
       client: e.sqlite, engine: 'sqlite', input: Readable.from(file), mode: 'merge', dryRun: true,
     })).rejects.toThrow(/No passphrase was given/i);
+  });
+});
+
+describe.skipIf(!enabled)('a restore that runs out of time says so, and changes nothing', { timeout: PARITY_TIMEOUT }, () => {
+  // Proven by measurement before this was written: Prisma's default transaction budget is 5s and a
+  // 6s body fails with P2028, while the same body under an explicit 30s or 30min budget succeeds.
+  // So the option is honoured and is not clamped — the two-minute ceiling was simply never raised
+  // by anything, because the route passed no timeout at all.
+  //
+  // A one-millisecond budget is the only reliable way to observe the expiry without making the
+  // suite wait minutes for it. What matters is not the number but the two properties: the failure
+  // is reported as a TIMEOUT rather than as a damaged file, and the database is untouched.
+  let e: Engines;
+  let file: Buffer;
+
+  beforeAll(async () => {
+    e = startEngines('backup-timeout');
+    await seedSecrets(e.pg);
+    file = await exportFrom(e.pg, 'postgres');
+  }, 120_000);
+  afterAll(async () => { await e?.dispose(); });
+
+  it('raises RestoreTimeoutError rather than something that reads as corruption', async () => {
+    // The distinction is the whole point. Told their backup "may be damaged or incomplete", an
+    // operator goes looking for a problem that does not exist — and may throw away the only copy.
+    await expect(restoreInto(e.sqlite, 'sqlite', file, { timeoutMs: 1 }))
+      .rejects.toThrow(RestoreTimeoutError);
+  });
+
+  it('names the setting that would fix it', async () => {
+    await expect(restoreInto(e.sqlite, 'sqlite', file, { timeoutMs: 1 }))
+      .rejects.toThrow(/NEXUS_RESTORE_TIMEOUT_MS/);
+  });
+
+  it('leaves the database exactly as it was', async () => {
+    // `replace` empties every table as its first act, so a timeout that did not roll back would
+    // leave an empty gateway — the worst outcome this feature can produce.
+    await e.sqlite.nexusProvider.create({ data: { id: 'keep', name: 'Untouched', slug: 'untouched', provider: 'openai' } });
+
+    await expect(restoreInto(e.sqlite, 'sqlite', file, { timeoutMs: 1 })).rejects.toThrow();
+
+    expect(await e.sqlite.nexusProvider.count()).toBe(1);
+    expect((await e.sqlite.nexusProvider.findUnique({ where: { id: 'keep' } }))!.name).toBe('Untouched');
+  });
+
+  it('does the same on PostgreSQL, where the transaction is a different implementation', async () => {
+    await expect(restoreInto(e.pg, 'postgres', file, { timeoutMs: 1 }))
+      .rejects.toThrow(RestoreTimeoutError);
+    // The source gateway still holds its own rows: the failed restore rolled back over them.
+    expect(await e.pg.nexusProvider.count()).toBe(1);
+  });
+
+  it('succeeds with a realistic budget, so the tiny one proved the timeout and not a broken file', async () => {
+    // Without this, every assertion above would still pass if the file were simply unreadable.
+    const r = await restoreInto(e.sqlite, 'sqlite', file, { timeoutMs: 120_000 });
+    expect(r.totalWritten).toBe(6);
   });
 });
 

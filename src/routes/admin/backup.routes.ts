@@ -45,9 +45,10 @@ import { adminOwnerGuard } from './guard';
 import { AUTH_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
 import { safeEqual } from '../../lib/timingSafe';
 import { recordAudit } from '../../services/audit.service';
-import { exportBackup, restoreBackup, backupFilename } from '../../services/backup.service';
+import { envInt } from '../../lib/envNumber';
+import { exportBackup, restoreBackup, backupFilename, RESTORE_TIMEOUT_ENV } from '../../services/backup.service';
 import { passphraseProblem } from '../../lib/backup/format';
-import type { RestoreMode } from '../../lib/backup/restore';
+import { RestoreTimeoutError, type RestoreMode } from '../../lib/backup/restore';
 
 /** Typed exactly as the factory reset's, so the two destructive actions feel the same. */
 export const RESTORE_CONFIRM_PHRASE = 'REPLACE ALL DATA';
@@ -58,8 +59,14 @@ export const RESTORE_CONFIRM_PHRASE = 'REPLACE ALL DATA';
  * The server's global multipart cap is 26 MB, sized for an audio file, and a gateway with real
  * usage history will exceed that easily — so this route raises its own limit rather than failing a
  * restore for a reason that has nothing to do with backups.
+ *
+ * Read through `envInt` rather than `parseInt` (A3): `parseInt('2gb', 10)` is 2, which turned a
+ * generous cap into a two-byte one that rejected every backup ever taken, with no message saying
+ * why. Read per call so the value is testable and so a container restart is enough to change it.
  */
-const MAX_BACKUP_BYTES = parseInt(process.env.NEXUS_MAX_BACKUP_BYTES ?? String(2 * 1024 * 1024 * 1024), 10);
+const DEFAULT_MAX_BACKUP_BYTES = 2 * 1024 * 1024 * 1024;
+const maxBackupBytes = (): number =>
+  envInt('NEXUS_MAX_BACKUP_BYTES', DEFAULT_MAX_BACKUP_BYTES, { min: 1024 });
 
 /** The audit fields every entry here shares. */
 function actor(request: FastifyRequest) {
@@ -140,13 +147,14 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
     let path: string | null = null;
 
     try {
-      for await (const part of request.parts({ limits: { fileSize: MAX_BACKUP_BYTES } })) {
+      const maxBytes = maxBackupBytes();
+      for await (const part of request.parts({ limits: { fileSize: maxBytes } })) {
         if (part.type === 'file') {
           dir = await mkdtemp(join(tmpdir(), 'nexus-restore-'));
           path = join(dir, 'upload.nxb');
           await pipeline(part.file, createWriteStream(path));
           if (part.file.truncated) {
-            return reply.code(413).send({ error: `That backup is larger than the ${MAX_BACKUP_BYTES} byte limit. Raise NEXUS_MAX_BACKUP_BYTES.` });
+            return reply.code(413).send({ error: `That backup is larger than the ${maxBytes} byte limit. Raise NEXUS_MAX_BACKUP_BYTES.` });
           }
           continue;
         }
@@ -211,15 +219,25 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
         });
         return reply.send(result);
       } catch (err) {
-        // A wrong passphrase and a damaged file are indistinguishable to us by design — GCM says
-        // only "did not authenticate" — so the message names both rather than guessing.
+        // A restore that ran out of time is not a bad file, and telling an operator their backup
+        // "may be damaged" when the gateway simply gave up on it would send them hunting for a
+        // problem that does not exist — and quite possibly throw the only copy away. 503, because
+        // the same request retried against a gateway configured for it would succeed.
+        const timedOut = err instanceof RestoreTimeoutError;
+        const status = timedOut ? 503 : 400;
+
         recordAudit({
-          action: dryRun ? 'backup.restore.dryrun' : 'backup.restore', method: 'POST', ...actor(request), status: 400,
-          detail: JSON.stringify({ outcome: 'failed', mode, error: (err as Error).message }),
+          action: dryRun ? 'backup.restore.dryrun' : 'backup.restore', method: 'POST', ...actor(request), status,
+          detail: JSON.stringify({
+            outcome: timedOut ? 'timed_out' : 'failed', mode, error: (err as Error).message,
+            ...(timedOut ? { timeoutMs: (err as RestoreTimeoutError).timeoutMs } : {}),
+          }),
         });
-        return reply.code(400).send({
+        return reply.code(status).send({
           error: (err as Error).message,
-          hint: 'Nothing was changed. If the passphrase is right, the file may be damaged or incomplete.',
+          hint: timedOut
+            ? `Nothing was changed. Raise ${RESTORE_TIMEOUT_ENV} and restore again — the file is fine.`
+            : 'Nothing was changed. If the passphrase is right, the file may be damaged or incomplete.',
         });
       }
     } finally {

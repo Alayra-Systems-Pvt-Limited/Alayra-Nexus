@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import { prisma, dbEngine } from '../lib/prisma';
+import { envInt } from '../lib/envNumber';
 import { deleteKeys } from '../lib/redisScan';
 import { drainAudit } from './audit.service';
 import { drainUsage } from './usagePipeline';
@@ -103,6 +104,29 @@ export const KV_PRESERVED_ON_RESTORE: readonly string[] = ['nexus:maintenance'];
 const SETTINGS_CACHE_PATTERN = 'nexus:setting:*';
 
 /**
+ * How long a restore may take before it is rolled back (A3).
+ *
+ * Thirty minutes, not two. The old two-minute budget did not make a large restore slow, it made one
+ * impossible — and it sat behind a two-gigabyte upload limit, so the gateway accepted files it could
+ * never apply. Thirty minutes is roughly what that upload cap is worth at real insert rates, which
+ * makes the two limits describe the same gateway for the first time.
+ *
+ * The floor exists because a zero or one-millisecond timeout is not a smaller budget, it is a
+ * restore that cannot start; an operator reaching for this to make a restore *safer* should not be
+ * able to make it impossible instead.
+ *
+ * This is where the policy lives rather than in lib/backup, because it is a product decision. The
+ * engine keeps its own conservative fallback for callers that pass nothing — the parity suite.
+ */
+export const RESTORE_TIMEOUT_ENV = 'NEXUS_RESTORE_TIMEOUT_MS';
+const DEFAULT_RESTORE_TIMEOUT_MS = 30 * 60 * 1000;
+const MIN_RESTORE_TIMEOUT_MS = 1_000;
+
+export function restoreTimeoutMs(): number {
+  return envInt(RESTORE_TIMEOUT_ENV, DEFAULT_RESTORE_TIMEOUT_MS, { min: MIN_RESTORE_TIMEOUT_MS });
+}
+
+/**
  * Read a backup into this gateway. Throws — changing nothing — if anything is wrong with it.
  *
  * ── Why the buffers are drained FIRST ─────────────────────────────────────────────────────────
@@ -142,6 +166,9 @@ export async function restoreBackup(req: RestoreRequest): Promise<GatewayRestore
   const result = await readBackup({
     client: prisma, engine: dbEngine,
     passphrase: req.passphrase, input: req.input, mode: req.mode, dryRun: req.dryRun,
+    // Without this the engine falls back to its own conservative default and the gateway's setting
+    // would be a variable nobody reads — the fix looking done while changing nothing.
+    timeoutMs: restoreTimeoutMs(),
   });
 
   if (req.dryRun) return { ...result, kvKeysCleared: 0 };

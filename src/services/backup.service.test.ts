@@ -21,7 +21,8 @@
 // with no email claim carry a bare role and are never re-validated — so without the wipe below they
 // keep full rights against wholly different data until their TTL runs out, up to twelve hours.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { resetEnvWarnings } from '../lib/envNumber';
 
 const { deleteKeys, drainAudit, drainUsage, readBackup, calls } = vi.hoisted(() => {
   const calls: string[] = [];
@@ -40,7 +41,7 @@ vi.mock('./audit.service', () => ({ drainAudit }));
 vi.mock('./usagePipeline', () => ({ drainUsage }));
 vi.mock('../lib/backup/restore', () => ({ readBackup }));
 
-import { restoreBackup, KV_PRESERVED_ON_RESTORE } from './backup.service';
+import { restoreBackup, restoreTimeoutMs, KV_PRESERVED_ON_RESTORE, RESTORE_TIMEOUT_ENV } from './backup.service';
 
 /** Only `mode` and `dryRun` matter here; the stream is never read because readBackup is mocked. */
 const request = (over: Record<string, unknown> = {}) =>
@@ -135,6 +136,45 @@ describe('a dry run touches nothing', () => {
     const result = await restoreBackup(request({ mode: 'replace', dryRun: true }));
     expect(result.kvKeysCleared).toBe(0);
     expect(deleteKeys).not.toHaveBeenCalled();
+  });
+});
+
+describe('how long a restore may take (A3)', () => {
+  afterEach(() => { delete process.env[RESTORE_TIMEOUT_ENV]; resetEnvWarnings(); });
+
+  it('defaults to thirty minutes, not the two that made large restores impossible', () => {
+    // Two minutes sat behind a two-gigabyte upload cap, so the gateway accepted files it could
+    // never apply. These two limits now describe the same gateway.
+    expect(restoreTimeoutMs()).toBe(30 * 60 * 1000);
+  });
+
+  it('honours the environment', () => {
+    process.env[RESTORE_TIMEOUT_ENV] = '600000';
+    expect(restoreTimeoutMs()).toBe(600_000);
+  });
+
+  it('refuses to be set below a floor, so it cannot be turned into "never"', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    process.env[RESTORE_TIMEOUT_ENV] = '0';
+    expect(restoreTimeoutMs()).toBe(1_000);
+  });
+
+  it('ignores a value parseInt would have mangled', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    process.env[RESTORE_TIMEOUT_ENV] = '30m';   // parseInt reads this as 30 milliseconds
+    expect(restoreTimeoutMs()).toBe(30 * 60 * 1000);
+  });
+
+  it('actually reaches the engine — without this the setting is a variable nobody reads', () => {
+    process.env[RESTORE_TIMEOUT_ENV] = '600000';
+    return restoreBackup(request()).then(() => {
+      expect(readBackup).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 600_000 }));
+    });
+  });
+
+  it('passes it on a dry run too, which needs no transaction but costs nothing to be consistent', async () => {
+    await restoreBackup(request({ dryRun: true }));
+    expect(readBackup).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 30 * 60 * 1000 }));
   });
 });
 

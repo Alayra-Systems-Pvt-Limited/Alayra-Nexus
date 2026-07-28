@@ -64,6 +64,24 @@ const WRITE_BATCH = 500;
 /** Rows held before their unique values are checked against what is already here. */
 const CHECK_BATCH = 500;
 
+/**
+ * How long to wait for a connection from the pool before giving up — NOT how long the restore may
+ * take (A3).
+ *
+ * These were the same value, which was harmless while the transaction budget was two minutes and a
+ * bug the moment it became thirty: a gateway whose pool was momentarily busy would sit waiting half
+ * an hour before starting work, with nothing to show for it. They are unrelated quantities. Prisma's
+ * own default here is 2s; ten is patient enough for a restore to survive a burst of dashboard
+ * traffic, and short enough that "the pool is exhausted" is still reported as a failure.
+ */
+const POOL_WAIT_MS = 10_000;
+
+/** Prisma's code for a transaction that ran past its budget. */
+const TRANSACTION_EXPIRED = 'P2028';
+
+/** Conservative fallback for library callers (the parity suite). The gateway passes its own. */
+export const DEFAULT_RESTORE_TIMEOUT_MS = 120_000;
+
 export type RestoreMode = 'merge' | 'replace';
 
 export interface RestoreOptions {
@@ -275,7 +293,10 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
   }
 
   // ── The real thing, entirely inside one transaction ────────────────────────────────────────
-  await opts.client.$transaction(async (tx) => {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_RESTORE_TIMEOUT_MS;
+
+  try {
+    await opts.client.$transaction(async (tx) => {
     if (opts.mode === 'replace') {
       tablesCleared = await emptyEveryTableIn(tx as unknown as RawExecutor, opts.engine);
     }
@@ -327,7 +348,18 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
     // everything already written rather than leaving a partial gateway behind.
     assertComplete(manifest, trailer, rowsInFile, totalRowsInFile);
     if (opts.mode === 'replace') assertNothingDropped(rowsInFile, written);
-  }, { timeout: opts.timeoutMs ?? 120_000, maxWait: opts.timeoutMs ?? 120_000 });
+    }, {
+      timeout: timeoutMs,
+      // Deliberately NOT timeoutMs — see POOL_WAIT_MS. Waiting for a free connection and doing the
+      // work are different things, and coupling them made the gateway wait half an hour to start.
+      maxWait: POOL_WAIT_MS,
+    });
+  } catch (e) {
+    // A restore that ran out of budget is not a damaged file, and must not be reported as one. The
+    // caller needs to be able to tell "this needs longer" from "this cannot be restored at all".
+    if (isTransactionExpired(e)) throw new RestoreTimeoutError(timeoutMs);
+    throw e;
+  }
 
   const skipped = zeroed();
   for (const m of MODEL_ORDER) skipped[m] = rowsInFile[m] - written[m];
@@ -345,6 +377,36 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
     collisions: [],
     secretsRekeyed, tablesCleared,
   };
+}
+
+/**
+ * The restore ran past its budget — distinct from every other failure, because the file is fine.
+ *
+ * Everything else `readBackup` throws means "this backup cannot be restored". This one means "this
+ * backup needs longer", which is a different sentence to show an operator and a different HTTP
+ * status to answer with.
+ */
+export class RestoreTimeoutError extends Error {
+  constructor(readonly timeoutMs: number) {
+    super(
+      `The restore ran longer than the ${Math.round(timeoutMs / 1000)}s limit and was rolled back — ` +
+      'nothing was changed. Raise NEXUS_RESTORE_TIMEOUT_MS and try again; a large backup is ' +
+      'legitimately slow, not broken.');
+    this.name = 'RestoreTimeoutError';
+  }
+}
+
+/**
+ * P2028 is Prisma's expired-transaction code.
+ *
+ * Checked STRUCTURALLY rather than with `instanceof PrismaClientKnownRequestError`, for the reason
+ * bulkInsert.ts documents at length: there are two generated clients here, each carrying its own
+ * copy of the Prisma runtime and therefore its own error classes, so an error raised by the SQLite
+ * client is not an `instanceof` the class exported by `@prisma/client`. That mistake was made once
+ * already and cost a silent failure on one engine only.
+ */
+function isTransactionExpired(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === TRANSACTION_EXPIRED;
 }
 
 /**
