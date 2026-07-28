@@ -9,11 +9,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createCipheriv, createDecipheriv } from 'node:crypto';
+import { createCipheriv, createDecipheriv, generateKeyPairSync } from 'node:crypto';
 import {
   BACKUP_FORMAT, BACKUP_VERSION, CIPHER, IV_BYTES, SALT_BYTES, TAG_BYTES, KEY_BYTES, MAX_RECIPIENTS,
-  newFileKey, wrapForPassphrase, wrapForGateway, buildHeader, headerBytes, parseHeader,
-  unwrapFileKey, passphraseProblem, type Recipient,
+  X25519_DER_BYTES, newFileKey, wrapForPassphrase, wrapForGateway, wrapForRecovery,
+  unwrapWithRecovery, sealWithPassphrase, openWithPassphrase, buildHeader, headerBytes, parseHeader,
+  unwrapFileKey, passphraseProblem, survivesTheMachine, type Recipient,
 } from './format';
 
 const PASS = 'a-long-enough-passphrase';
@@ -80,16 +81,33 @@ describe('the file key', () => {
   });
 });
 
-describe('a passphrase recipient is mandatory', () => {
+describe('every file must outlive the machine that wrote it', () => {
+  // The rule widened in C6 rather than loosening: it was "a passphrase recipient is mandatory", and
+  // is now "at least one recipient that survives the machine" — passphrase OR recovery. Both reduce
+  // to something the operator knows; the gateway key reduces to something the server holds, which
+  // is why it still cannot stand alone.
   it('refuses to build a gateway-only header', async () => {
     // A gateway-only backup is unopenable the moment the machine is gone — the exact disaster this
     // feature exists to prevent. This is the last point it can be stopped.
     expect(() => buildHeader([wrapForGateway(newFileKey())]))
-      .toThrow(/always be openable with a passphrase/i);
+      .toThrow(/openable by something other than this gateway/i);
   });
 
   it('refuses an empty recipient list', () => {
-    expect(() => buildHeader([])).toThrow(/always be openable with a passphrase/i);
+    expect(() => buildHeader([])).toThrow(/openable by something other than this gateway/i);
+  });
+
+  it('accepts a recovery recipient in place of a passphrase one', async () => {
+    // What makes an unattended nightly backup possible without storing a passphrase anywhere: the
+    // gateway wraps for the operator's public key, which it cannot itself open.
+    const { publicKey, privateKey } = generateKeyPairSync('x25519');
+    const der = publicKey.export({ format: 'der', type: 'spki' });
+    const sealed = await sealWithPassphrase(privateKey.export({ format: 'der', type: 'pkcs8' }), PASS);
+
+    expect(() => buildHeader([
+      wrapForRecovery(newFileKey(), der, sealed),
+      wrapForGateway(newFileKey()),
+    ])).not.toThrow();
   });
 
   it('accepts passphrase alone', async () => {
@@ -276,5 +294,176 @@ describe('sizes are what the readers assume', () => {
       expect(Buffer.from(r.wrapped, 'hex')).toHaveLength(KEY_BYTES);
     }
     expect(Buffer.from((h.recipients[0] as { kdf: { salt: string } }).kdf.salt, 'hex')).toHaveLength(SALT_BYTES);
+  });
+});
+
+describe('the recovery recipient (C6)', () => {
+  // The mailbox: the gateway keeps the slot and can drop backups in; only the operator's key opens
+  // them. This is what lets a 3am backup be locked to something the server cannot open.
+  /** An operator's recovery key as the gateway holds it: a public half and a sealed private half. */
+  const recovery = async () => {
+    const { publicKey, privateKey } = generateKeyPairSync('x25519');
+    return {
+      privateKey,
+      der: publicKey.export({ format: 'der', type: 'spki' }),
+      sealed: await sealWithPassphrase(privateKey.export({ format: 'der', type: 'pkcs8' }), PASS),
+    };
+  };
+
+  it('round-trips the file key through the operator key', async () => {
+    const fileKey = newFileKey();
+    const k = await recovery();
+    const r = wrapForRecovery(fileKey, k.der, k.sealed);
+
+    expect(unwrapWithRecovery(r, k.privateKey).equals(fileKey)).toBe(true);
+  });
+
+  it('wraps knowing ONLY the public half and an opaque sealed blob', async () => {
+    // The whole point. Nothing the gateway can open is needed to lock a backup for the operator, so
+    // nothing that opens a backup has to sit on the server waiting for 3am.
+    const k = await recovery();
+    expect(() => wrapForRecovery(newFileKey(), k.der, k.sealed)).not.toThrow();
+  });
+
+  it('OPENS ON A FRESH MACHINE WITH NOTHING BUT THE PASSPHRASE', async () => {
+    // The case the whole feature exists for, and the one an earlier draft of this design got wrong.
+    //
+    // A nightly backup is wrapped for [gateway, recovery] — no passphrase recipient, because nobody
+    // is awake to type one. The server then dies. If the recovery private key lived only in
+    // AppSettings, it would now be sitting INSIDE the very file it is needed to open, and the
+    // operator's passphrase would be worthless. Carrying the sealed key in the header is what makes
+    // this test pass.
+    const fileKey = newFileKey();
+    const k = await recovery();
+    const h = buildHeader([wrapForRecovery(fileKey, k.der, k.sealed), wrapForGateway(fileKey)]);
+
+    // A new machine: parse from bytes, no database, no stored key, gateway key explicitly refused.
+    const parsed = parseHeader(headerBytes(h).toString('utf8'));
+    const opened = await unwrapFileKey(parsed, { passphrase: PASS, allowGateway: false });
+
+    expect(opened.equals(fileKey)).toBe(true);
+  });
+
+  it('refuses the wrong passphrase on that same path', async () => {
+    const fileKey = newFileKey();
+    const k = await recovery();
+    const h = buildHeader([wrapForRecovery(fileKey, k.der, k.sealed)]);
+
+    await expect(unwrapFileKey(h, { passphrase: 'not-the-passphrase', allowGateway: false }))
+      .rejects.toThrow();
+  });
+
+  it('cannot be opened by a different recovery key', async () => {
+    const k = await recovery();
+    const other = await recovery();
+    const r = wrapForRecovery(newFileKey(), k.der, k.sealed);
+
+    expect(() => unwrapWithRecovery(r, other.privateKey)).toThrow();
+  });
+
+  it('uses a fresh ephemeral key for every file', async () => {
+    // Reuse would give two backups to the same operator the same wrapping key, so cracking one
+    // would open every other.
+    const k = await recovery();
+    const a = wrapForRecovery(newFileKey(), k.der, k.sealed);
+    const b = wrapForRecovery(newFileKey(), k.der, k.sealed);
+
+    expect(a.epk).not.toBe(b.epk);
+    expect(a.wrapped).not.toBe(b.wrapped);
+  });
+
+  it('wraps the same file key differently each time', async () => {
+    const fileKey = newFileKey();
+    const k = await recovery();
+    expect(wrapForRecovery(fileKey, k.der, k.sealed).wrapped)
+      .not.toBe(wrapForRecovery(fileKey, k.der, k.sealed).wrapped);
+  });
+
+  it('carries an ephemeral key of exactly the DER length', async () => {
+    const k = await recovery();
+    const r = wrapForRecovery(newFileKey(), k.der, k.sealed);
+    expect(Buffer.from(r.epk, 'hex').length).toBe(X25519_DER_BYTES);
+  });
+
+  it('survives a header round trip', async () => {
+    const fileKey = newFileKey();
+    const k = await recovery();
+    const h = buildHeader([wrapForRecovery(fileKey, k.der, k.sealed)]);
+    const parsed = parseHeader(headerBytes(h).toString('utf8'));
+
+    expect((await unwrapFileKey(parsed, { recoveryKey: k.privateKey })).equals(fileKey)).toBe(true);
+  });
+
+  it('is refused when its ephemeral key is the wrong size', async () => {
+    // createPublicKey on attacker-chosen bytes is a parser. A header does not get to decide how
+    // much this process hands it.
+    const k = await recovery();
+    const h = buildHeader([wrapForRecovery(newFileKey(), k.der, k.sealed)]);
+    const raw = JSON.parse(headerBytes(h).toString('utf8'));
+    raw.recipients[0].epk = 'aa'.repeat(200);
+
+    expect(() => parseHeader(JSON.stringify(raw))).toThrow(/malformed header/i);
+  });
+
+  it('is refused when its sealed key names ruinous KDF parameters', async () => {
+    // The same denial-of-service lever as a passphrase recipient, arriving through a second door.
+    const k = await recovery();
+    const h = buildHeader([wrapForRecovery(newFileKey(), k.der, k.sealed)]);
+    const raw = JSON.parse(headerBytes(h).toString('utf8'));
+    raw.recipients[0].sealedPrivate.kdf.N = 2 ** 30;
+
+    expect(() => parseHeader(JSON.stringify(raw))).toThrow(/more memory than is allowed/i);
+  });
+
+  it('is not opened by the gateway key, however tempting', async () => {
+    const k = await recovery();
+    const h = buildHeader([wrapForRecovery(newFileKey(), k.der, k.sealed)]);
+    await expect(unwrapFileKey(h, { allowGateway: true })).rejects.toThrow();
+  });
+
+  it('counts as surviving the machine; the gateway recipient does not', async () => {
+    const k = await recovery();
+    expect(survivesTheMachine(wrapForRecovery(newFileKey(), k.der, k.sealed))).toBe(true);
+    expect(survivesTheMachine(await wrapForPassphrase(newFileKey(), PASS))).toBe(true);
+    expect(survivesTheMachine(wrapForGateway(newFileKey()))).toBe(false);
+  });
+});
+
+describe('sealing the recovery private key with a passphrase', () => {
+  const SECRET = Buffer.from('a private key, notionally', 'utf8');
+
+  it('round-trips', async () => {
+    const sealed = await sealWithPassphrase(SECRET, PASS);
+    expect((await openWithPassphrase(sealed, PASS)).equals(SECRET)).toBe(true);
+  });
+
+  it('refuses the wrong passphrase rather than returning something', async () => {
+    const sealed = await sealWithPassphrase(SECRET, PASS);
+    await expect(openWithPassphrase(sealed, 'not-the-passphrase')).rejects.toThrow();
+  });
+
+  it('never stores the plaintext', async () => {
+    const sealed = await sealWithPassphrase(SECRET, PASS);
+    expect(JSON.stringify(sealed)).not.toContain(SECRET.toString('hex'));
+    expect(JSON.stringify(sealed)).not.toContain('notionally');
+  });
+
+  it('uses a fresh salt each time, so two seals of one secret differ', async () => {
+    const a = await sealWithPassphrase(SECRET, PASS);
+    const b = await sealWithPassphrase(SECRET, PASS);
+    expect(a.kdf.salt).not.toBe(b.kdf.salt);
+    expect(a.ciphertext).not.toBe(b.ciphertext);
+  });
+
+  it('refuses key-derivation parameters that would exhaust memory', async () => {
+    const sealed = await sealWithPassphrase(SECRET, PASS);
+    sealed.kdf.N = 2 ** 30;
+    await expect(openWithPassphrase(sealed, PASS)).rejects.toThrow(/invalid key-derivation/i);
+  });
+
+  it('refuses a blob sealed by something it does not understand', async () => {
+    const sealed = await sealWithPassphrase(SECRET, PASS);
+    (sealed.kdf as { name: string }).name = 'argon2';
+    await expect(openWithPassphrase(sealed, PASS)).rejects.toThrow(/does not understand/i);
   });
 });

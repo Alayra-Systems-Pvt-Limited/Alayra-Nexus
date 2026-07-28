@@ -30,6 +30,7 @@ import { deleteKeys } from '../lib/redisScan';
 import { drainAudit } from './audit.service';
 import { drainUsage } from './usagePipeline';
 import { MAINTENANCE_KEY, beginMaintenance, reportProgress, endMaintenance } from './maintenance.service';
+import { recoveryMaterial } from './backupRecovery.service';
 import { writeBackup, type ExportSummary } from '../lib/backup/export';
 import { readBackup, type RestoreMode, type RestoreResult } from '../lib/backup/restore';
 
@@ -71,10 +72,14 @@ export function backupFilename(now = new Date()): string {
  * job has nobody to type a passphrase — and the passphrase recipient is added regardless, so such a
  * backup still survives the machine.
  */
-export function exportBackup(passphrase: string, out: Writable, includeGatewayRecipient = false): Promise<ExportSummary> {
+export async function exportBackup(passphrase: string, out: Writable, includeGatewayRecipient = false): Promise<ExportSummary> {
   return writeBackup({
     client: prisma, engine: dbEngine, passphrase, out,
     gatewayVersion: gatewayVersion(), includeGatewayRecipient,
+    // Null on a gateway that predates C6 or was never given one. Absent rather than fatal: a backup
+    // with a passphrase recipient is still a perfectly good backup, and refusing to take one
+    // because a recovery key is missing would withhold the thing being asked for.
+    recovery: await recoveryMaterial(),
   });
 }
 

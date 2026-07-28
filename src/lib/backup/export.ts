@@ -47,8 +47,8 @@ import { rekeyRow, countSecrets } from './secrets';
 import { encodeRow } from './rowCodec';
 import {
   CIPHER, BACKUP_FORMAT, BACKUP_VERSION,
-  newFileKey, wrapForPassphrase, wrapForGateway, buildHeader, headerBytes, passphraseProblem,
-  type Recipient,
+  newFileKey, wrapForPassphrase, wrapForGateway, wrapForRecovery, buildHeader, headerBytes,
+  passphraseProblem, type Recipient, type SealedBlob,
 } from './format';
 
 /** How many rows are read from one table at a time. */
@@ -82,6 +82,13 @@ export interface ExportOptions {
    */
   schema?: SchemaShape;
   env?: string[];
+  /**
+   * The operator's recovery key, when this gateway has one (C6).
+   *
+   * Supplied by the caller rather than loaded here: this module takes a client and streams and
+   * touches no service, which is what lets the parity suite drive it against two databases at once.
+   */
+  recovery?: { der: Buffer; sealed: SealedBlob } | null;
 }
 
 export interface ExportSummary {
@@ -157,6 +164,9 @@ export async function writeBackup(opts: ExportOptions): Promise<ExportSummary> {
   const fileKey = newFileKey();
   const recipients: Recipient[] = [await wrapForPassphrase(fileKey, opts.passphrase)];
   if (opts.includeGatewayRecipient) recipients.push(wrapForGateway(fileKey));
+  // Added whenever the gateway has one (C6). It costs a few hundred bytes and is the recipient that
+  // will let a scheduled backup, taken with nobody present, still be opened by the operator alone.
+  if (opts.recovery) recipients.push(wrapForRecovery(fileKey, opts.recovery.der, opts.recovery.sealed));
 
   const header = buildHeader(recipients);
   const aad = headerBytes(header);
