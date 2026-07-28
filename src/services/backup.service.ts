@@ -29,6 +29,7 @@ import { envInt } from '../lib/envNumber';
 import { deleteKeys } from '../lib/redisScan';
 import { drainAudit } from './audit.service';
 import { drainUsage } from './usagePipeline';
+import { MAINTENANCE_KEY, beginMaintenance, reportProgress, endMaintenance } from './maintenance.service';
 import { writeBackup, type ExportSummary } from '../lib/backup/export';
 import { readBackup, type RestoreMode, type RestoreResult } from '../lib/backup/restore';
 
@@ -83,6 +84,15 @@ export interface RestoreRequest {
   passphrase?: string;
   mode: RestoreMode;
   dryRun: boolean;
+  /**
+   * How many rows the file holds, when the caller knows (A4).
+   *
+   * A backup states its own row count in the TRAILER, at the end of the file, so a restore cannot
+   * know its total until it has already finished. A dry run reads the whole file and does know —
+   * which is the flow the dashboard follows anyway. Without it the restore still reports rows
+   * written, just with no percentage and no estimate.
+   */
+  expectedRows?: number | null;
 }
 
 export interface GatewayRestoreResult extends RestoreResult {
@@ -96,9 +106,13 @@ export interface GatewayRestoreResult extends RestoreResult {
  * The maintenance flag (A4) coordinates every instance of the gateway: it is what makes the proxy
  * answer 503 with a countdown instead of hanging while tables are locked. Wiping it partway through
  * the very restore it exists to announce would drop the gateway back into service mid-operation —
- * so the wipe spares it, and A4 must use this exact key.
+ * so the wipe spares it.
+ *
+ * Taken from maintenance.service rather than written out again: two literals that must agree is a
+ * rename away from a restore that silently clears its own flag, and the failure would show up only
+ * under a real restore on a real gateway. One constant cannot disagree with itself.
  */
-export const KV_PRESERVED_ON_RESTORE: readonly string[] = ['nexus:maintenance'];
+export const KV_PRESERVED_ON_RESTORE: readonly string[] = [MAINTENANCE_KEY];
 
 /** The AppSettings read-through cache. Five-minute TTL, so staleness is bounded but not free. */
 const SETTINGS_CACHE_PATTERN = 'nexus:setting:*';
@@ -163,13 +177,39 @@ export async function restoreBackup(req: RestoreRequest): Promise<GatewayRestore
   // A dry run writes nothing, so there is nothing to protect it from and nothing to invalidate.
   if (!req.dryRun) await Promise.all([drainAudit(), drainUsage()]);
 
-  const result = await readBackup({
-    client: prisma, engine: dbEngine,
-    passphrase: req.passphrase, input: req.input, mode: req.mode, dryRun: req.dryRun,
-    // Without this the engine falls back to its own conservative default and the gateway's setting
-    // would be a variable nobody reads — the fix looking done while changing nothing.
-    timeoutMs: restoreTimeoutMs(),
-  });
+  // Maintenance mode covers `replace` only (A4).
+  //
+  // `replace` empties every table first, so from the moment it starts, anything the gateway serves
+  // is either locked-and-hanging (PostgreSQL) or the old world about to vanish (SQLite, where WAL
+  // lets readers carry on against the pre-transaction snapshot). Neither is fit to answer with.
+  //
+  // `merge` only inserts what is missing. Nothing it does makes existing data wrong to serve, so
+  // refusing traffic through it would be an outage we chose rather than one we prevented. On SQLite
+  // a long merge does still serialise other WRITES behind its transaction — a contention problem,
+  // not a correctness one, and not something refusing traffic would fix.
+  const announced = !req.dryRun && req.mode === 'replace';
+  if (announced) await beginMaintenance('a backup is being restored', req.expectedRows ?? null);
+
+  let result: RestoreResult;
+  try {
+    result = await readBackup({
+      client: prisma, engine: dbEngine,
+      passphrase: req.passphrase, input: req.input, mode: req.mode, dryRun: req.dryRun,
+      // Without this the engine falls back to its own conservative default and the gateway's setting
+      // would be a variable nobody reads — the fix looking done while changing nothing.
+      timeoutMs: restoreTimeoutMs(),
+      onProgress: announced
+        // Fire and forget: this runs inside the write transaction, so awaiting a KV round trip per
+        // batch would make every restore slower to report that it is slow.
+        ? (rows) => { void reportProgress(rows).catch(() => { /* watcher */ }); }
+        : undefined,
+    });
+  } catch (err) {
+    // A failed restore must not leave the gateway refusing traffic. The flag's TTL is a backstop
+    // for a killed process, not the mechanism for an ordinary error.
+    if (announced) await endMaintenance().catch(() => { /* already refusing; TTL will clear it */ });
+    throw err;
+  }
 
   if (req.dryRun) return { ...result, kvKeysCleared: 0 };
 
@@ -183,6 +223,11 @@ export async function restoreBackup(req: RestoreRequest): Promise<GatewayRestore
   const kvKeysCleared = req.mode === 'replace'
     ? await deleteKeys('nexus:*', KV_PRESERVED_ON_RESTORE)
     : await deleteKeys(SETTINGS_CACHE_PATTERN);
+
+  // AFTER the wipe, never before. The wipe deliberately spares the maintenance flag, so lowering it
+  // first would open the gateway to traffic during the very moment every session and cache is being
+  // invalidated — a window where a request could be served against half-cleared state.
+  if (announced) await endMaintenance();
 
   return { ...result, kvKeysCleared };
 }

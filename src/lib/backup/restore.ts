@@ -104,6 +104,14 @@ export interface RestoreOptions {
   dryRun?: boolean;
   /** How long the write transaction may take. A large restore is legitimately slow. */
   timeoutMs?: number;
+  /**
+   * Called with the running total as each batch lands, so a caller can report progress (A4).
+   *
+   * Deliberately synchronous and deliberately ignored if it throws: this runs inside the write
+   * transaction, and a progress report that could fail a restore would be a reporting feature that
+   * destroys the thing it reports on. Callers wanting to do I/O here fire and forget.
+   */
+  onProgress?: (rowsWritten: number) => void;
 }
 
 export interface RestorePlan {
@@ -311,6 +319,12 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
       // with older data, and on `replace` the tables are already empty so none can occur.
       written[batch.model] += await createManyIgnoringDuplicates(delegate, batch.rows, opts.engine);
       batch.rows = [];
+
+      if (opts.onProgress) {
+        // Swallowed on purpose — see onProgress. A restore must not fail because something that
+        // was only watching it did.
+        try { opts.onProgress(Object.values(written).reduce((a, b) => a + b, 0)); } catch { /* watcher */ }
+      }
     };
 
     for await (const line of lines) {

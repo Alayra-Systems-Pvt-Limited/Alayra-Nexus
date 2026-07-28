@@ -45,6 +45,8 @@ import { adminOwnerGuard } from './guard';
 import { AUTH_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
 import { safeEqual } from '../../lib/timingSafe';
 import { recordAudit } from '../../services/audit.service';
+import { hasLiveSession } from '../../services/adminAuth.service';
+import { readMaintenance } from '../../services/maintenance.service';
 import { envInt } from '../../lib/envNumber';
 import { exportBackup, restoreBackup, backupFilename, RESTORE_TIMEOUT_ENV } from '../../services/backup.service';
 import { passphraseProblem } from '../../lib/backup/format';
@@ -79,6 +81,30 @@ function actor(request: FastifyRequest) {
 }
 
 export default async function adminBackupRoutes(fastify: FastifyInstance) {
+  // ── Maintenance status ────────────────────────────────────────────
+  //
+  // What the dashboard polls to draw a progress bar during a restore, and the reason it has its own
+  // guard rather than `adminGuard`: the normal guard resolves a session against the `adminUser`
+  // table, and a `replace` restore holds that table under ACCESS EXCLUSIVE for its whole duration.
+  // Using it here would block inside the check — an endpoint for watching an outage that hangs
+  // during the outage. So the session is verified against the key-value store alone.
+  //
+  // It reveals nothing new: every proxy request already receives a 503 stating that a restore is
+  // running and how long to wait. This is that same fact, to someone holding a session.
+  fastify.get('/admin/backup/maintenance', async (request, reply) => {
+    const auth = request.headers.authorization;
+    const token = auth?.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!(await hasLiveSession(token)) && !safeEqual(token, process.env.ADMIN_PASSWORD)) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    const state = await readMaintenance();
+    return reply.header('cache-control', 'no-store').send({
+      active: state !== null,
+      ...(state ? { maintenance: state } : {}),
+    });
+  });
+
   // ── Export ────────────────────────────────────────────────────────
   //
   // POST rather than GET: the passphrase is in the body, and a GET would put it in the URL — where
@@ -171,6 +197,12 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
         dryRun: z.enum(['true', 'false']).default('false'),
         masterPassword: z.string().optional(),
         confirm: z.string().optional(),
+        // The dashboard fills this from the dry run it already ran. A backup states its own row
+        // count in the trailer, at the END of the file, so the restore cannot know its total until
+        // it has finished — without this there is progress but no percentage and no estimate.
+        // Untrusted and cosmetic: it only scales a progress bar, so a wrong value misdraws a bar
+        // and changes nothing about what is written.
+        expectedRows: z.coerce.number().int().positive().optional(),
       }).safeParse(fields);
       if (!parsed.success) return reply.code(400).send({ error: 'A backup passphrase is required.' });
 
@@ -201,7 +233,10 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const result = await restoreBackup({ input: createReadStream(path), passphrase, mode, dryRun });
+        const result = await restoreBackup({
+          input: createReadStream(path), passphrase, mode, dryRun,
+          expectedRows: parsed.data.expectedRows ?? null,
+        });
         recordAudit({
           action: dryRun ? 'backup.restore.dryrun' : 'backup.restore', method: 'POST', ...actor(request), status: 200,
           detail: JSON.stringify({

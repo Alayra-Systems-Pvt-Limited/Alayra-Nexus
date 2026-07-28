@@ -24,14 +24,20 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { resetEnvWarnings } from '../lib/envNumber';
 
-const { deleteKeys, drainAudit, drainUsage, readBackup, calls } = vi.hoisted(() => {
+const {
+  deleteKeys, drainAudit, drainUsage, readBackup, calls,
+  beginMaintenance, reportProgress, endMaintenance,
+} = vi.hoisted(() => {
   const calls: string[] = [];
   return {
     calls,
-    deleteKeys: vi.fn(async () => 0),
+    deleteKeys: vi.fn(async () => { calls.push('deleteKeys'); return 0; }),
     drainAudit: vi.fn(async () => { calls.push('drainAudit'); }),
     drainUsage: vi.fn(async () => { calls.push('drainUsage'); }),
     readBackup: vi.fn(async () => { calls.push('readBackup'); return {}; }),
+    beginMaintenance: vi.fn(async () => { calls.push('beginMaintenance'); }),
+    reportProgress: vi.fn(async () => { calls.push('reportProgress'); }),
+    endMaintenance: vi.fn(async () => { calls.push('endMaintenance'); }),
   };
 });
 
@@ -40,6 +46,9 @@ vi.mock('../lib/redisScan', () => ({ deleteKeys }));
 vi.mock('./audit.service', () => ({ drainAudit }));
 vi.mock('./usagePipeline', () => ({ drainUsage }));
 vi.mock('../lib/backup/restore', () => ({ readBackup }));
+vi.mock('./maintenance.service', () => ({
+  MAINTENANCE_KEY: 'nexus:maintenance', beginMaintenance, reportProgress, endMaintenance,
+}));
 
 import { restoreBackup, restoreTimeoutMs, KV_PRESERVED_ON_RESTORE, RESTORE_TIMEOUT_ENV } from './backup.service';
 
@@ -50,8 +59,12 @@ const request = (over: Record<string, unknown> = {}) =>
 beforeEach(() => {
   vi.clearAllMocks();
   calls.length = 0;
-  deleteKeys.mockResolvedValue(0);
+  // Re-applied rather than left to the hoisted factory: `clearAllMocks` drops implementations, and
+  // several assertions below are about ORDER, which needs every step to keep recording itself.
+  deleteKeys.mockImplementation(async () => { calls.push('deleteKeys'); return 0; });
   readBackup.mockImplementation(async () => { calls.push('readBackup'); return {}; });
+  beginMaintenance.mockImplementation(async () => { calls.push('beginMaintenance'); });
+  endMaintenance.mockImplementation(async () => { calls.push('endMaintenance'); });
 });
 
 describe('a replace restore invalidates the key-value store', () => {
@@ -111,7 +124,11 @@ describe('the buffered writers are drained before anything is written', () => {
     // new usage at the buffer cap. Draining first puts those rows in the tables they belong to.
     await restoreBackup(request());
 
-    expect(calls).toEqual(['drainAudit', 'drainUsage', 'readBackup']);
+    // The property, not the whole sequence: A4 legitimately inserts steps around these, and a test
+    // that pins every step would fail for correct changes. The full order is asserted once, in the
+    // A4 block, where ordering IS the subject.
+    expect(calls.indexOf('drainAudit')).toBeLessThan(calls.indexOf('readBackup'));
+    expect(calls.indexOf('drainUsage')).toBeLessThan(calls.indexOf('readBackup'));
   });
 
   it('drains on a merge too, because a stale row lands either way', async () => {
@@ -175,6 +192,77 @@ describe('how long a restore may take (A3)', () => {
   it('passes it on a dry run too, which needs no transaction but costs nothing to be consistent', async () => {
     await restoreBackup(request({ dryRun: true }));
     expect(readBackup).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 30 * 60 * 1000 }));
+  });
+});
+
+describe('announcing the outage instead of hanging through it (A4)', () => {
+  it('raises the flag before the restore starts and lowers it after the wipe', async () => {
+    // Order is the whole feature. Raised late, the gateway serves half-restored data; lowered
+    // early, it serves during the moment every session and cache is being invalidated.
+    await restoreBackup(request());
+
+    expect(calls).toEqual([
+      'drainAudit', 'drainUsage', 'beginMaintenance', 'readBackup', 'deleteKeys', 'endMaintenance',
+    ]);
+  });
+
+  it('passes the expected row count through, so the bar has a denominator', async () => {
+    await restoreBackup(request({ expectedRows: 120_000 }));
+    expect(beginMaintenance).toHaveBeenCalledWith(expect.any(String), 120_000);
+  });
+
+  it('announces with no total when the caller could not supply one', async () => {
+    // Progress without a percentage is still progress; a fabricated denominator is not.
+    await restoreBackup(request());
+    expect(beginMaintenance).toHaveBeenCalledWith(expect.any(String), null);
+  });
+
+  it('lowers the flag when the restore throws', async () => {
+    // Otherwise a failed restore leaves the gateway refusing traffic until the TTL expires — a
+    // five-minute outage caused by an error that changed nothing.
+    readBackup.mockRejectedValue(new Error('this backup file is truncated'));
+
+    await expect(restoreBackup(request())).rejects.toThrow(/truncated/);
+    expect(endMaintenance).toHaveBeenCalled();
+  });
+
+  it('reports progress as batches land', async () => {
+    readBackup.mockImplementation(async (opts: { onProgress?: (n: number) => void }) => {
+      opts.onProgress?.(500);
+      opts.onProgress?.(1000);
+      return {};
+    });
+
+    await restoreBackup(request());
+    expect(reportProgress).toHaveBeenCalledWith(500);
+    expect(reportProgress).toHaveBeenCalledWith(1000);
+  });
+
+  it('survives a progress report that fails', async () => {
+    // The watcher must never be able to fail the thing it is watching.
+    reportProgress.mockRejectedValue(new Error('redis is down'));
+    readBackup.mockImplementation(async (opts: { onProgress?: (n: number) => void }) => {
+      opts.onProgress?.(500);
+      return {};
+    });
+
+    await expect(restoreBackup(request())).resolves.toBeDefined();
+  });
+
+  it('does not announce a merge, which never makes existing data wrong to serve', async () => {
+    await restoreBackup(request({ mode: 'merge' }));
+    expect(beginMaintenance).not.toHaveBeenCalled();
+    expect(endMaintenance).not.toHaveBeenCalled();
+  });
+
+  it('does not announce a dry run, which writes nothing at all', async () => {
+    await restoreBackup(request({ dryRun: true }));
+    expect(beginMaintenance).not.toHaveBeenCalled();
+  });
+
+  it('gives the engine no progress callback when nothing was announced', async () => {
+    await restoreBackup(request({ mode: 'merge' }));
+    expect(readBackup).toHaveBeenCalledWith(expect.objectContaining({ onProgress: undefined }));
   });
 });
 

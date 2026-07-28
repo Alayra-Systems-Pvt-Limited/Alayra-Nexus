@@ -374,6 +374,26 @@ export async function isValidSession(token: string): Promise<boolean> {
   return (await resolveSession(token)) !== null;
 }
 
+/**
+ * Is this token a live session, judged from the key-value store ALONE? (Phase A4)
+ *
+ * Deliberately weaker than `resolveSession`, and only for the maintenance status endpoint. That
+ * endpoint exists to be answerable while a `replace` restore holds every table under ACCESS
+ * EXCLUSIVE — and `resolveSession` reads `adminUser`, so using it there would block inside the
+ * check, in exactly the situation the endpoint was added for.
+ *
+ * What is given up: "the account still exists and is active". What is kept: proof of holding an
+ * unexpired session token, which is not guessable. The trade is acceptable for one read-only
+ * endpoint whose entire output — that a restore is running, and how far along — is already public
+ * on every proxy 503, which necessarily says "unavailable, retry in N".
+ *
+ * Do not reach for this anywhere else. Anything that acts on WHO is calling needs the account.
+ */
+export async function hasLiveSession(token: string): Promise<boolean> {
+  if (!token) return false;
+  return (await redis.get(SESSION_PREFIX + sha256(token))) !== null;
+}
+
 export async function destroySession(token: string): Promise<void> {
   if (!token) return;
   const hash = sha256(token);

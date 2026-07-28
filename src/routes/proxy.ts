@@ -16,6 +16,7 @@
 
 import { FastifyInstance } from 'fastify';
 import { verifyApiKey }   from '../middleware/auth.middleware';
+import { refuseDuringMaintenance } from '../middleware/maintenance.middleware';
 import { handleProxy }    from '../services/completionsProxy.service';
 import type { CompletionsBody } from '../services/completionsProxy.service';
 import { anthropicToOpenAI } from '../lib/anthropic';
@@ -23,6 +24,13 @@ import { createAnthropicReply } from '../lib/anthropicReply';
 import { dispatchProxy, embeddingReserve, completionReserve, imageReserve, imageQuantity, speechReserve, speechCharacters } from '../services/proxyDispatch.service';
 
 export default async function proxyRoutes(fastify: FastifyInstance) {
+  // Every route below, including any added later. onRequest runs BEFORE the verifyApiKey
+  // preHandlers — which is required, not tidy: verifyApiKey reads the key table, and that table is
+  // locked for the duration of a `replace` restore. A gate behind authentication would hang inside
+  // authentication. Encapsulated to this plugin, so the admin API stays answerable and an operator
+  // can still watch the restore they started.
+  fastify.addHook('onRequest', refuseDuringMaintenance);
+
   fastify.post('/v1/chat/completions', { preHandler: [verifyApiKey] }, async (request, reply) => {
     const teamKeyId = request.teamKeyId;
     return handleProxy(request.body as CompletionsBody, reply, teamKeyId, request.headers as Record<string, unknown>, request.team);
