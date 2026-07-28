@@ -15,7 +15,7 @@ import type { PrismaClient } from '@prisma/client';
 import { encrypt } from '../encryption';
 import { writeBackup } from './export';
 import { MODEL_ORDER } from './modelOrder';
-import { CIPHER, TAG_BYTES, parseHeader, deriveKey } from './format';
+import { CIPHER, TAG_BYTES, parseHeader, unwrapFileKey } from './format';
 import { decodeRow } from './rowCodec';
 
 const PASS = 'a-long-enough-backup-passphrase';
@@ -62,7 +62,7 @@ async function open(file: Buffer, passphrase = PASS): Promise<{ header: unknown;
   const header = parseHeader(headerLine);
   const body = file.subarray(nl + 1);
 
-  const decipher = createDecipheriv(CIPHER, await deriveKey(passphrase, header), Buffer.from(header.cipher.iv, 'hex'));
+  const decipher = createDecipheriv(CIPHER, await unwrapFileKey(header, { passphrase }), Buffer.from(header.cipher.iv, 'hex'));
   decipher.setAAD(Buffer.from(headerLine, 'utf8'));
   decipher.setAuthTag(body.subarray(body.length - TAG_BYTES));
 

@@ -24,6 +24,32 @@ if (MASTER_ENCRYPTION_KEY.length !== 64) {
   throw new Error('CRITICAL FATAL: MASTER_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes).');
 }
 
+/**
+ * A key derived from the master key for one specific purpose (Phase B1.2b).
+ *
+ * The master key stays inside this module — it is never exported, and nothing outside here should
+ * ever hold it. Callers that need key material for something OTHER than field encryption ask for a
+ * subkey instead, naming what it is for.
+ *
+ * HKDF, not the master key directly. Reusing one key for two jobs is the kind of shortcut that is
+ * harmless until the day one of them turns out to leak something about the key, at which point it
+ * has compromised the other as well. Distinct `info` strings produce independent keys from the same
+ * master, so the backup wrapping key cannot be used to read a stored provider credential and vice
+ * versa. The label is versioned so a future scheme can coexist rather than silently reinterpret an
+ * existing one.
+ *
+ * @param info a stable, descriptive label — e.g. "alayra-nexus/backup/gateway-recipient/v1".
+ */
+export function deriveSubKey(info: string, bytes = 32): Buffer {
+  if (!info) throw new Error('deriveSubKey needs a purpose label.');
+  // Empty salt: HKDF is defined for it, and the master key is already 32 bytes of full-entropy
+  // random rather than a password, so the extract step has nothing to strengthen. The `info` label
+  // is what separates one subkey from another.
+  return Buffer.from(
+    crypto.hkdfSync('sha256', Buffer.from(MASTER_ENCRYPTION_KEY, 'hex'), Buffer.alloc(0), info, bytes),
+  );
+}
+
 export function encrypt(plaintext: string): string {
   const iv = crypto.randomBytes(16);
   const key = Buffer.from(MASTER_ENCRYPTION_KEY, 'hex');

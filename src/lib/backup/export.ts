@@ -46,7 +46,8 @@ import { rekeyRow, countSecrets } from './secrets';
 import { encodeRow } from './rowCodec';
 import {
   CIPHER, BACKUP_FORMAT, BACKUP_VERSION,
-  newHeader, headerBytes, deriveKey, passphraseProblem,
+  newFileKey, wrapForPassphrase, wrapForGateway, buildHeader, headerBytes, passphraseProblem,
+  type Recipient,
 } from './format';
 
 /** How many rows are read from one table at a time. */
@@ -62,6 +63,14 @@ export interface ExportOptions {
   /** Recorded in the manifest so a restore can say what wrote the file. */
   gatewayVersion: string;
   pageSize?: number;
+  /**
+   * Also let THIS gateway open the file without the passphrase.
+   *
+   * Default false, and the default differs by path on purpose. A scheduled backup stays on the
+   * operator's own infrastructure and must run unattended, so it wants this. A manual download
+   * leaves the building, and a second way in only helps someone who already has the .env.
+   */
+  includeGatewayRecipient?: boolean;
 }
 
 export interface ExportSummary {
@@ -121,7 +130,14 @@ export async function writeBackup(opts: ExportOptions): Promise<ExportSummary> {
   if (problem) throw new Error(problem);
 
   const pageSize = opts.pageSize ?? DEFAULT_PAGE;
-  const header = newHeader();
+
+  // One random key encrypts the body; it is then wrapped for each way the file may be opened. The
+  // passphrase recipient is not optional — buildHeader refuses a set without one.
+  const fileKey = newFileKey();
+  const recipients: Recipient[] = [await wrapForPassphrase(fileKey, opts.passphrase)];
+  if (opts.includeGatewayRecipient) recipients.push(wrapForGateway(fileKey));
+
+  const header = buildHeader(recipients);
   const aad = headerBytes(header);
 
   // The header goes out in the clear — it holds the salt and parameters needed to derive the key,
@@ -130,7 +146,7 @@ export async function writeBackup(opts: ExportOptions): Promise<ExportSummary> {
   await write(opts.out, aad);
   await write(opts.out, '\n');
 
-  const cipher = createCipheriv(CIPHER, await deriveKey(opts.passphrase, header), Buffer.from(header.cipher.iv, 'hex'));
+  const cipher = createCipheriv(CIPHER, fileKey, Buffer.from(header.cipher.iv, 'hex'));
   cipher.setAAD(aad);
 
   // `end: false` so finishing the cipher does not close the destination: the authentication tag

@@ -243,6 +243,40 @@ async function main(): Promise<void> {
     check('a wrong passphrase is refused', wrong.status === 400, `status ${wrong.status}`);
     check('and it says nothing was changed', /nothing was changed/i.test(wrong.body?.hint ?? ''), wrong.body?.hint ?? '');
 
+    // Wrapped for the gateway as well (B1.2b): the same file opens with no passphrase at all, which
+    // is what lets a scheduled job restore unattended — while the passphrase still works, so the
+    // backup survives the machine.
+    const dual = await fetch(`${BASE}/admin/backup/export`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ passphrase: PASSPHRASE, includeGatewayRecipient: true }),
+    });
+    check('export accepts a gateway recipient', dual.status === 200, `status ${dual.status}`);
+    const dualFile = Buffer.from(await dual.arrayBuffer());
+
+    const asGateway = async (fields: Record<string, string>) => {
+      const form = new FormData();
+      form.set('file', new Blob([new Uint8Array(dualFile)]), 'backup.nxb');
+      for (const [k, v] of Object.entries(fields)) form.set(k, v);
+      const r = await fetch(`${BASE}/admin/backup/restore`, {
+        method: 'POST', headers: { authorization: `Bearer ${token}` }, body: form,
+      });
+      return { status: r.status, body: await r.json().catch(() => null) as any };  // eslint-disable-line @typescript-eslint/no-explicit-any
+    };
+
+    const noPass = await asGateway({ mode: 'merge', dryRun: 'true' });
+    check('it opens with no passphrase, using the gateway key', noPass.status === 200,
+      `status ${noPass.status} ${JSON.stringify(noPass.body).slice(0, 120)}`);
+    check('and still reports the same contents', (noPass.body?.totalRowsInFile ?? 0) > 0, `${noPass.body?.totalRowsInFile} rows`);
+
+    const stillPass = await asGateway({ passphrase: PASSPHRASE, mode: 'merge', dryRun: 'true' });
+    check('the passphrase still opens it too', stillPass.status === 200, `status ${stillPass.status}`);
+
+    // And the ordinary download must NOT be openable that way — it left the building.
+    const noPassOnPlain = await restore({ mode: 'merge', dryRun: 'true' });
+    check('a passphrase-only backup is not openable by the gateway', noPassOnPlain.status === 400,
+      `status ${noPassOnPlain.status}`);
+
     const unconfirmed = await restore({ passphrase: PASSPHRASE, mode: 'replace', dryRun: 'false' });
     check('a replace without the typed phrase is refused', unconfirmed.status === 400, `status ${unconfirmed.status}`);
 

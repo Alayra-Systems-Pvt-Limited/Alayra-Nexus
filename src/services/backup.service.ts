@@ -57,14 +57,26 @@ export function backupFilename(now = new Date()): string {
   return `alayra-nexus-backup-${stamp}.nxb`;
 }
 
-/** Write an encrypted backup of this gateway to `out`. */
-export function exportBackup(passphrase: string, out: Writable): Promise<ExportSummary> {
-  return writeBackup({ client: prisma, engine: dbEngine, passphrase, out, gatewayVersion: gatewayVersion() });
+/**
+ * Write an encrypted backup of this gateway to `out`.
+ *
+ * `includeGatewayRecipient` also wraps the file key for this gateway, so it can be reopened without
+ * the passphrase. Default false: a manual download leaves the building, and a second way in only
+ * helps someone who already has the .env. The scheduler (B2) will pass true, because an unattended
+ * job has nobody to type a passphrase — and the passphrase recipient is added regardless, so such a
+ * backup still survives the machine.
+ */
+export function exportBackup(passphrase: string, out: Writable, includeGatewayRecipient = false): Promise<ExportSummary> {
+  return writeBackup({
+    client: prisma, engine: dbEngine, passphrase, out,
+    gatewayVersion: gatewayVersion(), includeGatewayRecipient,
+  });
 }
 
 export interface RestoreRequest {
   input: Readable;
-  passphrase: string;
+  /** Omitted only on the unattended path, where the gateway opens its own backup. */
+  passphrase?: string;
   mode: RestoreMode;
   dryRun: boolean;
 }

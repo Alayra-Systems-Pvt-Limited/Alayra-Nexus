@@ -52,9 +52,11 @@ async function seedSecrets(db: PrismaClient): Promise<void> {
   await db.auditLog.create({ data: { id: 'a1', action: 'keys.create', actorRole: 'owner' } });
 }
 
-async function exportFrom(db: PrismaClient, engine: 'postgres' | 'sqlite'): Promise<Buffer> {
+async function exportFrom(db: PrismaClient, engine: 'postgres' | 'sqlite', includeGatewayRecipient = false): Promise<Buffer> {
   const { stream, buffer } = sink();
-  await writeBackup({ client: db, engine, passphrase: PASS, out: stream, gatewayVersion: 'test-1.0' });
+  await writeBackup({
+    client: db, engine, passphrase: PASS, out: stream, gatewayVersion: 'test-1.0', includeGatewayRecipient,
+  });
   return buffer();
 }
 
@@ -231,5 +233,46 @@ describe.skipIf(!enabled)('merge does not overwrite what is already there', { ti
     });
 
     expect((await e.sqlite.nexusProvider.findUnique({ where: { id: 'p1' } }))!.name).toBe('Renamed locally');
+  });
+});
+
+describe.skipIf(!enabled)('a backup can be wrapped for the gateway as well', { timeout: PARITY_TIMEOUT }, () => {
+  let e: Engines;
+
+  beforeAll(async () => {
+    e = startEngines('backup-recipients');
+    await seedSecrets(e.pg);
+  }, 120_000);
+  afterAll(async () => { await e?.dispose(); });
+
+  it('restores with NO passphrase at all — the unattended path', async () => {
+    // What the scheduler (B2) will do: a nightly job has nobody to type a passphrase, so it wraps
+    // the file key for the gateway too and can reopen its own backup unaided.
+    const file = await exportFrom(e.pg, 'postgres', true);
+    const r = await readBackup({
+      client: e.sqlite, engine: 'sqlite', input: Readable.from(file), mode: 'replace',
+    });
+
+    expect(r.totalWritten).toBe(6);
+    expect(decrypt((await e.sqlite.nexusKey.findUnique({ where: { id: 'k1' } }))!.encryptedKey)).toBe(PROVIDER_KEY);
+  });
+
+  it('is STILL openable with the passphrase, so it survives the machine', async () => {
+    // The whole point of recipients: the gateway recipient is an addition, never a substitute. If
+    // the server were lost, this file would still open.
+    const file = await exportFrom(e.pg, 'postgres', true);
+    const r = await readBackup({
+      client: e.sqlite, engine: 'sqlite', passphrase: PASS, input: Readable.from(file), mode: 'replace',
+    });
+    expect(r.totalWritten).toBe(6);
+  });
+
+  it('a passphrase-only backup cannot be opened without one', async () => {
+    // The default for a manual download. A file that left the building is not openable by anything
+    // that merely has the .env.
+    const file = await exportFrom(e.pg, 'postgres', false);
+    await expect(readBackup({
+      client: e.sqlite, engine: 'sqlite', input: Readable.from(file), mode: 'merge', dryRun: true,
+    })).rejects.toThrow(/No passphrase was given/i);
   });
 });

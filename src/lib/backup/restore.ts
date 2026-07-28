@@ -52,7 +52,7 @@ import { createManyIgnoringDuplicates, type BulkDelegate } from '../bulkInsert';
 import { MODEL_ORDER } from './modelOrder';
 import { rekeyRow, countSecrets } from './secrets';
 import { decodeRow } from './rowCodec';
-import { CIPHER, TAG_BYTES, parseHeader, deriveKey, passphraseProblem } from './format';
+import { CIPHER, TAG_BYTES, parseHeader, unwrapFileKey, passphraseProblem } from './format';
 
 /** Rows held before being written. Bounded so a large table never becomes a large heap. */
 const WRITE_BATCH = 500;
@@ -62,7 +62,11 @@ export type RestoreMode = 'merge' | 'replace';
 export interface RestoreOptions {
   client: PrismaClient;
   engine: DbEngine;
-  passphrase: string;
+  /**
+   * Omit only when the file carries a gateway recipient and this is the gateway that wrote it —
+   * the unattended path. A person restoring a file types the passphrase.
+   */
+  passphrase?: string;
   input: Readable;
   mode: RestoreMode;
   /**
@@ -105,7 +109,7 @@ export interface RestoreResult extends RestorePlan {
  * The header is read a chunk at a time rather than by buffering the file: the point of streaming is
  * that a backup larger than memory can still be restored.
  */
-async function* decryptedLines(input: Readable, passphrase: string): AsyncGenerator<string> {
+async function* decryptedLines(input: Readable, passphrase?: string): AsyncGenerator<string> {
   let pending = Buffer.alloc(0);
   let headerLine: string | null = null;
   // DecipherGCM, not the base Decipher: `createDecipheriv` is overloaded on the algorithm, and
@@ -135,7 +139,9 @@ async function* decryptedLines(input: Readable, passphrase: string): AsyncGenera
       }
       headerLine = pending.subarray(0, nl).toString('utf8');
       const header = parseHeader(headerLine);
-      decipher = createDecipheriv(CIPHER, await deriveKey(passphrase, header), Buffer.from(header.cipher.iv, 'hex'));
+      // Recover the file key from whichever recipient we can satisfy, then decrypt the body with it.
+      const fileKey = await unwrapFileKey(header, { passphrase });
+      decipher = createDecipheriv(CIPHER, fileKey, Buffer.from(header.cipher.iv, 'hex'));
       // The header is authenticated, so a rewritten one fails here rather than changing how the
       // file is read.
       decipher.setAAD(Buffer.from(headerLine, 'utf8'));
@@ -177,8 +183,12 @@ interface Pending { model: string; rows: Record<string, unknown>[] }
  * incomplete, or any row cannot be written.
  */
 export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
-  const problem = passphraseProblem(opts.passphrase);
-  if (problem) throw new Error(problem);
+  // Validated only when one was supplied: the unattended path opens the file with the gateway's own
+  // key and has no passphrase to check. `unwrapFileKey` is what refuses when neither works.
+  if (opts.passphrase !== undefined) {
+    const problem = passphraseProblem(opts.passphrase);
+    if (problem) throw new Error(problem);
+  }
 
   const rowsInFile: Record<string, number> = {};
   const written: Record<string, number> = {};

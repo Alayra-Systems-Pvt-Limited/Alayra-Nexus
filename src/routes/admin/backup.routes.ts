@@ -77,7 +77,13 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
   // POST rather than GET: the passphrase is in the body, and a GET would put it in the URL — where
   // it lands in access logs, proxy logs and browser history.
   fastify.post('/admin/backup/export', withRateLimit(adminOwnerGuard, AUTH_RATE_LIMIT), async (request, reply) => {
-    const parsed = z.object({ passphrase: z.string() }).safeParse(request.body);
+    const parsed = z.object({
+      passphrase: z.string(),
+      // Also wrap the file key for this gateway, so it can be reopened without the passphrase.
+      // Off unless asked: a downloaded file leaves the building, and a second way in only helps
+      // someone who already has the .env.
+      includeGatewayRecipient: z.boolean().default(false),
+    }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'A backup passphrase is required.' });
 
     const problem = passphraseProblem(parsed.data.passphrase);
@@ -95,10 +101,14 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
     reply.raw.setHeader('x-content-type-options', 'nosniff');
 
     try {
-      const summary = await exportBackup(parsed.data.passphrase, reply.raw);
+      const summary = await exportBackup(parsed.data.passphrase, reply.raw, parsed.data.includeGatewayRecipient);
       recordAudit({
         action: 'backup.export', method: 'POST', ...actor(request), status: 200,
-        detail: JSON.stringify({ filename, rows: summary.totalRows, secrets: summary.secrets }),
+        detail: JSON.stringify({
+          filename, rows: summary.totalRows, secrets: summary.secrets,
+          // Recorded because it changes who can open the file — an auditor should not have to guess.
+          gatewayRecipient: parsed.data.includeGatewayRecipient,
+        }),
       });
       reply.raw.end();
     } catch (err) {
@@ -146,7 +156,9 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
       if (!path) return reply.code(400).send({ error: 'No backup file was uploaded.' });
 
       const parsed = z.object({
-        passphrase: z.string(),
+        // Optional: a file carrying a gateway recipient can be opened by the gateway that wrote it,
+        // which is the unattended path. A person uploading a file supplies the passphrase.
+        passphrase: z.string().optional(),
         mode: z.enum(['merge', 'replace']).default('merge'),
         dryRun: z.enum(['true', 'false']).default('false'),
         masterPassword: z.string().optional(),
@@ -158,8 +170,12 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
       const mode = parsed.data.mode as RestoreMode;
       const dryRun = parsed.data.dryRun === 'true';
 
-      const problem = passphraseProblem(passphrase);
-      if (problem) return reply.code(400).send({ error: problem });
+      // Only validated when supplied. When it is absent the engine tries this gateway's own key and
+      // refuses clearly if that does not open the file.
+      if (passphrase !== undefined) {
+        const problem = passphraseProblem(passphrase);
+        if (problem) return reply.code(400).send({ error: problem });
+      }
 
       // A dry run writes nothing, so it needs no extra proof — and demanding one would discourage
       // the very step that makes `replace` safe to offer at all.
