@@ -129,6 +129,26 @@ describe('Admin — People', () => {
   });
 });
 
+describe('Admin — Backup tab', () => {
+  it('is offered to an owner, and opens both halves of the story', async () => {
+    render(<Admin />);
+    fireEvent.click(screen.getByRole('tab', { name: /^backup$/i }));
+
+    await waitFor(() => expect(screen.getByText(/take a backup/i)).toBeInTheDocument());
+    // Taking one and restoring one live on the same screen deliberately: the second is only ever as
+    // good as the first, and an operator who has never pressed the top button should see that.
+    expect(screen.getByText(/restore from a backup/i)).toBeInTheDocument();
+  });
+
+  it('does not exist for an admin', () => {
+    // Same reasoning as the Danger zone: both routes sit behind adminOwnerGuard, and a `replace`
+    // additionally demands the master password. Hiding the tab keeps an admin out of a dead end.
+    asRole('admin', 'u3');
+    render(<Admin />);
+    expect(screen.queryByRole('tab', { name: /^backup$/i })).not.toBeInTheDocument();
+  });
+});
+
 describe('Admin — Danger zone tab', () => {
   it('is offered to an owner, and opens the factory reset', async () => {
     render(<Admin />);

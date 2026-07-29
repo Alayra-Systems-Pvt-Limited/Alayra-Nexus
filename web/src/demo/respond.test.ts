@@ -134,6 +134,18 @@ describe('demo responder — every endpoint the dashboard calls', () => {
     '/admin/notifications/read-all', '/admin/invites/accept',
   ]);
 
+  // Endpoints that never pass through `api()` at all, so `demoRespond` is not on their path and a
+  // fixture for them would be code that can never run (B1.4).
+  //
+  // Backup is the whole set: an export answers with a binary stream, a restore is a multipart upload
+  // that reports its own progress through XMLHttpRequest, and the maintenance poll deliberately
+  // reads its own response so that a 401 — which a `replace` restore guarantees the moment it wipes
+  // every session — cannot be turned into a sign-out. They are also unreachable in the demo twice
+  // over: the tab is owner-only and the demo identity is a viewer.
+  const OUTSIDE_THE_API_CLIENT = new Set([
+    '/admin/backup/export', '/admin/backup/restore', '/admin/backup/maintenance',
+  ]);
+
   // Sources are read with Vite's own `import.meta.glob`, not node:fs. Anything using `process` or
   // `readFileSync` here would be a Node global inside a file tsconfig checks, and `types` is pinned
   // to browser typings on purpose — that mismatch typechecks locally (TypeScript finds @types/node
@@ -151,7 +163,7 @@ describe('demo responder — every endpoint the dashboard calls', () => {
     expect(paths.size).toBeGreaterThan(20); // the scan found something; a silent zero would pass vacuously
 
     const unhandled = [...paths]
-      .filter((p) => !WRITE_ONLY.has(p))
+      .filter((p) => !WRITE_ONLY.has(p) && !OUTSIDE_THE_API_CLIENT.has(p))
       .filter((p) => {
         try { demoRespond('GET', p); return false; } catch { return true; }
       });

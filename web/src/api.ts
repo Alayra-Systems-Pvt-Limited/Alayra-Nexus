@@ -683,6 +683,85 @@ export interface SessionRow {
 
 export interface SessionsResponse { sessions: SessionRow[] }
 
+// ── Backup and restore (backup.routes.ts) ─────────────────────────────────────
+// The contracts only. The transport lives in lib/backupClient.ts, because none of these three calls
+// can go through `api()`: an export is a binary stream, a restore is a multipart upload that reports
+// its own progress, and the maintenance poll must not trip the global 401-means-sign-out handler
+// while a restore is in the middle of invalidating every session.
+
+export type RestoreMode = 'merge' | 'replace';
+
+/** Mirrors Collision in lib/backup/collisions.ts. `examples` is always empty for a hashed column. */
+export interface BackupCollision {
+  model: string;
+  column: string;
+  /** Rows that would be silently dropped. Exact, not sampled. */
+  count: number;
+  examples: string[];
+}
+
+/** Mirrors DriftKind in lib/backup/schemaDrift.ts. */
+export type DriftKind =
+  | 'unknown-model' | 'new-model' | 'unknown-column'
+  | 'missing-required' | 'missing-fillable' | 'type-changed' | 'now-required';
+
+/** Mirrors Difference in lib/backup/schemaDrift.ts. */
+export interface SchemaDifference {
+  model: string;
+  column?: string;
+  kind: DriftKind;
+  /** One line, already phrased for an operator by the server. Rendered as-is. */
+  detail: string;
+  blocking: boolean;
+}
+
+/**
+ * Mirrors GatewayRestoreResult in services/backup.service.ts — what both a dry run and a real
+ * restore answer with. A dry run is the same shape with everything written left at zero, which is
+ * what lets one report component render the plan and the outcome.
+ */
+export interface RestoreReport {
+  gatewayVersion: string;
+  createdAt: string;
+  sourceEngine: string;
+  rowsInFile: Record<string, number>;
+  totalRowsInFile: number;
+  secretsInFile: number;
+  sourceSchema: Record<string, string[]> | null;
+  /** Settings the source gateway had that this one does not, by name. Never values. */
+  missingEnv: string[];
+  /** Non-blocking drift only — anything blocking threw before this was produced. */
+  schemaDrift: SchemaDifference[];
+  mode: RestoreMode;
+  dryRun: boolean;
+  written: Record<string, number>;
+  totalWritten: number;
+  skipped: Record<string, number>;
+  totalSkipped: number;
+  /** Populated by a `merge` dry run alone — see collisions.ts. */
+  collisions: BackupCollision[];
+  secretsRekeyed: number;
+  tablesCleared: number;
+  kvKeysCleared: number;
+}
+
+/** Mirrors MaintenanceView in services/maintenance.service.ts. */
+export interface MaintenanceView {
+  reason: string;
+  startedAt: number;
+  rowsWritten: number;
+  /** Null when the total is unknown — a progress bar with no denominator is a spinner. */
+  rowsExpected: number | null;
+  updatedAt: number;
+  elapsedMs: number;
+  percent: number | null;
+  /** Null until enough has happened to estimate honestly. */
+  etaSeconds: number | null;
+  retryAfterSeconds: number;
+}
+
+export interface MaintenanceStatus { active: boolean; maintenance?: MaintenanceView }
+
 export const GET   = <T = unknown>(p: string) => api<T>('GET', p);
 export const POST  = <T = unknown>(p: string, b?: unknown) => api<T>('POST', p, b);
 export const PUT   = <T = unknown>(p: string, b?: unknown) => api<T>('PUT', p, b);

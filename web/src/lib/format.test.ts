@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compactNumber, currency, relativeTime, shortDate } from './format';
+import { bytes, compactNumber, currency, duration, relativeTime, shortDate } from './format';
 
 describe('compactNumber', () => {
   it('shows small numbers as-is and abbreviates large ones', () => {
@@ -16,6 +16,45 @@ describe('currency', () => {
     expect(currency(0)).toBe('$0');
     expect(currency(0.004)).toBe('<$0.01');
     expect(currency(12.5)).toBe('$12.50');
+  });
+});
+
+describe('bytes', () => {
+  it('climbs units and keeps one decimal until the number is big enough not to need it', () => {
+    expect(bytes(0)).toBe('0 B');
+    expect(bytes(512)).toBe('512 B');
+    expect(bytes(1536)).toBe('1.5 KB');
+    expect(bytes(150_000)).toBe('150 KB');
+    expect(bytes(2_400_000)).toBe('2.4 MB');
+    expect(bytes(3_000_000_000)).toBe('3.0 GB');
+  });
+
+  it('does not render a negative or non-finite size as one', () => {
+    // A file size arrives from the browser; a wrong one should read as nothing, not as "-1 B".
+    expect(bytes(-1)).toBe('0 B');
+    expect(bytes(NaN)).toBe('0 B');
+  });
+});
+
+describe('duration', () => {
+  it('says one unit, rounded, because it is labelling an estimate', () => {
+    expect(duration(1)).toBe('1 second');
+    expect(duration(45)).toBe('45 seconds');
+    expect(duration(90)).toBe('2 minutes');
+    expect(duration(600)).toBe('10 minutes');
+    expect(duration(3700)).toBe('1 hour');
+    expect(duration(7800)).toBe('2 hours');
+  });
+
+  it('never says "0 seconds" — there is always at least a moment left', () => {
+    // Rounding 0.4s down would put "0 seconds remaining" on screen while work is still happening,
+    // which reads as a stuck progress bar rather than an imminent finish.
+    expect(duration(0.4)).toBe('1 second');
+  });
+
+  it('returns nothing for a duration that cannot be described', () => {
+    expect(duration(NaN)).toBe('');
+    expect(duration(-5)).toBe('');
   });
 });
 
