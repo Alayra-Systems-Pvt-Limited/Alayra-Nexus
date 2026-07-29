@@ -5,8 +5,24 @@ name: Release
 #
 # Two registries on purpose: GHCR sits next to the source and needs no extra account, but exposes no
 # public pull counter. Docker Hub is where most people look first and is the only one that reports
-# pulls — which is why the README's pulls badge reads from there. One build, pushed to both, so the
-# digests are identical and neither can drift from the other.
+# pulls — which is why the README's pulls badge reads from there. One build per architecture, pushed
+# to both, so the digests are identical and neither can drift from the other.
+#
+# ── Why one job per architecture instead of one emulated build ────────────────────────────────────
+# Until 1.4.0 this was a single `docker buildx build --platform linux/amd64,linux/arm64` under QEMU.
+# That broke without a line of ours changing: the `node:22-alpine` digest moved, and `npm ci` began
+# dying under emulation with `qemu: uncaught target signal 4 (Illegal instruction)` — exit 132. The
+# arm64 image had only ever been produced by emulating an instruction set, and emulation is a
+# guess that can stop being right at any upstream bump.
+#
+# GitHub's arm64 runners are free for public repositories, so each architecture is now built on
+# hardware that actually is that architecture. The class of failure goes away rather than being
+# pinned around, and an arm64 build stops taking ten times as long as its amd64 twin.
+#
+# The cost is a two-stage shape. Each build pushes an untagged, digest-addressed image (no tag can
+# name half a multi-arch image without lying about it while the other half is still building), and a
+# merge job then joins the digests into one manifest list and puts the tags on that. So the tags
+# appear once, atomically, pointing at something complete.
 on:
   push:
     tags: ['v*.*.*']
@@ -27,14 +43,29 @@ env:
   IMAGE_HUB: docker.io/alayrasystems/nexus
 
 jobs:
-  image:
-    name: Build & push image
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # Don't cancel arm64 because amd64 failed. Two failures name two problems; one failure plus a
+      # cancellation names one and hides the other.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
+      - name: Derive a filesystem-safe platform name
+        # `linux/amd64` cannot be an artifact name. Used for the cache scope and the digest artifact.
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+
       - uses: actions/checkout@v4
 
-      # Emulation for the arm64 build (Apple Silicon / Graviton).
-      - uses: docker/setup-qemu-action@v3
+      # No setup-qemu-action: that is the thing being removed. Each runner is native.
       - uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
@@ -52,12 +83,78 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Derive image tags & labels
+      - name: Derive labels
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # Every tag pattern below is expanded once per image, so both registries get the same
-          # version / major.minor / latest set from a single build.
+          images: |
+            ${{ env.IMAGE }}
+            ${{ env.IMAGE_HUB }}
+          # Tags are applied in the merge job, to the manifest list. Here we want only the labels.
+          labels: |
+            org.opencontainers.image.title=Alayra Nexus
+            org.opencontainers.image.vendor=Alayra Systems
+
+      - name: Build & push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          # Both registry names in one output: the manifest is byte-identical either way, so the two
+          # registries receive the same digest from a single build rather than from two.
+          outputs: type=image,"name=${{ env.IMAGE }},${{ env.IMAGE_HUB }}",push-by-digest=true,name-canonical=true,push=true
+          # Scoped per architecture. A shared scope would have the two jobs evicting each other's
+          # layers on every run, which reads as a flaky cache rather than as a misconfigured one.
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
+
+      - name: Export the digest
+        # The filename IS the digest; the file is empty. The merge job only needs the names.
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest='${{ steps.build.outputs.digest }}'
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish manifest
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
           images: |
             ${{ env.IMAGE }}
             ${{ env.IMAGE_HUB }}
@@ -70,18 +167,51 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
             type=raw,value=latest
-          labels: |
-            org.opencontainers.image.title=Alayra Nexus
-            org.opencontainers.image.vendor=Alayra Systems
 
-      - name: Build & push (amd64 + arm64)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          provenance: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create the manifest list and push the tags
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+
+          # The artifact filenames are the digests. Collect them first: an empty directory would
+          # otherwise leave the glob unexpanded and hand `imagetools` the literal string `*`.
+          digests=$(ls)
+          if [ -z "$digests" ]; then
+            echo "::error::No digests were produced by the build jobs"; exit 1
+          fi
+          echo "Joining $(echo "$digests" | wc -l) platform image(s):"; echo "$digests"
+
+          # One manifest list per registry, from sources in that same registry — both already hold
+          # every layer, so nothing is copied across the internet a second time.
+          for image in "$IMAGE" "$IMAGE_HUB"; do
+            # `case` rather than grep: the image name contains dots, and a regex would quietly treat
+            # them as wildcards. This is an exact prefix match.
+            tags=""
+            while IFS= read -r tag; do
+              case "$tag" in
+                "$image:"*) tags="$tags -t $tag" ;;
+              esac
+            done <<< "$TAGS"
+
+            # Guard against a metadata change quietly emitting nothing for one registry, which would
+            # otherwise push an untagged manifest and look like a success.
+            if [ -z "$tags" ]; then
+              echo "::error::No tags were derived for $image"; exit 1
+            fi
+
+            sources=""
+            for digest in $digests; do sources="$sources $image@sha256:$digest"; done
+
+            # shellcheck disable=SC2086
+            docker buildx imagetools create $tags $sources
+          done
+
+      - name: Show what was published
+        run: |
+          set -euo pipefail
+          for image in "$IMAGE" "$IMAGE_HUB"; do
+            # Fails the job if the tag does not resolve, so a green run means the image is pullable.
+            docker buildx imagetools inspect "$image:latest"
+          done
