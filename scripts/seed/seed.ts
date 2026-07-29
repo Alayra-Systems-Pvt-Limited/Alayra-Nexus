@@ -34,6 +34,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
+import { encrypt } from '../../src/lib/encryption';
 import { generate, summarise, SEED_TEAMS, SEED_MODELS, type GeneratedData } from './generator';
 import { assertSafeTarget } from './target';
 
@@ -91,7 +92,10 @@ async function seedTeamsAndKeys(): Promise<Map<string, string>> {
           // The seeded access keys are not usable credentials and are not meant to be: the hash is
           // random, so no request can ever authenticate with one. They exist to give usage rows
           // something to attribute to and to populate the Teams tables.
-          encryptedKey: randomBytes(32).toString('base64'),
+          //
+          // Sealed with the real encrypt() rather than filled with random bytes (see the provider
+          // key below for what that cost).
+          encryptedKey: encrypt(plain),
           keyHash:      randomBytes(32).toString('hex'),
           maskedKey:    mask(plain),
         },
@@ -129,10 +133,19 @@ async function seedProviderPools(): Promise<number> {
         data: {
           providerId:   provider.id,
           label:        `${pool.provider}-key-${i + 1}`,
-          // Not a real ciphertext and never decrypted by this script — the seeded pools exist to
-          // populate counts and tables, not to serve traffic. A seeded key that could actually be
-          // decrypted and used would be a far worse idea than one that cannot.
-          encryptedKey: randomBytes(48).toString('base64'),
+          // Real ciphertext of a fake key — not random bytes.
+          //
+          // This used to be `randomBytes(48).toString('base64')`, reasoning that a seeded key which
+          // could be decrypted was more dangerous than one that could not. The security instinct was
+          // right; the implementation was wrong. `encryptedKey` has a contract — `iv:authTag:ciphertext`
+          // produced by encrypt() — and random base64 does not meet it, so every feature that walks
+          // secrets breaks on seeded data. The backup export is where it surfaced: it aborted the
+          // whole export on the first seeded pool.
+          //
+          // Sealing a placeholder keeps both properties. The row is structurally valid, so the code
+          // that reads it works; and what comes out is `openai-SEED-…`, which no provider will ever
+          // accept, so it is still not a usable credential.
+          encryptedKey: encrypt(plain),
           maskedKey:    mask(plain),
           status:       'active',
           rpmLimit:     [60, 120, 240][i % 3],

@@ -140,6 +140,32 @@ export function rekeyRow(model: string, row: Row, transform: (value: string) => 
 
   const out: Row = { ...row };
 
+  /**
+   * Run the transform, and name the row if it fails.
+   *
+   * Without this the whole export dies on `Invalid ciphertext format. Expected iv:authTag:encrypted`
+   * — true, and useless: it names neither the table, nor the column, nor which of ten thousand rows
+   * is the bad one, so an operator whose backup just failed has nowhere to start. Found running an
+   * export over a database whose provider keys had been written by a fixture script as raw base64
+   * rather than through encrypt(). The failure is correct; refusing to say where it happened is not.
+   *
+   * Still a hard failure. A row that cannot be decrypted must never be written into a backup as
+   * whatever bytes happened to be sitting there — that produces a file that restores cleanly and
+   * hands back a credential nothing can open.
+   */
+  const rekey = (value: string, field: string): string => {
+    try {
+      return transform(value);
+    } catch (err) {
+      const id = typeof row.id === 'string' ? row.id : '(unknown id)';
+      throw new Error(
+        `Could not re-encrypt ${model}.${field} on row ${id}: ${(err as Error).message}. ` +
+        'That value is not something this gateway\'s master key produced — it was written by a ' +
+        'different key, or by something that bypassed encrypt(). Nothing was exported.',
+      );
+    }
+  };
+
   for (const loc of locations) {
     const current = out[loc.field];
     // Absent, null, or empty: nothing was ever sealed here. Encrypting "" would manufacture a
@@ -147,7 +173,7 @@ export function rekeyRow(model: string, row: Row, transform: (value: string) => 
     if (typeof current !== 'string' || current.length === 0) continue;
 
     if (loc.shape.kind === 'column') {
-      out[loc.field] = transform(current);
+      out[loc.field] = rekey(current, loc.field);
       continue;
     }
 
@@ -169,7 +195,10 @@ export function rekeyRow(model: string, row: Row, transform: (value: string) => 
     const secret = blob[loc.shape.property];
     if (typeof secret !== 'string' || secret.length === 0) continue;
 
-    out[loc.field] = JSON.stringify({ ...blob, [loc.shape.property]: transform(secret) });
+    out[loc.field] = JSON.stringify({
+      ...blob,
+      [loc.shape.property]: rekey(secret, `${loc.field}.${loc.shape.property}`),
+    });
   }
 
   return out;
