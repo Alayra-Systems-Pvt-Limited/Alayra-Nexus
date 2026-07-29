@@ -90,7 +90,16 @@ jobs:
           images: |
             ${{ env.IMAGE }}
             ${{ env.IMAGE_HUB }}
-          # Tags are applied in the merge job, to the manifest list. Here we want only the labels.
+          # Tags are applied in the merge job, to the manifest list — nothing here consumes
+          # `outputs.tags`. The patterns are still declared because the automatic
+          # `org.opencontainers.image.version` LABEL is derived from them: without the semver
+          # patterns it falls back to the raw ref name, and 1.4.0 shipped labelled `v1.4.0` where
+          # every release before it was labelled `1.3.2`, `1.3.1` and so on.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=raw,value=latest
           labels: |
             org.opencontainers.image.title=Alayra Nexus
             org.opencontainers.image.vendor=Alayra Systems
@@ -154,6 +163,12 @@ jobs:
       - name: Derive image tags
         id: meta
         uses: docker/metadata-action@v5
+        env:
+          # Annotate the manifest LIST, not the platform manifests. Labels on the platform images
+          # are invisible to a registry browsing a multi-arch tag: GHCR's package page has read
+          # "No description provided" since the first multi-arch release, because it looks for the
+          # description in the index annotations and every release so far has shipped none.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: |
             ${{ env.IMAGE }}
@@ -172,8 +187,20 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
+          ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
         run: |
           set -euo pipefail
+
+          # An array, not a string: the description annotation contains spaces, and word splitting
+          # would turn one annotation into six arguments.
+          annotations=()
+          while IFS= read -r annotation; do
+            [ -n "$annotation" ] && annotations+=(--annotation "$annotation")
+          done <<< "$ANNOTATIONS"
+          if [ ${#annotations[@]} -eq 0 ]; then
+            echo "::error::No annotations were derived; the package page would show no description"
+            exit 1
+          fi
 
           # The artifact filenames are the digests. Collect them first: an empty directory would
           # otherwise leave the glob unexpanded and hand `imagetools` the literal string `*`.
@@ -205,7 +232,7 @@ jobs:
             for digest in $digests; do sources="$sources $image@sha256:$digest"; done
 
             # shellcheck disable=SC2086
-            docker buildx imagetools create $tags $sources
+            docker buildx imagetools create "${annotations[@]}" $tags $sources
           done
 
       - name: Show what was published
