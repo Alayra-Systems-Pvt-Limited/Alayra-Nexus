@@ -316,7 +316,7 @@ docker run -d --name alayra-nexus -p 3000:3000 \
 | Docker Hub | `alayrasystems/nexus` |
 | GHCR | `ghcr.io/alayra-systems-pvt-limited/alayra-nexus` |
 
-Pin a version for production (e.g. `:1.3.2`) rather than `:latest`.
+Pin a version for production (e.g. `:1.4.0`) rather than `:latest`.
 
 <details>
 <summary><b>Option B — Docker Compose (brings its own Postgres + Redis)</b></summary>
@@ -335,7 +335,7 @@ curl -O https://raw.githubusercontent.com/Alayra-Systems-Pvt-Limited/Alayra-Nexu
 cat > .env <<EOF
 MASTER_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 ADMIN_PASSWORD=change-me
-NEXUS_VERSION=1.3.2
+NEXUS_VERSION=1.4.0
 EOF
 
 docker compose up -d
@@ -447,8 +447,12 @@ Dashboard is live at `http://localhost:3000`
 ## Standalone mode — no Postgres, no Redis
 
 > [!NOTE]
-> **On `main`, not yet in a published image.** Standalone runs from a source checkout today and
-> ships in the next release. The `docker run` and Compose recipes above are server mode.
+> **Ships in 1.4.0, but not from the container.** The image's start command is
+> `prisma migrate deploy && node dist/server.js`, and that migration step needs a `DATABASE_URL` —
+> so a container started without one stops before the gateway runs. Standalone today means a source
+> checkout or a built `dist/`. A published package that starts a gateway in one command
+> (`npx alayra-nexus`) is the next phase, and a standalone-capable container entry point goes with
+> it. The `docker run` and Compose recipes above are server mode.
 
 Set neither `DATABASE_URL` nor `REDIS_URL` and the gateway runs on a local **SQLite file** and
 **in-process memory** instead. One process, one directory, nothing to provision — for trying Nexus
