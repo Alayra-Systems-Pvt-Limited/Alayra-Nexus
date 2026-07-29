@@ -10,6 +10,63 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 ## [Unreleased]
 
 ### Added
+- **Standalone mode — the gateway runs with no Postgres and no Redis.** Set neither `DATABASE_URL`
+  nor `REDIS_URL` and Nexus starts on a local SQLite file and in-process memory: one process, one
+  directory, nothing to provision. Intended for evaluation, local development against a real
+  gateway, and CI — not for production. It is **not** zero-configuration: `MASTER_ENCRYPTION_KEY` is
+  still required, because a gateway that invented its own would be a gateway whose provider keys
+  nobody else can ever decrypt.
+  The Postgres schema stays the single source of truth — the SQLite client and its schema are
+  *generated* from it, so the two cannot drift. All 14 raw aggregate queries gained a SQLite twin
+  declared beside the Postgres text it stands in for, and a parity suite stands up a real PostgreSQL
+  and a real SQLite, seeds them identically, and fails if any twin disagrees.
+  **What differs, stated rather than papered over:** one writer at a time; no replication or failover;
+  analytics slow down on large tables; `p95` is a nearest-rank pick rather than Postgres' interpolated
+  `percentile_cont`, so the two engines can report neighbouring values; and the Postgres-only Health
+  readings (pool stats, cache hit ratio, deadlocks) report as *unavailable* rather than as `0`, which
+  would read as a measurement instead of an absence.
+
+- **Encrypted backup and restore, portable across engines.** Owner-only, under Admin → **Backup**.
+  Export writes a single encrypted `.nxb` file streamed straight to the browser; restore takes it
+  back, on this gateway or a different one entirely. Every encrypted secret is **re-keyed** in
+  transit — decrypted with the source gateway's master key and re-sealed with the target's — which is
+  what makes a backup portable rather than merely restorable, and what a file copy can never be.
+  A backup carries a manifest of what it came from: format version, source engine, row counts, a
+  schema fingerprint, and the *names* (never the values) of the environment variables the source had
+  set. The restore refuses a backup this gateway cannot honestly restore and lists the specific
+  schema differences instead of failing partway through.
+  **Every restore is dry-run first** — there is no route to a destructive one that skips the report.
+  The report names what would collide, what would be dropped, and what the chosen mode would do,
+  under either **merge** (add and update, keep everything else) or **replace everything** (empty each
+  table first). A replace puts the gateway into maintenance with a live progress figure and a shared
+  countdown, rather than hanging silently, and invalidates the KV afterwards so no stale counter
+  survives its own data. Audited as `backup.export`, `backup.restore.dryrun` and `backup.restore`.
+  **Proven end to end, cross-engine and cross-key:** a 22.6 MB backup from a PostgreSQL gateway
+  restored into a standalone SQLite gateway holding a *different* master key — 51,033 rows across 16
+  tables, 18 secrets re-keyed. The same provider key decrypts to identical plaintext on both sides,
+  the two ciphertexts differ, and the SQLite row cannot be opened with the PostgreSQL key.
+
+- **A Recovery Kit at install, so a backup can outlive either loss.** One file key is wrapped for
+  several recipients rather than encrypting the archive twice. A passphrase recipient (minimum 12
+  characters) is what a person types; a **gateway** recipient lets unattended work proceed without a
+  human awake; and a **recovery** recipient wraps to an X25519 key generated at install and shown
+  once, whose private half the server never holds — so a stolen gateway yields no way in. A
+  gateway-only file is refused at write time, since it would be unopenable the moment the machine it
+  came from is gone, which is precisely the disaster the feature exists to prevent.
+
+- **A static, read-only demo of the console.** The product can now be seen without installing it.
+  The whole demo backend is one function mapping the dashboard's existing single API entry point
+  onto a frozen dataset, so it cannot drift into a second client. Writes are refused rather than
+  faked — a demo that appears to save and silently forgets is worse than one that admits what it is —
+  and the visitor is signed in as a viewer, so the role gating the dashboard already enforces hides
+  every write control. None of it reaches a production build. The dashboard also became mountable
+  under a sub-path, with a root deployment reducing to byte-for-byte what it was.
+
+- **A deterministic synthetic data generator and seed script.** A gateway that has served three
+  requests photographs badly — every chart one spike on a flat line. The generator touches no clock
+  and no global random state, so a seed and an anchor time produce byte-identical output and a
+  fixture changes only when someone means it to. Prices come from the real model catalogue.
+
 - **The Health page now says which stores the gateway is running on.** A Storage card names the
   database and the counter/session engine, whether a restart loses anything, and the caution that
   goes with an ephemeral pairing. Admin-only: the public `/health` and `/ready` are unchanged, since
@@ -20,8 +77,7 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   fails loudly exactly as before — a database outage must never demote a gateway into an ephemeral
   store that accepts traffic it will lose. A contradiction (`NEXUS_MODE=standalone` next to a
   `DATABASE_URL`) is refused rather than guessed: both readings destroy something, so the message
-  names the two settings that disagree. Groundwork for SQLite and in-memory operation; neither is
-  available yet, and the boot says so plainly instead of half-starting.
+  names the two settings that disagree.
 
 - **Redis is now optional.** Without `REDIS_URL` the gateway keeps counters, sessions, breaker state
   and the response cache in process, and starts with no Redis at all. Everything a Redis deployment
@@ -34,11 +90,46 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   Budgets are the exception — they re-derive from usage history, so spend stays correct. The Health
   page and `/ready` name the store in use rather than reporting on a Redis that is not there.
 
+### Changed
+- **A standalone gateway opens SQLite in WAL journal mode.** SQLite's default `delete` mode locks the
+  whole file for a write while readers wait, which is the wrong trade for this process: the usage
+  pipeline, audit buffer and health sampler all write continuously underneath a dashboard that reads.
+  Measured over six concurrent aggregates across 120k rows with 60 background writes — **~2100 ms
+  total and a ~2000 ms slowest write under `delete`, against ~600 ms and ~260 ms under WAL.** Note
+  that the live database is then *three* files (`nexus.db`, plus `-wal` and `-shm` sidecars): copy
+  the directory, or stop the gateway first — or use the backup export above, which is the supported
+  answer.
+
 ### Fixed
+- **A fresh PostgreSQL install was missing a table the schema declared.** `AiModelRegistry` existed in
+  `schema.prisma` and in no migration. Every developer machine had it, because `prisma db push`
+  writes the schema directly; every fresh install did not, because the container runs
+  `prisma migrate deploy` and migrations are all it applies. It stayed invisible until the backup
+  export — the first feature that walks *every* model in the schema — aborted on it. Standalone was
+  never affected, since the SQLite schema is generated from `schema.prisma` rather than replayed from
+  migrations; the engine missing the table was the production one. A fresh `migrate deploy` now
+  builds all 16 tables.
+- **The seed script wrote random bytes into an encrypted column.** `encryptedKey` has a format, and a
+  placeholder that could not be decrypted broke every feature that walks secrets. The seeded value is
+  now sealed with the real encryption path, so the row is structurally valid while what comes out of
+  it is a string no provider will ever accept.
+- **A re-key failure now names the row it failed on.** "Invalid ciphertext format" was true and
+  useless against a database with fifty thousand rows; it now names the model, field and row id. The
+  failure itself remains hard by design — a value that cannot be decrypted must never be written into
+  a backup as whatever bytes happened to be there, because that produces a file that restores
+  cleanly and hands back a credential nothing can open.
+- **The top-eight model and provider breakdowns were never deterministically ordered.** `ORDER BY
+  requests DESC` alone left tied rows to the engine, so which entries appeared in a `LIMIT 8` could
+  change between identical queries. Four queries gained a tiebreaker on the group key. Found by the
+  cross-engine parity suite, and a latent PostgreSQL defect rather than an accommodation for SQLite.
 - **A malformed `SELECT version()` row no longer takes the whole Health response down.** The Postgres
   introspection read guarded a missing row but not a null column, so an unexpected shape raised a
   TypeError instead of degrading to the "version —" the UI already renders. Found while writing the
   tests above.
+
+### Security
+- **Three high-severity advisories cleared** across the gateway, the dashboard and the e2e tooling,
+  including pinning `brace-expansion` past its OOM advisory in dev tooling.
 
 ## [1.3.2] - 2026-07-20
 
@@ -581,7 +672,10 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/releases/tag/v1.0.0

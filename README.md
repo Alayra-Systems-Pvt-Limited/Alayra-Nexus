@@ -68,7 +68,7 @@ one for you silently would mean every install shared a key we published.</sub>
 
 ## Contents
 
-**Get started** · [Live demo](https://alayra-systems-pvt-limited.github.io/Alayra-Nexus/demo/) · [Why Alayra Nexus?](#why-alayra-nexus) · [Features](#features) · [Screens](#screens) · [How it compares](#how-it-compares) · [Supported providers](#supported-providers) · [Architecture](#architecture) · [Quick start](#quick-start) · [Standalone mode](#standalone-mode--no-postgres-no-redis) · [Connect your tools](#connect-your-tools) · [Environment variables](#environment-variables)
+**Get started** · [Live demo](https://alayra-systems-pvt-limited.github.io/Alayra-Nexus/demo/) · [Why Alayra Nexus?](#why-alayra-nexus) · [Features](#features) · [Screens](#screens) · [How it compares](#how-it-compares) · [Supported providers](#supported-providers) · [Architecture](#architecture) · [Quick start](#quick-start) · [Standalone mode](#standalone-mode--no-postgres-no-redis) · [Backup & restore](#backup--restore) · [Connect your tools](#connect-your-tools) · [Environment variables](#environment-variables)
 
 **How it works** · [Rate limits, explained](#rate-limits-explained) · [Resilience & routing](#resilience--routing) · [Teams & budgets](#teams--budgets) · [BYOK](#byok--bring-your-own-key) · [API reference](#api-reference) · [Dashboard](#dashboard) · [Observability](#observability)
 
@@ -105,12 +105,14 @@ Alayra Nexus is the infrastructure layer that sits between your application and 
 | **Anthropic-Compatible API** | `/v1/messages` too, so **Claude Code** and the Anthropic SDKs route through the same pool — streaming, tools, and all |
 | **Team Key Issuance** | Create scoped access tokens per team, each with an independently configurable RPM limit |
 | **BYOK (Bring Your Own Key)** | A team can register its own provider keys, encrypted at rest and routed only for that team's traffic — with optional fall-back to the shared pool, or hard isolation |
-| **Real-Time Rate Limiting** | Per-key RPM enforcement via Redis with live utilization meters (per-key TPM budgets are configurable; enforcement is on the roadmap) |
+| **Real-Time Rate Limiting** | Per-key RPM **and TPM** enforced atomically before admission, with token reservation and post-response reconciliation, plus live utilization meters |
 | **Cost Tracking** | Per-request USD cost computed from model pricing, attributed to the requesting team |
 | **Full Analytics Dashboard** | Request trends, token breakdowns, team leaderboard, provider split — powered by Chart.js |
 | **Custom Date Ranges** | Analytics filterable by today / 7d / 30d / 90d or any custom from→to window |
 | **CSV Export** | One-click export of all analytics data for finance or reporting |
 | **Model Registry** | Manage which models are available, their tier, capabilities, and per-1M token pricing |
+| **Encrypted Backup & Restore** | One encrypted file for the whole gateway. Secrets are re-keyed on the way in, so a backup restores onto a *different* gateway with a different master key — PostgreSQL ⇄ SQLite included. Every restore is dry-run first |
+| **Standalone Mode** | No Postgres, no Redis — a SQLite file and in-process memory. One process, one directory, nothing to provision |
 | **Web Admin Dashboard** | Full browser UI — no CLI required for day-to-day operations |
 | **Two-Factor Admin Auth** | Optional TOTP second factor with single-use recovery codes, session tokens, per-source login lockout, and revocable API tokens for scripts |
 | **Security Hardened** | Fastify Helmet, CORS, constant-time secret comparison, AES-256-GCM key encryption, zero plaintext secrets at rest |
@@ -501,15 +503,19 @@ and standalone puts that database on one disk.
 **Budgets are the exception** — spend is re-derived from usage history rather than held in a
 counter, so it stays correct across a restart.
 
-### Backups: copy the whole directory, not the database file
+### Backups: use the export, not a file copy
 
 Standalone runs SQLite in **WAL** mode, so the live database is **three files** — `nexus.db`, plus
 a `-wal` sidecar holding commits not yet folded in, plus `-shm`.
 
 > [!WARNING]
 > Copying `nexus.db` on its own while the gateway is running produces a backup that restores to an
-> **earlier state while looking complete**. Stop the gateway first, or copy the whole `.nexus/`
-> directory. A proper export/restore with encryption is the next thing being built.
+> **earlier state while looking complete**.
+
+Use **[Backup & restore](#backup--restore)** instead: it reads a consistent snapshot from the
+running gateway, encrypts it into one file, and restores onto any gateway — including a Postgres
+one. If you would rather copy files, stop the gateway first and copy the whole `.nexus/` directory,
+never the `.db` alone.
 
 WAL is why background writes stay off the dashboard's back. Measured with six concurrent aggregates
 over 120k rows while 60 writes landed underneath them:
@@ -557,9 +563,103 @@ Move when any of these becomes true: you need **more than one instance**, you ne
 enforced accurately** across them, you need **backups and failover you did not build yourself**, or
 your analytics tables have grown enough that the dashboard feels slow.
 
-Point `DATABASE_URL` and `REDIS_URL` at real servers and restart. Migrating existing standalone
-data into Postgres is being built — until it lands, treat a standalone gateway as one you are
-willing to start over from.
+Point `DATABASE_URL` and `REDIS_URL` at real servers and restart — then carry your data across with
+**[Backup & restore](#backup--restore)**: export from the standalone gateway, restore into the
+Postgres one. Provider keys survive the move, because the restore re-encrypts every secret with the
+target gateway's key rather than copying ciphertext it could not open. The direction works both
+ways, which is also how you take a local copy of production to debug against.
+
+---
+
+## Backup & restore
+
+**Admin → Backup**, owner-only. Export writes the whole gateway to one encrypted file; restore takes
+it back — on this gateway, or on a different one entirely.
+
+What makes it portable rather than merely restorable: **every encrypted secret is re-keyed in
+transit.** Provider keys, team keys and TOTP secrets are decrypted with the source gateway's
+`MASTER_ENCRYPTION_KEY` and re-sealed with the target's. A file copy cannot do this — restore a
+Postgres dump onto a gateway with a different master key and every credential in it is unreadable.
+
+Which is why the same file moves between engines. Verified end to end: a **22.6 MB** backup taken
+from a PostgreSQL gateway, restored into a standalone SQLite gateway holding a *different* master
+key — **51,033 rows across 16 tables, 18 secrets re-keyed.** The provider key decrypts to identical
+plaintext on both sides, the two ciphertexts differ, and the SQLite row cannot be opened with the
+PostgreSQL key.
+
+### Exporting
+
+Choose a passphrase of **at least 12 characters**. It is the only thing between a stolen backup file
+and every API key in the gateway, and — unless you also wrapped the file for another recipient — the
+only way to open it again.
+
+One file key is wrapped for up to three **recipients**, so a backup can outlive either loss:
+
+| Recipient | What opens it | When to use it |
+|---|---|---|
+| **Passphrase** | Something you know | Always. The default |
+| **Gateway** | A subkey of this deployment's `MASTER_ENCRYPTION_KEY` | Unattended work. Off unless asked — a downloaded file leaves the building, and this recipient only helps someone who already has your `.env` |
+| **Recovery** | The X25519 private key from your Recovery Kit, shown once at install | Disaster recovery. The server holds only the public half, so a stolen gateway yields no way in |
+
+A gateway-only file is **refused at write time**: it would be unopenable the moment the machine it
+came from is gone, which is exactly the disaster this feature exists to prevent.
+
+### Restoring
+
+**Every restore is dry-run first.** There is no path to a destructive one that skips the report. The
+report names the source gateway and engine, the row counts, what would collide, what would be
+dropped, and any environment variables the source had set that this gateway does not.
+
+| Mode | What it does |
+|---|---|
+| **Merge** | Adds new rows and updates matching ones. Everything else is left alone |
+| **Replace everything** | Empties all 16 tables first, then loads the backup. The gateway enters maintenance with a live progress figure and a shared countdown |
+
+The restore **refuses** a backup whose schema this gateway cannot honestly restore, and lists the
+specific differences rather than failing partway through. After a replace, the counter/session store
+is invalidated so no stale rate-limit window survives its own data.
+
+> [!IMPORTANT]
+> A backup contains every provider key, every team key, every TOTP secret and the full audit trail.
+> It is as sensitive as the gateway itself. **`.env` is deliberately not included** — carrying it
+> would mean a stolen backup also handed over your SSO and SMTP credentials.
+
+### Over the API
+
+```bash
+curl -X POST http://localhost:3000/admin/backup/export \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"passphrase":"correct horse battery staple"}' -o backup.nxb
+```
+
+Dry run first — writes nothing, and returns the same report the dashboard shows:
+
+```bash
+curl -X POST http://localhost:3000/admin/backup/restore \
+  -H "Authorization: Bearer $TOKEN" \
+  -F file=@backup.nxb -F passphrase='correct horse battery staple' \
+  -F mode=replace -F dryRun=true
+```
+
+Then the real one. A destructive restore needs two further proofs — the exact phrase, and the
+administrator password from the **server's** environment, which a stolen dashboard session does not
+carry:
+
+```bash
+curl -X POST http://localhost:3000/admin/backup/restore \
+  -H "Authorization: Bearer $TOKEN" \
+  -F file=@backup.nxb -F passphrase='correct horse battery staple' \
+  -F mode=replace -F dryRun=false \
+  -F confirm='REPLACE ALL DATA' -F masterPassword="$ADMIN_PASSWORD"
+```
+
+Owner-only and rate-limited. Audited as `backup.export`, `backup.restore.dryrun` and
+`backup.restore`. Upload size is capped by `NEXUS_MAX_BACKUP_BYTES`.
+
+> [!NOTE]
+> **Scheduled and off-box backups are not built yet.** Today an export is something a person runs.
+> A backup written to the same disk as the gateway is lost to the same accident, so download it
+> somewhere else.
 
 ---
 
@@ -1223,7 +1323,12 @@ Named presets you can copy as starting points: `email`, `us-phone`, `credit-card
 - [x] Prometheus `/metrics` endpoint and optional OpenTelemetry tracing
 - [x] BYOK — team-owned provider keys with optional hard isolation
 - [x] Admin auth hardening — constant-time compare, login lockout, TOTP 2FA
+- [x] Standalone mode — SQLite and in-process memory, no Postgres and no Redis
+- [x] Encrypted backup and restore, portable across gateways and across engines
+- [x] A static, read-only live demo of the console
 - [ ] **CLI — coming soon.** A command-line interface over the existing admin API
+- [ ] `npx alayra-nexus` — a published package that starts a gateway with no clone and no Docker
+- [ ] Scheduled backups, and writing them off-box (S3, GCS, a mounted volume)
 - [ ] Webhook and email alerts on key failure or budget threshold
 - [ ] Custom domain / CNAME support
 - [ ] Integration test suite
