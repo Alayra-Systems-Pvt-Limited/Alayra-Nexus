@@ -28,7 +28,22 @@
 // It deliberately holds no logic. Resolution lives in lib/mode.ts, which is pure and exhaustively
 // tested; this only prints and exits, so there is nothing here worth a unit test.
 
-import { resolveMode, describeMode, ephemeralWarning, type ResolvedMode } from './lib/mode';
+import { resolveMode, describeMode, ephemeralWarning, pinStorageEnv, type ResolvedMode } from './lib/mode';
+
+// Before anything else, and before `check()` below reads the environment.
+//
+// Importing `@prisma/client` loads the `.env` beside its schema, so a variable this gateway was
+// deliberately started WITHOUT can be set behind its back, three levels down an import chain, after
+// the check below has already passed and printed. Changing directory is no escape — the file is
+// found from the schema, not from the working directory. Pinning declares the absence explicitly,
+// and an explicit value is one no env-file loader will overwrite. `pinStorageEnv` documents the
+// full sequence.
+//
+// It belongs here rather than in `lib/prisma.ts` for the same reason this module exists at all:
+// `@prisma/client` is reached through several modules — `lib/dialect.ts` and
+// `services/analytics.service.ts` among them — so guarding one of them guards nothing. There is
+// exactly one place that is reliably earlier than all of them, and this is it.
+pinStorageEnv();
 
 function die(lines: string[]): never {
   console.error(`\n✖  ${lines[0]}`);

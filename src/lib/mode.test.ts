@@ -9,8 +9,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { resolveMode, describeMode, ephemeralWarning, resolveDatabaseUrl, DEFAULT_DATA_DIR, DEFAULT_DB_FILE } from './mode';
-import { isAbsolute, resolve as resolvePath } from 'node:path';
+import { resolveMode, describeMode, ephemeralWarning, resolveDatabaseUrl, pinStorageEnv, DEFAULT_DATA_DIR, DEFAULT_DB_FILE } from './mode';
+import { isAbsolute, resolve as resolvePath, join } from 'node:path';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import dotenv from 'dotenv';
 
 const PG    = 'postgresql://nexus:nexus@localhost:5432/nexus';
 const REDIS = 'redis://localhost:6379';
@@ -283,5 +286,94 @@ describe('resolveDatabaseUrl', () => {
       const url      = resolveDatabaseUrl(e, CWD).toLowerCase();
       expect(url.startsWith('file:') ? 'sqlite' : 'postgres').toBe(expected);
     }
+  });
+});
+
+describe('pinStorageEnv — making an absent variable stay absent', () => {
+  it('pins both when neither is configured', () => {
+    const e = env({});
+    expect(pinStorageEnv(e)).toEqual(['DATABASE_URL', 'REDIS_URL']);
+    expect(e.DATABASE_URL).toBe('');
+    expect(e.REDIS_URL).toBe('');
+  });
+
+  it('leaves a configured value exactly as it found it', () => {
+    const e = env({ DATABASE_URL: PG, REDIS_URL: REDIS });
+    expect(pinStorageEnv(e)).toEqual([]);
+    expect(e.DATABASE_URL).toBe(PG);
+    expect(e.REDIS_URL).toBe(REDIS);
+  });
+
+  it('pins only the one that is missing', () => {
+    const e = env({ DATABASE_URL: PG });
+    expect(pinStorageEnv(e)).toEqual(['REDIS_URL']);
+    expect(e.DATABASE_URL).toBe(PG);
+    expect(e.REDIS_URL).toBe('');
+  });
+
+  // An already-empty value is already pinned. Reporting it as newly pinned would be a lie in the
+  // one place a reader would use to work out whether anything was shielded.
+  it('reports nothing pinned when the caller already set an empty string', () => {
+    const e = env({ DATABASE_URL: '', REDIS_URL: '' });
+    expect(pinStorageEnv(e)).toEqual([]);
+  });
+
+  it('changes nothing about how the mode then resolves', () => {
+    const bare = resolveMode(env({}));
+    const e = env({});
+    pinStorageEnv(e);
+    const pinned = resolveMode(e);
+    expect(pinned).toEqual(bare);
+    expect(pinned.mode).toBe('standalone');
+  });
+
+  it('leaves a whitespace-only value alone, and it still reads as unconfigured', () => {
+    const e = env({ REDIS_URL: '   ' });
+    expect(pinStorageEnv(e)).toEqual(['DATABASE_URL']);
+    expect(e.REDIS_URL).toBe('   ');
+    expect(resolveMode(e).kv).toBe('memory');
+  });
+});
+
+// The whole fix rests on one claim about a library we do not control: a dotenv-style loader will
+// not overwrite a key that is already present. Asserting that against the real dotenv is the
+// difference between a test of the fix and a test of my belief about the fix — and if a future
+// dotenv ever changed that behaviour, this is the test that would say so rather than a gateway
+// quietly dialling a Redis nobody asked for.
+describe('pinStorageEnv — against the real dotenv', () => {
+  const write = (body: string): string => {
+    const file = join(mkdtempSync(join(tmpdir(), 'nexus-pin-')), '.env');
+    writeFileSync(file, body);
+    return file;
+  };
+
+  const STRAY = 'REDIS_URL=redis://stray:6379\nDATABASE_URL=postgresql://stray/db\n';
+
+  it('without the pin, a stray file wins — this is the bug', () => {
+    const file = write(STRAY);
+    const e = env({});
+    dotenv.config({ path: file, processEnv: e });
+    expect(e.REDIS_URL).toBe('redis://stray:6379');
+    expect(resolveMode(e).kv).toBe('redis');
+  });
+
+  it('with the pin, the same file cannot get in', () => {
+    const file = write(STRAY);
+    const e = env({});
+    pinStorageEnv(e);
+    dotenv.config({ path: file, processEnv: e });
+    expect(e.REDIS_URL).toBe('');
+    expect(e.DATABASE_URL).toBe('');
+    expect(resolveMode(e)).toMatchObject({ mode: 'standalone', db: 'sqlite', kv: 'memory' });
+  });
+
+  // The pin must not become a gag order: a variable the operator really did set has to keep
+  // arriving from the file it was set in.
+  it('and a variable the pin did not touch still loads normally', () => {
+    const file = write(`${STRAY}MASTER_ENCRYPTION_KEY=${'a'.repeat(64)}\n`);
+    const e = env({});
+    pinStorageEnv(e);
+    dotenv.config({ path: file, processEnv: e });
+    expect(e.MASTER_ENCRYPTION_KEY).toBe('a'.repeat(64));
   });
 });

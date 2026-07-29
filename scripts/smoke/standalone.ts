@@ -92,24 +92,40 @@ async function main(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'nexus-smoke-'));
   let output = '';
 
-  // An EMPTY working directory, and both URLs explicitly blank. The directory matters as much as
-  // the variables: Prisma's client loads a .env next to the schema, so a run from the repo root
-  // would silently inherit the developer's Postgres and this would quietly test the wrong engine.
-  // That exact mistake produced a passing "standalone" run during S2.0 that was really Postgres.
+  // An EMPTY working directory, and both URLs genuinely ABSENT rather than blank.
+  //
+  // They used to be passed as empty strings, which made this the one caller that could not catch
+  // the bug it was working around: importing `@prisma/client` loads the .env beside its schema —
+  // this checkout's — and sets both variables from it, whatever directory the process runs in. The
+  // empty temp directory below is therefore NOT protection; only the blanking was, and that exact
+  // mistake produced a passing "standalone" run during S2.0 that was really Postgres. Blanking here
+  // immunised this script and left every other caller exposed, which is why the bug survived two
+  // phases.
+  //
+  // The gateway pins them for itself now (`pinStorageEnv` in lib/mode.ts). Deleting rather than
+  // blanking is what makes this the npx condition: unset, not set-to-nothing, so the gateway has to
+  // do the pinning. On any machine whose checkout has a .env — every developer's, by definition —
+  // that turns this script into a live regression test for it. Verified by disabling the pin and
+  // running this: it dies with "Cannot reach Redis at localhost:6379 / REDIS_URL=localhost:6379",
+  // a variable nothing here set. In CI, where there is no .env, it degrades to what it always was.
+  const childEnv = {
+    ...process.env,
+    NEXUS_MODE: '',
+    PORT: String(PORT),
+    HOST: '127.0.0.1',
+    NODE_ENV: 'production',
+    ADMIN_PASSWORD: MASTER,
+    MASTER_ENCRYPTION_KEY: 'a'.repeat(64),
+    LOG_LEVEL: 'warn',
+  };
+  // Not `= ''`: a developer's shell often has both, and inheriting one would silently test server
+  // mode while reporting a standalone pass.
+  delete childEnv.DATABASE_URL;
+  delete childEnv.REDIS_URL;
+
   const child = spawn(process.execPath, [join(ROOT, 'dist', 'server.js')], {
     cwd: dir,
-    env: {
-      ...process.env,
-      DATABASE_URL: '',
-      REDIS_URL: '',
-      NEXUS_MODE: '',
-      PORT: String(PORT),
-      HOST: '127.0.0.1',
-      NODE_ENV: 'production',
-      ADMIN_PASSWORD: MASTER,
-      MASTER_ENCRYPTION_KEY: 'a'.repeat(64),
-      LOG_LEVEL: 'warn',
-    },
+    env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout?.on('data', (d) => { output += d; });

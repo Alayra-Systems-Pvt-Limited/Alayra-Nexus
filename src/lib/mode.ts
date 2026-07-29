@@ -78,6 +78,55 @@ function readMode(raw: string | undefined): { value: NexusMode | null; invalid: 
   return { value: null, invalid: raw!.trim() };
 }
 
+/** The two variables whose absence is what "standalone" means. */
+export const STORAGE_VARS = ['DATABASE_URL', 'REDIS_URL'] as const;
+
+/**
+ * Make "this variable is not set" survive everything that loads an env file later.
+ *
+ * Prisma Client reads a `.env` when `@prisma/client` is IMPORTED — not when a client is
+ * constructed, and not through anything this codebase calls. The file it reads is the one beside
+ * the schema the client was generated from, which for this repo is `.env` at the root. Note that
+ * this is NOT the working directory: a gateway started in an empty temp directory still picks up
+ * the checkout's `.env`, so moving elsewhere is not an escape from it. The sequence is:
+ *
+ *   1. `dotenv/config` loads the file the operator chose, which may be another path entirely
+ *      (`DOTENV_CONFIG_PATH`) and may deliberately contain no DATABASE_URL and no REDIS_URL.
+ *   2. `bootGuard` resolves the mode from that, correctly, and reports standalone.
+ *   3. Some import three levels down reaches `@prisma/client`, which loads the checkout's `.env`
+ *      and sets both variables from it.
+ *   4. `lib/redis.ts` reads REDIS_URL at ITS import — now populated — and dials a Redis nobody asked
+ *      for, while the banner printed at step 2 still says in-process memory.
+ *
+ * The gateway ends up REPORTING one configuration and RUNNING another, which is the exact
+ * contradiction the boot check exists to refuse, arriving after the check has already passed. An
+ * operator who explicitly pointed the gateway at a different config file gets overruled by a file
+ * they did not name.
+ *
+ * The fix rests on how every dotenv-style loader behaves: **a key already present in the
+ * environment is left alone.** Absence is the only state such a loader is free to overwrite. So we
+ * stop leaving these two absent and set them to the empty string instead — a value the whole
+ * codebase already reads as "not configured" (`env.DATABASE_URL?.trim() || ''`), and one no later
+ * loader will touch. Not-set becomes explicitly-set-to-nothing, and the decision made at boot is
+ * the decision that survives.
+ *
+ * A configured value is never altered, so nothing about a server-mode gateway changes.
+ *
+ * This must run before anything imports `@prisma/client` — see the call site in `bootGuard.ts`.
+ *
+ * @returns the names actually pinned, for tests and for anything that wants to report it.
+ */
+export function pinStorageEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  const pinned: string[] = [];
+  for (const name of STORAGE_VARS) {
+    if (env[name] === undefined) {
+      env[name] = '';
+      pinned.push(name);
+    }
+  }
+  return pinned;
+}
+
 /**
  * Work out which stores to use from the environment alone.
  *

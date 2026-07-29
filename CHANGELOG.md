@@ -9,6 +9,24 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Fixed
+- **A gateway told to run standalone can no longer be talked out of it by a file nobody named.**
+  Importing `@prisma/client` loads the `.env` beside its schema — the checkout's — and sets whatever
+  it finds there. So an operator who pointed the gateway at a different config file
+  (`DOTENV_CONFIG_PATH`) with no `DATABASE_URL` and no `REDIS_URL` got the right decision at boot,
+  printed honestly, and then a `REDIS_URL` set behind its back three levels down an import chain.
+  The gateway ended up **reporting one configuration and running another** — the exact contradiction
+  the boot check exists to refuse, arriving after the check had already passed. Changing directory
+  was no escape: the file is found from the schema, not from the working directory.
+  The two variables are now pinned to an empty string at boot when they are absent, before anything
+  can reach Prisma. Every env-file loader leaves an already-present key alone, so declaring the
+  absence explicitly is what makes it survive; the codebase already reads empty as unconfigured, and
+  a configured value is never touched, so nothing about a server-mode gateway changes.
+  The standalone smoke had this worked around by hand since S2.0 — it passed both URLs as empty
+  strings, which immunised the one caller that could have caught it and left every other exposed.
+  It now deletes them instead, so the gateway has to do the pinning itself, and disabling the pin
+  makes that suite fail with `Cannot reach Redis at localhost:6379` on a variable it never set.
+
 ## [1.4.0] - 2026-07-29
 
 ### Added
