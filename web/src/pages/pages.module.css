@@ -91,6 +91,11 @@
 .poolModelsHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .poolModelsLabel { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 .poolModelsEmpty { font-size: 12px; color: var(--subtle); }
+/* Sits opposite the "MODELS (n)" label — the header is already space-between. Quiet by default:
+   it is an occasional action next to a list, not the thing the eye should land on first. */
+.poolModelsAdd { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 6px; background: none; border: 1px solid var(--border); color: var(--muted); cursor: pointer; font-size: 11.5px; font-weight: 500; transition: color .12s, border-color .12s, background .12s; }
+.poolModelsAdd:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); background: var(--surface-2); }
+.poolModelsAdd:disabled { opacity: .5; cursor: not-allowed; }
 .modelList { display: flex; flex-direction: column; gap: 6px; }
 .modelItem { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); }
 .modelItemMain { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
