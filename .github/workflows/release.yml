@@ -434,8 +434,27 @@ jobs:
         # A scoped package defaults to RESTRICTED. Publishing one privately looks identical to
         # publishing one publicly from in here — the difference only shows to someone outside the
         # organisation, which is everyone who matters. So ask the registry anonymously.
+        #
+        # With retries, because the registry is a CDN: a read issued seconds after a write can
+        # legitimately miss, and this asks from outside the account that just wrote. 1.5.2 published
+        # correctly to both registries and this step still failed on a 404, reporting a complete
+        # release as a broken one. A check that cannot tell "not public" from "not replicated yet"
+        # is worse than no check at all, because the first thing anyone learns is to distrust it.
         run: |
           set -euo pipefail
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
-          npm --userconfig=/dev/null view "$NAME@$VERSION" version
+
+          for attempt in $(seq 1 10); do
+            if npm --userconfig=/dev/null view "$NAME@$VERSION" version; then
+              echo "::notice::$NAME@$VERSION is publicly visible."
+              exit 0
+            fi
+            echo "not visible yet (attempt $attempt/10) — waiting for the registry to replicate"
+            sleep 15
+          done
+
+          # Two and a half minutes is long past replication, so this is a real visibility problem.
+          echo "::error::$NAME@$VERSION is not publicly visible."
+          echo "If it did publish, the package is probably restricted: check 'npm access list packages'."
+          exit 1
