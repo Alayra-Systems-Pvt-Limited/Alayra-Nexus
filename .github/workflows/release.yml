@@ -43,8 +43,66 @@ env:
   IMAGE_HUB: docker.io/alayrasystems/nexus
 
 jobs:
+  # ── Nothing is published until this passes ──────────────────────────────────────────────────────
+  # A release workflow's real failure mode is not failing to publish. It is publishing something
+  # broken, which cannot be taken back: npm never reissues a version, and a bad `:latest` is pulled
+  # by everyone before anyone notices.
+  #
+  # The last step is the one that matters most. It packs the actual tarball, installs it into an
+  # empty directory and drives the result over HTTP — so what gets tested is the artefact about to
+  # be published, not the repository it came from. Four bugs in S4 existed only in that gap.
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    services:
+      # Same throwaway pair as CI: without them the engine-parity suites skip, and a mistranslated
+      # SQL twin ships silently — four of the seven ways they can be wrong produce no error at all,
+      # just a wrong number on the dashboard.
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus
+          POSTGRES_DB: nexus_parity
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nexus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          PARITY_REDIS_URL: redis://localhost:6379
+          PARITY_DATABASE_URL: postgresql://nexus:nexus@localhost:5432/nexus_parity
+
+      - name: Dashboard
+        run: npm ci && npm run typecheck && npm test
+        working-directory: web
+
+      - name: The published package, installed and driven
+        run: npm run smoke:npx
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: [verify]
     runs-on: ${{ matrix.runner }}
     strategy:
       # Don't cancel arm64 because amd64 failed. Two failures name two problems; one failure plus a
@@ -119,6 +177,46 @@ jobs:
           # layers on every run, which reads as a flaky cache rather than as a misconfigured one.
           cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
+
+      # ── Prove the image runs, before any tag can point at it ────────────────────────────────────
+      # Started with NO DATABASE_URL, which is the configuration that exposed three separate
+      # defects in 1.4.0 — an unconditional migration, an image that had never contained the SQLite
+      # client, and a volume mount point owned by root while the gateway runs unprivileged. Every
+      # one of them was invisible to a Postgres deployment, so nothing else in this pipeline would
+      # have caught them.
+      #
+      # This runs inside the matrix job on purpose: each architecture tests its own image on its own
+      # hardware, with no emulation and no extra job to plumb digests through.
+      - name: Run the image with no database
+        run: |
+          set -euo pipefail
+          REF='${{ env.IMAGE }}@${{ steps.build.outputs.digest }}'
+          docker pull -q "$REF"
+          docker run -d --name smoke -p 3000:3000 \
+            -e MASTER_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
+            -e ADMIN_PASSWORD=ci-smoke-password \
+            -v /tmp/nexus-ci-data:/app/.nexus \
+            "$REF"
+
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3000/health; then break; fi
+            if [ "$(docker inspect -f '{{.State.Running}}' smoke)" != "true" ]; then
+              echo "::error::The container exited before answering."; docker logs smoke; exit 1
+            fi
+            sleep 2
+          done
+
+          curl -fsS -o /dev/null http://127.0.0.1:3000/health || { docker logs smoke; exit 1; }
+          curl -fsS -o /dev/null http://127.0.0.1:3000/ready  || { docker logs smoke; exit 1; }
+          curl -fsS -o /dev/null http://127.0.0.1:3000/       || { docker logs smoke; exit 1; }
+
+          # It must have built its own database rather than found one, and said which engine it is
+          # on. A gateway reporting Postgres here would mean it reached something it should not have.
+          docker logs smoke 2>&1 | grep -q 'Database created' || { docker logs smoke; exit 1; }
+          docker logs smoke 2>&1 | grep -q 'SQLite'           || { docker logs smoke; exit 1; }
+
+          docker rm -f smoke >/dev/null
+          echo "the ${{ matrix.platform }} image serves with no database"
 
       - name: Export the digest
         # The filename IS the digest; the file is empty. The merge job only needs the names.
@@ -242,3 +340,66 @@ jobs:
             # Fails the job if the tag does not resolve, so a green run means the image is pullable.
             docker buildx imagetools inspect "$image:latest"
           done
+
+  # ── npm, via OIDC — there is no token anywhere in this repository ──────────────────────────────
+  # npm is configured to trust exactly one thing: this repository, this workflow filename. When the
+  # job runs, GitHub itself mints a short-lived token asserting both facts and signs it; npm checks
+  # that signature and those claims before allowing a publish. A workflow in any other repository
+  # cannot make that assertion, and nothing long-lived exists here to leak or to expire.
+  #
+  # It also earns provenance for free: npm attaches a signed attestation tying the published tarball
+  # to this commit and this workflow, which anyone can verify.
+  #
+  # `needs: build` rather than `needs: verify`: the images have to have been built AND started with
+  # no database before this runs. A release where the package publishes and the container does not
+  # work is worse than a release that fails outright, because only one half can be taken back.
+  publish-npm:
+    name: Publish to npm
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write        # the whole mechanism; without it there is nothing to sign
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          # Not cached: a release must resolve its dependencies fresh rather than from whatever a
+          # previous run happened to leave behind.
+          package-manager-cache: false
+
+      # Node 22 ships npm 10, and trusted publishing needs 11.5.1 or newer.
+      - run: npm install -g npm@latest
+
+      # Runs our postinstall, which generates both Prisma clients. `npm publish` then runs prepack,
+      # which builds the gateway and the dashboard — the only reason web/dist, gitignored and absent
+      # from a clean checkout, can be inside the tarball at all.
+      - run: npm ci
+
+      # A re-run after a half-finished release must not fail on the half that already succeeded.
+      # npm refuses to republish a version, correctly — so ask first, and say plainly which it was.
+      - name: Publish, unless this version is already on npm
+        run: |
+          set -euo pipefail
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::$NAME@$VERSION is already published — nothing to do."
+            exit 0
+          fi
+
+          npm publish
+          echo "::notice::published $NAME@$VERSION"
+
+      - name: Confirm the public can actually see it
+        # A scoped package defaults to RESTRICTED. Publishing one privately looks identical to
+        # publishing one publicly from in here — the difference only shows to someone outside the
+        # organisation, which is everyone who matters. So ask the registry anonymously.
+        run: |
+          set -euo pipefail
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          npm --userconfig=/dev/null view "$NAME@$VERSION" version
