@@ -9,6 +9,58 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-07-30
+
+Everything here came from watching one person install the published package and use it, which is
+the one test that had never been run. Nothing was found by reading the code.
+
+### Fixed
+- **A generated admin password no longer ends up in log files.** The launcher printed it
+  unconditionally — right for a person, who cannot claim the gateway without it, and wrong for
+  `> deploy.log`, a piped invocation, or CI, where a live credential lands in a file that outlives
+  its usefulness. It now prints only when stdout is a **terminal**, and otherwise names the `0600`
+  file it is already kept in. Showing it at all is deliberate: refusing would begin every first run
+  by sending someone to open a file, for no gain, since anyone who can read that terminal can read
+  that file.
+- **The backup passphrase screen had no Copy button.** Every other screen showing a secret had one.
+  So the only way past that step was to read a *generated* secret off the screen and retype it —
+  precisely what generating it was meant to prevent.
+- **Secrets are now legible.** They were set at 12px on a single line that scrolled sideways, a
+  deliberate choice to avoid folding a hyphenated key mid-group. It solved the wrong problem: a
+  value you can see a third of at a time is worse than one that wraps. They now wrap **only after a
+  hyphen**, so a group is never split down the middle, at a size you can read without leaning in.
+- **The last step of first-run setup no longer strands you.** It read as three things to consider
+  rather than two things to do in order, and the button stayed disabled until the passphrase was
+  pasted back with nothing explaining that downloading the kit is what makes pasting possible. The
+  steps are numbered now, the download is the primary action, and once it has been taken, step two
+  says where to find what it is asking for.
+- **A regular expression stopped pretending to parse HTML** in the package end-to-end test. It
+  missed `<SCRIPT`, and asserted so little that any page satisfied it — including an error page. It
+  now checks for the content-hashed bundle name, which appears only when the dashboard that was
+  compiled is the one being served.
+
+### Changed
+- **Releases run from a tag, and refuse to publish half of one.** Four gates, in order: the full
+  suites; the **packed tarball installed into an empty directory and driven over HTTP**; one image
+  per architecture on native hardware, each **started with no `DATABASE_URL`** and checked; then
+  publication. npm waits for the container deliberately — a release where the package works and the
+  image does not is worse than one that fails outright, since neither half can be withdrawn and the
+  version then means two different things. Authentication is OIDC, so **no npm token exists in this
+  repository**: npm trusts one repository and one workflow filename, GitHub signs a short-lived
+  assertion of both, and provenance tying each tarball to its commit comes free. The final step asks
+  the registry **anonymously** whether the version is visible, because a scoped package published
+  privately looks identical from the inside and the publisher is the last person positioned to
+  notice.
+- **CI now runs on Node 22.** It had been running on 20 while `engines` required 22, so every green
+  run was validating a runtime the package refuses to install on. Node 20 has been end-of-life since
+  April 2026.
+
+### Documentation
+- **The quick start says the single command does both things.** `npx @alayrasystems/nexus`
+  downloads *and* starts — there is no install step before it. It also warns that the first run
+  takes about a minute behind an npm spinner: that output belongs to npm and cannot be replaced with
+  a progress bar, so the honest fix is to say so rather than let a normal wait read as a hang.
+
 ## [1.5.1] - 2026-07-30
 
 ### Changed
@@ -769,7 +821,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.3.2...v1.4.0
