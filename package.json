@@ -1,6 +1,6 @@
 {
   "name": "alayra-nexus",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "AI key pool proxy — route Claude, Gemini, GPT through one OpenAI-compatible endpoint",
   "license": "Apache-2.0",
   "main": "dist/server.js",
@@ -24,8 +24,15 @@
     "README.md"
   ],
   "keywords": [
-    "ai-gateway", "llm-proxy", "openai-compatible", "anthropic", "litellm-alternative",
-    "load-balancing", "rate-limiting", "cost-tracking", "self-hosted"
+    "ai-gateway",
+    "llm-proxy",
+    "openai-compatible",
+    "anthropic",
+    "litellm-alternative",
+    "load-balancing",
+    "rate-limiting",
+    "cost-tracking",
+    "self-hosted"
   ],
   "repository": {
     "type": "git",

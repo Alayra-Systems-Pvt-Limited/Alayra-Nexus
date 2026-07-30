@@ -9,6 +9,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-30
+
 ### Added
 - **`npx alayra-nexus` — one command, nothing to provision.** No clone, no build, no Postgres, no
   Redis, no Docker. It creates `~/.alayra-nexus`, generates and persists its own encryption key and
@@ -69,8 +71,6 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   gateway running in front of you in a terminal should not bury its one useful screen in
   per-request JSON — and an explicit `LOG_LEVEL` still wins. The generated API key notice no longer
   names one specific editor.
-
-### Fixed
 - **A gateway told to run standalone can no longer be talked out of it by a file nobody named.**
   Importing `@prisma/client` loads the `.env` beside its schema — the checkout's — and sets whatever
   it finds there. So an operator who pointed the gateway at a different config file
@@ -753,7 +753,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.3.0...v1.3.1
