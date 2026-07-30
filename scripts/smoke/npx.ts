@@ -229,7 +229,13 @@ async function main(): Promise<void> {
       output.split('\n').find((l) => l.includes('not used'))?.trim() ?? 'no such line');
 
     const password = readFileSync(join(dataDir, 'admin-password'), 'utf8').trim();
-    check('the printed password is the one it kept', output.includes(password));
+    // This run's stdout is a pipe, not a terminal — exactly the shape of a CI job or a
+    // `> deploy.log`. The password must NOT be in it. It is a real credential, and a log file is
+    // where credentials go to outlive their usefulness.
+    check('the password is not written to a non-terminal stdout', !output.includes(password),
+      output.includes(password) ? 'FOUND IT IN THE LOG' : '');
+    check('and the banner says where it is kept instead',
+      output.includes(join(dataDir, 'admin-password')));
 
     // ── 5. It is a real gateway ──────────────────────────────────────────────────────────────
     const ready = await req('GET', '/ready');
@@ -257,9 +263,19 @@ async function main(): Promise<void> {
       check(`the dashboard read ${path} answers`, r.status === 200, r.status === 200 ? '' : JSON.stringify(r.body));
     }
 
+    // Not a tag-matching regex. Code scanning was right to object — a pattern like `/<script/`
+    // silently fails on `<SCRIPT`, and reaching for a regex to inspect HTML is the habit worth
+    // dropping rather than the case worth arguing. It was also a weak assertion: any HTML page at
+    // all would satisfy it, including an error page.
+    //
+    // The built bundle's filename carries a content hash, so `/assets/index-` appears only when the
+    // dashboard that `prepack` compiled is the thing being served. That is the claim this test is
+    // actually making — the dashboard survived `files` and came out of the package.
     const dash = await fetch(`${BASE}/`);
     const html = await dash.text();
-    check('the dashboard itself is served from the package', dash.ok && /<div id="app">|<script/.test(html));
+    check('the dashboard itself is served from the package',
+      dash.ok && html.includes('/assets/index-'),
+      dash.ok ? '' : `status ${dash.status}`);
 
     // ── 6. A second gateway on the same directory is refused ─────────────────────────────────
     const second = spawnSync(bin, ['--data-dir', dataDir, '--port', String(PORT + 1)], {

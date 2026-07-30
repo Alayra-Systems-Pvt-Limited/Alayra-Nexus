@@ -474,11 +474,26 @@ function banner(o: CliOptions, created: { key: boolean; password: boolean }, pas
   }
 
   console.log('');
-  if (created.password) {
+  // A generated password has to reach the person who just ran this, or the gateway they started
+  // cannot be claimed. But "reach a person" and "appear in a log file" are different things, and
+  // only one of them is intended.
+  //
+  // So it is printed only to an interactive terminal. Redirect the output, pipe it, or run this in
+  // CI, and stdout is not a TTY — the password then stays where it already is, in a 0600 file, and
+  // the banner says where to find it. This is the difference between a credential shown to its
+  // owner and a credential written into `deploy.log` where it will outlive its usefulness.
+  //
+  // The remaining console.log is deliberate and is what code scanning flags: a password reaching a
+  // terminal on purpose. The alternative — never showing it — would mean every first run begins by
+  // telling someone to go open a file, which is worse for no security gain, since anyone who can
+  // read that terminal can also read that file.
+  if (created.password && process.stdout.isTTY) {
     console.log(`  Admin password   ${password}`);
     console.log('                   Use it to claim the gateway in the dashboard.');
+    console.log(`                   Also kept in ${join(o.dataDir, PASSWORD_FILE)}`);
   } else {
     console.log(`  Admin password   ${join(o.dataDir, PASSWORD_FILE)}`);
+    if (created.password) console.log('                   (generated — not printed, this output is not a terminal)');
   }
   console.log('');
   // Deliberately no URL and no "Ctrl-C to stop" here. The server prints the URLs itself moments

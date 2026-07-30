@@ -56,24 +56,32 @@
 
 .keyRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-/* The recovery key is shown exactly once, so it is set to be read and transcribed accurately:
-   monospaced and selectable. It stays on ONE line — wrapping made the hyphenated key look broken
-   and "squeezed"; if it can't fit it scrolls sideways rather than folding mid-group. Copy and
-   Download sit beside it, so nobody has to transcribe it by eye anyway. */
+/* The recovery key and the backup passphrase are shown exactly once, so they are set to be read and
+   transcribed accurately: monospaced, selectable, and large enough to read without leaning in.
+
+   This used to sit on ONE line and scroll sideways, to avoid folding a hyphenated key mid-group.
+   That solved the wrong problem: a value you can only see a third of at a time is worse than one
+   that wraps, and the first person to reach this screen said so — "the box is small so the words
+   are too small and very congested". It now wraps, but ONLY after a hyphen (`word-break: keep-all`
+   plus the browser's natural break opportunity there), so a group is never split down the middle.
+   Every value shown here is hyphen-separated by construction, so there is always somewhere to
+   break. */
 .key {
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 1.7;
   letter-spacing: 0.02em;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 9px 10px;
+  padding: 12px 14px;
   user-select: all;
-  white-space: nowrap;
-  overflow-x: auto;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* ── Claim wizard (Phase 7.16b) — a stepped, org-aware first run ──────────── */

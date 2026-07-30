@@ -14,6 +14,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-6d28d9.svg?style=for-the-badge)](./LICENSE)
 [![Release](https://img.shields.io/github/v/release/Alayra-Systems-Pvt-Limited/Alayra-Nexus?style=for-the-badge&color=0e7490)](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/releases)
 [![npm](https://img.shields.io/npm/v/%40alayrasystems%2Fnexus?style=for-the-badge&logo=npm&logoColor=white&color=cb0000)](https://www.npmjs.com/package/@alayrasystems/nexus)
+[![npm downloads](https://img.shields.io/npm/dm/%40alayrasystems%2Fnexus?style=for-the-badge&logo=npm&logoColor=white&color=cb0000&label=npm%20installs)](https://www.npmjs.com/package/@alayrasystems/nexus)
 [![Docker Pulls](https://img.shields.io/docker/pulls/alayrasystems/nexus?style=for-the-badge&logo=docker&logoColor=white&color=2496ed)](https://hub.docker.com/r/alayrasystems/nexus)
 [![Container](https://img.shields.io/badge/ghcr.io-alayra--nexus-2496ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/pkgs/container/alayra-nexus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3b82f6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -302,6 +303,11 @@ providers is identical either way.
 ```bash
 npx @alayrasystems/nexus
 ```
+
+**That single command downloads it and starts it.** There is no install step before it, and nothing
+to clean up after. The first run takes about a minute — most of it fetching the database engine —
+and npm shows only a spinner while it does, so give it that minute before deciding it has hung.
+Every run after the first starts in seconds.
 
 That is the whole thing. No clone, no build, no Postgres, no Redis, no Docker. It creates
 `~/.alayra-nexus`, generates its own encryption key and admin password, builds a SQLite database,

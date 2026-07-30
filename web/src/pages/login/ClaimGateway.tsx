@@ -54,6 +54,8 @@ export function ClaimGateway({
   const [chosen, setChosen] = useState('');
   const [masterKey, setMasterKey] = useState('');
   const [pasteBack, setPasteBack] = useState('');
+  /** Whether the kit has been downloaded, so step 2 can say where to find what it is asking for. */
+  const [downloaded, setDownloaded] = useState(false);
 
   const passphrase = generated ? backupPassphrase : chosen;
 
@@ -132,18 +134,29 @@ export function ClaimGateway({
             </Field>
           )}
 
+          {/* Primary, and numbered. The first person through this screen read it as three things to
+              consider rather than two things to do in order, and stalled — the button below is
+              disabled until the passphrase is pasted back, with nothing saying that downloading is
+              what makes pasting possible. Saying "1" and "2" out loud costs a line and removes the
+              guesswork. */}
+          <p class={s.hint}><strong>1.</strong> Download the kit — it contains everything above.</p>
           <Button
             type="button"
-            variant="secondary"
-            onClick={() => download('alayra-nexus-recovery-kit.txt', kit)}
+            variant="primary"
+            onClick={() => { download('alayra-nexus-recovery-kit.txt', kit); setDownloaded(true); }}
           >
             <Download size={14} /> Download Recovery Kit
           </Button>
 
+          <p class={s.hint}>
+            <strong>2.</strong> Paste your backup passphrase below to confirm you have it.
+            {downloaded && ' It is in the file you just downloaded, and on the Copy button above.'}
+          </p>
+
           {/* The gate. Not a checkbox: you cannot paste what you did not save. */}
           <Field
             label="Confirm you saved it"
-            hint="Type or paste your backup passphrase back. We ask because we cannot recover it for you."
+            hint="We ask because we cannot recover it for you. There is no reset link."
           >
             <Input
               value={pasteBack}
@@ -323,6 +336,10 @@ export function ClaimGateway({
               >
                 <div class={s.keyRow}>
                   <code class={s.key}>{backupPassphrase}</code>
+                  {/* Copy belongs on every screen that shows a secret, not only the last one. It was
+                      missing here, so the only way past this step was to read the passphrase off the
+                      screen and retype it — for a value we generated precisely so nobody would. */}
+                  <CopyButton value={backupPassphrase} label="Copy" variant="secondary" />
                   <Button type="button" variant="secondary" onClick={() => setBackupPassphrase(generatePassphrase())}>
                     <RefreshCw size={14} /> New one
                   </Button>
