@@ -14,7 +14,13 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-// `npx alayra-nexus` — the launcher, and only the launcher (Phase S4).
+// `npx @alayrasystems/nexus` — the launcher, and only the launcher (Phase S4).
+//
+// The PACKAGE is scoped and the COMMAND is not, deliberately. The scope puts the package under the
+// organisation, which is where something meant to outlive any one person's npm account belongs —
+// npm allows no other arrangement, since only user accounts may own unscoped names. The `bin` entry
+// keeps the short `alayra-nexus` for everyone who installs it, so the long form is paid exactly
+// once, by someone trying it for the first time.
 //
 // This starts a gateway. It is NOT a CLI: there are no subcommands for pools, keys, models or
 // analytics, because all of that already exists in the dashboard this same process serves. A real
@@ -265,7 +271,8 @@ function usage(): string {
   alayra-nexus — start an Alayra Nexus gateway
 
   Usage
-    npx alayra-nexus [options]
+    alayra-nexus [options]              (installed:  npm i -g @alayrasystems/nexus)
+    npx @alayrasystems/nexus [options]  (one-off, nothing installed)
 
   Options
     -p, --port <n>       port to listen on            (default ${DEFAULT_PORT})
@@ -437,7 +444,7 @@ function checkClientsGenerated(): void {
         'That happens when installation skips lifecycle scripts (--ignore-scripts, or a policy',
         'that disables them). Reinstall allowing scripts, or generate them by hand:',
         '',
-        '  npm exec --package=alayra-nexus -- prisma generate',
+        '  npm exec --package=@alayrasystems/nexus -- prisma generate',
         '',
         `(missing: ${specifier})`,
       ]);

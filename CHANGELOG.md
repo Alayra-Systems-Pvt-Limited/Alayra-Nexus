@@ -9,6 +9,22 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-07-30
+
+### Changed
+- **The npm package is now `@alayrasystems/nexus`.** 1.5.0 was published unscoped as `alayra-nexus`,
+  which npm allows only under a personal account: *"Only user accounts can create and manage
+  unscoped packages. Organizations can only manage scoped packages."* There is no transfer, no
+  button, and no workaround — a package meant to outlive any one person's npm account has to be
+  scoped. That is worth more than four characters of typing.
+  **The command is unchanged.** `bin` still installs `alayra-nexus`, so the scope is paid exactly
+  once, by whoever runs the one-off `npx @alayrasystems/nexus`; everyone who installs it types
+  `alayra-nexus` forever after. `publishConfig.access` becomes load-bearing here rather than
+  decorative: a scoped package defaults to restricted, and without it the publish would either fail
+  or quietly ship something nobody can install.
+  `alayra-nexus@1.5.0` stays published and working, and is deprecated with a pointer to the new
+  name rather than removed — unpublishing would break anyone who already installed it.
+
 ## [1.5.0] - 2026-07-30
 
 ### Added
@@ -753,7 +769,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.3.1...v1.3.2

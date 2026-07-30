@@ -13,11 +13,12 @@
 [![CI](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-6d28d9.svg?style=for-the-badge)](./LICENSE)
 [![Release](https://img.shields.io/github/v/release/Alayra-Systems-Pvt-Limited/Alayra-Nexus?style=for-the-badge&color=0e7490)](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/releases)
+[![npm](https://img.shields.io/npm/v/%40alayrasystems%2Fnexus?style=for-the-badge&logo=npm&logoColor=white&color=cb0000)](https://www.npmjs.com/package/@alayrasystems/nexus)
 [![Docker Pulls](https://img.shields.io/docker/pulls/alayrasystems/nexus?style=for-the-badge&logo=docker&logoColor=white&color=2496ed)](https://hub.docker.com/r/alayrasystems/nexus)
 [![Container](https://img.shields.io/badge/ghcr.io-alayra--nexus-2496ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/pkgs/container/alayra-nexus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3b82f6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-v5-22c55e.svg?style=for-the-badge)](https://fastify.dev/)
-[![Node.js](https://img.shields.io/badge/Node.js-20+-f59e0b.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22+-f59e0b.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Prisma-0ea5e9.svg?style=for-the-badge&logo=postgresql&logoColor=white)](https://prisma.io/)
 [![CLI](https://img.shields.io/badge/CLI-coming_soon-64748b.svg?style=for-the-badge&logo=gnubash&logoColor=white)](#contents)
 
@@ -299,7 +300,7 @@ providers is identical either way.
 ### Option A — One command, nothing to provision
 
 ```bash
-npx alayra-nexus
+npx @alayrasystems/nexus
 ```
 
 That is the whole thing. No clone, no build, no Postgres, no Redis, no Docker. It creates
@@ -309,7 +310,7 @@ is disabled because there is no database server; the engines underneath are diff
 is the same.
 
 ```
-  Alayra Nexus 1.5.0 — first run
+  Alayra Nexus 1.5.1 — first run
 
   Data directory   /home/you/.alayra-nexus
   Encryption key   /home/you/.alayra-nexus/secret.key  (generated)
@@ -337,10 +338,14 @@ Open the dashboard, claim it with that password, add a provider key, and point y
 > have names common enough to appear in someone else's. If one is found, the gateway says so and
 > ignores it. Name the file with `--env-file` to use it deliberately.
 
-To keep it around, install it instead of fetching it each time:
+To keep it around, install it instead of fetching it each time — the command it installs is short:
 
 ```bash
-npm install -g alayra-nexus
+npm install -g @alayrasystems/nexus
+```
+
+```bash
+alayra-nexus
 ```
 
 Standalone is for evaluation, local development and CI — one process, one machine, and a restart
@@ -368,7 +373,7 @@ docker run -d --name alayra-nexus -p 3000:3000 \
 | Docker Hub | `alayrasystems/nexus` |
 | GHCR | `ghcr.io/alayra-systems-pvt-limited/alayra-nexus` |
 
-Pin a version for production (e.g. `:1.5.0`) rather than `:latest`.
+Pin a version for production (e.g. `:1.5.1`) rather than `:latest`.
 
 <details>
 <summary><b>Option C — Docker Compose (brings its own Postgres + Redis)</b></summary>
@@ -387,7 +392,7 @@ curl -O https://raw.githubusercontent.com/Alayra-Systems-Pvt-Limited/Alayra-Nexu
 cat > .env <<EOF
 MASTER_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 ADMIN_PASSWORD=change-me
-NEXUS_VERSION=1.5.0
+NEXUS_VERSION=1.5.1
 EOF
 
 docker compose up -d
@@ -498,7 +503,7 @@ Dashboard is live at `http://localhost:3000`
 
 ## Standalone mode — no Postgres, no Redis
 
-The easiest way in is [`npx alayra-nexus`](#option-a--one-command-nothing-to-provision), which does
+The easiest way in is [`npx @alayrasystems/nexus`](#option-a--one-command-nothing-to-provision), which does
 all of the below for you. It also runs from the container, with no database alongside it:
 
 ```bash
@@ -1391,7 +1396,7 @@ Named presets you can copy as starting points: `email`, `us-phone`, `credit-card
 - [x] Encrypted backup and restore, portable across gateways and across engines
 - [x] A static, read-only live demo of the console
 - [ ] **CLI — coming soon.** A command-line interface over the existing admin API
-- [ ] `npx alayra-nexus` — a published package that starts a gateway with no clone and no Docker
+- [x] `npx @alayrasystems/nexus` — a published package that starts a gateway with no clone and no Docker
 - [ ] Scheduled backups, and writing them off-box (S3, GCS, a mounted volume)
 - [ ] Webhook and email alerts on key failure or budget threshold
 - [ ] Custom domain / CNAME support

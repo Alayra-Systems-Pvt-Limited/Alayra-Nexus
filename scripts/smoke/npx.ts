@@ -19,7 +19,7 @@
 // Proves the PACKAGE, not the repository (Phase S4).
 //
 // Every other test in this project runs against a working tree that has been built, installed and
-// configured by us. None of that exists for someone typing `npx alayra-nexus` — they get a tarball,
+// configured by us. None of that exists for someone typing `npx @alayrasystems/nexus` — a tarball,
 // whatever `files` let out of it, and a postinstall. So this packs the real package, installs the
 // tarball into an empty directory, and runs the binary npm puts on the PATH.
 //
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
     // The postinstall's whole job. Without these the launcher refuses to start, by design.
     check('the postinstall generated the Postgres client', existsSync(join(modules, '.prisma', 'client')));
     check('the postinstall generated the SQLite client',
-      existsSync(join(modules, 'alayra-nexus', 'node_modules', '.prisma', 'client-sqlite'))
+      existsSync(join(modules, '@alayrasystems', 'nexus', 'node_modules', '.prisma', 'client-sqlite'))
       || existsSync(join(modules, '.prisma', 'client-sqlite')));
 
     const bin = join(modules, '.bin', process.platform === 'win32' ? 'alayra-nexus.cmd' : 'alayra-nexus');
@@ -287,7 +287,7 @@ async function main(): Promise<void> {
       console.error(output);
       process.exitCode = 1;
     } else {
-      console.log(`✔ npx alayra-nexus works end to end — installed in ${installSeconds}s\n`);
+      console.log(`✔ npx @alayrasystems/nexus works end to end — installed in ${installSeconds}s\n`);
     }
   } catch (err) {
     console.error(`\n✖  ${(err as Error).message}\n`);
