@@ -96,11 +96,17 @@ RUN prisma --version
 
 # The standalone data directory, created in the IMAGE and owned by the user that will write to it.
 #
-# Docker creates a bind or named-volume mount point that does not exist in the image as root, and
-# this container drops to uid 1000 — so a `-v nexus-data:/app/.nexus` produced a directory the
-# gateway could not write, and SQLite failed with "unable to open the database file". Creating it
-# here means a fresh named volume inherits this ownership when Docker seeds it from the image.
-# Harmless in server mode, where nothing ever writes to it.
+# Docker creates a mount point that does not exist in the image as root, and this container drops to
+# uid 1000 — so a `-v nexus-data:/app/.nexus` produced a directory the gateway could not write, and
+# SQLite failed with "unable to open the database file". Creating it here means a fresh NAMED volume
+# inherits this ownership when Docker seeds it from the image. Harmless in server mode, where
+# nothing ever writes to it.
+#
+# This does NOT rescue a BIND mount, and nothing in an image can: Docker overlays the host directory
+# as it finds it, and creates a missing one as root. That is not a defect peculiar to this image —
+# every image that drops privileges has it — but it is the single most likely way a user meets this
+# error, so the startup message names it and the README carries the two working recipes (a named
+# volume, or a directory you own plus `--user`). The release workflow tests both.
 RUN mkdir -p /app/.nexus
 
 # Drop root: run as the image's built-in unprivileged `node` user.

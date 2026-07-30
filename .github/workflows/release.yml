@@ -188,35 +188,71 @@ jobs:
       # This runs inside the matrix job on purpose: each architecture tests its own image on its own
       # hardware, with no emulation and no extra job to plumb digests through.
       - name: Run the image with no database
+        env:
+          VOLUME: nexus-smoke-data
+          BIND:   ${{ github.workspace }}/nexus-smoke-bind
         run: |
           set -euo pipefail
           REF='${{ env.IMAGE }}@${{ steps.build.outputs.digest }}'
           docker pull -q "$REF"
-          docker run -d --name smoke -p 3000:3000 \
-            -e MASTER_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
-            -e ADMIN_PASSWORD=ci-smoke-password \
-            -v /tmp/nexus-ci-data:/app/.nexus \
-            "$REF"
+          KEY=$(openssl rand -hex 32)
 
-          for i in $(seq 1 60); do
-            if curl -fsS -o /dev/null http://127.0.0.1:3000/health; then break; fi
-            if [ "$(docker inspect -f '{{.State.Running}}' smoke)" != "true" ]; then
-              echo "::error::The container exited before answering."; docker logs smoke; exit 1
-            fi
-            sleep 2
-          done
+          # Start the image and wait for it to answer. Everything after the container name is passed
+          # straight through to `docker run`, which is how each scenario below supplies its own mount.
+          start_and_wait () {
+            local name=$1; shift
+            docker run -d --name "$name" -p 3000:3000 \
+              -e MASTER_ENCRYPTION_KEY="$KEY" \
+              -e ADMIN_PASSWORD=ci-smoke-password \
+              "$@" "$REF" >/dev/null
 
-          curl -fsS -o /dev/null http://127.0.0.1:3000/health || { docker logs smoke; exit 1; }
-          curl -fsS -o /dev/null http://127.0.0.1:3000/ready  || { docker logs smoke; exit 1; }
-          curl -fsS -o /dev/null http://127.0.0.1:3000/       || { docker logs smoke; exit 1; }
+            local i
+            for i in $(seq 1 60); do
+              if curl -fsS -o /dev/null http://127.0.0.1:3000/health; then return 0; fi
+              if [ "$(docker inspect -f '{{.State.Running}}' "$name")" != "true" ]; then
+                echo "::error::$name exited before answering."; docker logs "$name"; return 1
+              fi
+              sleep 2
+            done
+            echo "::error::$name never answered."; docker logs "$name"; return 1
+          }
+
+          # ── 1. The documented form: a named volume ────────────────────────────────────────────────
+          # Docker seeds a fresh named volume from the image, ownership included, so this works
+          # without the operator preparing anything.
+          start_and_wait vol -v "$VOLUME:/app/.nexus"
+          curl -fsS -o /dev/null http://127.0.0.1:3000/ready || { docker logs vol; exit 1; }
+          curl -fsS -o /dev/null http://127.0.0.1:3000/      || { docker logs vol; exit 1; }
 
           # It must have built its own database rather than found one, and said which engine it is
           # on. A gateway reporting Postgres here would mean it reached something it should not have.
-          docker logs smoke 2>&1 | grep -q 'Database created' || { docker logs smoke; exit 1; }
-          docker logs smoke 2>&1 | grep -q 'SQLite'           || { docker logs smoke; exit 1; }
+          docker logs vol 2>&1 | grep -q 'Database created' || { docker logs vol; exit 1; }
+          docker logs vol 2>&1 | grep -q 'SQLite'           || { docker logs vol; exit 1; }
+          docker rm -f vol >/dev/null
 
-          docker rm -f smoke >/dev/null
-          echo "the ${{ matrix.platform }} image serves with no database"
+          # ── 2. The same volume, a second container ────────────────────────────────────────────────
+          # The whole point of the `-v` is that the data outlives the container, and nothing checked
+          # it. `Database created` prints only when the database is new, so its ABSENCE here is the
+          # assertion: this gateway found the first one's database instead of starting over.
+          start_and_wait vol-again -v "$VOLUME:/app/.nexus"
+          if docker logs vol-again 2>&1 | grep -q 'Database created'; then
+            echo "::error::The volume did not persist — the gateway built a second database."
+            docker logs vol-again; exit 1
+          fi
+          docker rm -f vol-again >/dev/null
+
+          # ── 3. A bind mount, prepared the way the README says to prepare one ──────────────────────
+          # This is the scenario that made this step fail the first time it ever ran. Docker creates a
+          # missing bind source as ROOT and overlays it as-is, so an unprepared bind mount is
+          # unwritable by a container that drops privileges — and no change to the image can fix that.
+          # The working recipe is a directory you own plus `--user`, so that is what ships in the
+          # README, and testing it here is what keeps it true.
+          mkdir -p "$BIND"
+          start_and_wait bind --user "$(id -u):$(id -g)" -v "$BIND:/app/.nexus"
+          docker rm -f bind >/dev/null
+          test -f "$BIND/nexus.db" || { echo "::error::No database in the bind mount."; exit 1; }
+
+          echo "the ${{ matrix.platform }} image serves with no database, and keeps it"
 
       - name: Export the digest
         # The filename IS the digest; the file is empty. The merge job only needs the names.

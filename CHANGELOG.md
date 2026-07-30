@@ -38,6 +38,14 @@ the one test that had never been run. Nothing was found by reading the code.
   missed `<SCRIPT`, and asserted so little that any page satisfied it — including an error page. It
   now checks for the content-hashed bundle name, which appears only when the dashboard that was
   compiled is the one being served.
+- **The new container check mounted the one way that cannot work.** It failed on both architectures
+  the first time it ran — before anything was published, which is what it is for. It bind-mounted a
+  host path, which Docker creates as **root** and overlays exactly as it finds it, while the gateway
+  runs unprivileged: SQLite could not open its own database. A named volume, which Docker seeds from
+  the image with the image's ownership, was always the documented form and the one the image was
+  fixed for. The step now tests that, proves the volume actually **persists** across a second
+  container — the whole reason the `-v` exists, and never once checked — and tests a bind mount
+  prepared the way the README says to prepare one, so the recipe cannot rot.
 
 ### Changed
 - **Releases run from a tag, and refuse to publish half of one.** Four gates, in order: the full
@@ -60,6 +68,10 @@ the one test that had never been run. Nothing was found by reading the code.
   downloads *and* starts — there is no install step before it. It also warns that the first run
   takes about a minute behind an npm spinner: that output belongs to npm and cannot be replaced with
   a progress bar, so the honest fix is to say so rather than let a normal wait read as a hang.
+- **Both working ways to mount the data directory are written down**, with the reason a bind mount
+  needs `--user` and a named volume does not. The startup error now names bind mounts and shows the
+  two recipes, instead of explaining a cause the image no longer has — it said the mount point was
+  root-owned because the image did not create it, which stopped being true in 1.5.0.
 
 ## [1.5.1] - 2026-07-30
 
