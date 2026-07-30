@@ -35,6 +35,11 @@ export function redactUrl(raw: string | undefined): string {
   if (!raw) return '(not set)';
   try {
     const u = new URL(raw);
+    // A SQLite URL has no host, so the host:port reduction below rendered it as an empty string —
+    // a failure message that named no database at all. There is nothing to redact in a local path
+    // (no credentials can appear in one), and the path is the single most useful thing to print
+    // when the error is "unable to open the database file".
+    if (u.protocol === 'file:') return decodeURIComponent(u.pathname) || raw;
     return u.port ? `${u.hostname}:${u.port}` : u.hostname;
   } catch {
     return '(unparseable URL)';
@@ -67,11 +72,38 @@ const HELP: Record<Dependency, { label: string; envVar: string; hint: string[] }
 };
 
 /**
+ * The database entry above describes PostgreSQL, because for most of this project's life that was
+ * the only database there was. On SQLite every line of it is wrong: the engine is not PostgreSQL,
+ * the setting is not DATABASE_URL (standalone leaves it unset on purpose), and `docker compose up
+ * -d postgres` plus a migration is advice that cannot help — SQLite has no server to start and the
+ * gateway creates its own schema.
+ *
+ * A container hitting this printed "Cannot reach PostgreSQL at" with an empty address, and told the
+ * operator to start Postgres, when the real problem was a data directory it could not write to.
+ * Being unable to say what is wrong is bad; confidently naming the wrong thing is worse.
+ */
+function engineAware(dep: Dependency, url: string | undefined): { label: string; envVar: string; hint: string[] } {
+  if (dep !== 'database' || !url?.startsWith('file:')) return HELP[dep];
+  return {
+    label:  'SQLite',
+    envVar: 'database file',
+    hint: [
+      'Standalone mode keeps its database in a local file, so nothing needs starting —',
+      'but the directory holding it has to exist and be writable by this process.',
+      '',
+      'In Docker, a volume mounted at a path the image does not create is owned by root,',
+      'while the gateway runs as an unprivileged user. Check the mount, or point the',
+      'gateway somewhere it can write with NEXUS_DATA_DIR.',
+    ],
+  };
+}
+
+/**
  * A single, actionable startup failure message. Deliberately not an exception dump:
  * the stack of an ECONNREFUSED tells an operator nothing they can act on.
  */
 export function formatStartupFailure(dep: Dependency, url: string | undefined, err: unknown): string {
-  const { label, envVar, hint } = HELP[dep];
+  const { label, envVar, hint } = engineAware(dep, url);
   const reason = err instanceof Error ? err.message : String(err);
   return [
     '',

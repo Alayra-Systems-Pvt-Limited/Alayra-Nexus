@@ -6,10 +6,22 @@ WORKDIR /app
 # OpenSSL so Prisma detects the correct engine at generate time (Alpine ships
 # OpenSSL 3.x; without libssl present Prisma mis-guesses openssl-1.1.x).
 RUN apk add --no-cache openssl
+# The lifecycle script comes with the manifest that names it. `postinstall` generates the Prisma
+# clients for whatever schemas sit beside it, and here there are none yet — prisma/ arrives with
+# `COPY . .` below, and the explicit generate after it is what builds them. So this script has
+# nothing to do at this point and says so by exiting 0. It still has to EXIST: npm runs the command
+# in package.json whether or not the file is there, and a missing file is a MODULE_NOT_FOUND that
+# fails the image build.
 COPY package*.json ./
+COPY scripts/npm ./scripts/npm
 RUN npm ci
 COPY . .
-RUN npx prisma generate && npm run build
+# BOTH clients, via the same script CI and local development use — `npx prisma generate` alone
+# builds only the Postgres one, from the default schema. That is how the image came to contain no
+# SQLite client at all: standalone mode shipped in 1.4.0, and a container had no engine to run it
+# on even before the migration step killed it. Two independent blockers, one of them invisible
+# until a container was actually started without a DATABASE_URL.
+RUN npm run db:generate && npm run build
 # Build the redesigned dashboard (Phase 7.9 cutover). It is a separate npm package under web/; its
 # static output (web/dist) is what the runtime image serves. Built here so the runtime stage carries
 # only the compiled assets, never the dashboard's dev toolchain.
@@ -31,7 +43,11 @@ LABEL org.opencontainers.image.title="Alayra Nexus" \
 
 # Production dependencies only. `prisma` is a runtime dependency (migrate deploy
 # runs at startup), so the CLI is present without pulling in dev tooling.
+# Same pairing as the builder stage: the postinstall script must be present for npm to run it, and
+# it exits 0 here because no schema sits beside it. The generated clients arrive from the builder a
+# few lines down, already built for this platform, so there is nothing to generate in this stage.
 COPY package*.json ./
+COPY scripts/npm ./scripts/npm
 # npm is deleted immediately after it has done its job. It is not needed at runtime — the start
 # command invokes Prisma's own entrypoint directly rather than going through npx — and the copy
 # bundled with Node vendors its own dependency tree, which is where every CVE reported against this
@@ -58,6 +74,18 @@ COPY prisma ./prisma
 # the container starts clean but returns 404 for the dashboard.
 COPY --from=builder /app/web/dist ./web/dist
 
+# Fail the BUILD if either database client is missing.
+#
+# The image shipped without the SQLite client from S2 until S4 — `npx prisma generate` builds only
+# the default schema, and nothing checked. A gateway configured for Postgres never touches the
+# SQLite client, so the gap was invisible to every existing deployment and to every test that ran
+# against one. It surfaced only when a container was started with no DATABASE_URL, at which point
+# the failure was a MODULE_NOT_FOUND several frames deep in a require chain.
+#
+# `require.resolve` rather than a path test: it asks the same question the gateway asks at runtime,
+# through the same resolution rules, so this cannot pass while the real load fails.
+RUN node -e "for (const s of ['.prisma/client', '.prisma/client-sqlite']) { require.resolve(s); console.log('ok', s); }"
+
 # Fail the BUILD if the Prisma CLI cannot be launched. `build/index.js` is Prisma's internal layout,
 # not a published contract, so a future version could move it — and the first thing the container
 # does at runtime is a migration, meaning a broken launcher would surface as what looks like a
@@ -65,6 +93,15 @@ COPY --from=builder /app/web/dist ./web/dist
 # obvious, immediate build error instead. The dependency range is pinned to ^5 so a major
 # reorganisation cannot arrive unreviewed in the first place.
 RUN prisma --version
+
+# The standalone data directory, created in the IMAGE and owned by the user that will write to it.
+#
+# Docker creates a bind or named-volume mount point that does not exist in the image as root, and
+# this container drops to uid 1000 — so a `-v nexus-data:/app/.nexus` produced a directory the
+# gateway could not write, and SQLite failed with "unable to open the database file". Creating it
+# here means a fresh named volume inherits this ownership when Docker seeds it from the image.
+# Harmless in server mode, where nothing ever writes to it.
+RUN mkdir -p /app/.nexus
 
 # Drop root: run as the image's built-in unprivileged `node` user.
 RUN chown -R node:node /app
@@ -82,4 +119,17 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 # Apply pending migrations, then start the server, through the same `prisma` shim an operator gets —
 # one definition of where the CLI lives, so the start path and the interactive path cannot drift.
-CMD ["sh", "-c", "prisma migrate deploy && node dist/server.js"]
+#
+# The migration runs ONLY when there is a database to migrate. `prisma migrate deploy` needs a
+# DATABASE_URL, so running it unconditionally meant a container started without one died before the
+# gateway existed — which is why standalone mode shipped in 1.4.0 and could not be reached from the
+# image. SQLite needs no migration step at all: the schema is created from prisma/sqlite-schema.sql
+# on first connection, by the gateway itself.
+#
+# A failed migration still stops everything. `|| exit 1` rather than `;` because a gateway that
+# starts against a half-migrated database is worse than one that refuses to start.
+#
+# `exec` so the server becomes PID 1 instead of a child of this shell. Without it, `docker stop`
+# signals the shell and the gateway never runs its SIGTERM handler — the one that drains buffered
+# usage and audit rows before exit.
+CMD ["sh", "-c", "if [ -n \"$DATABASE_URL\" ]; then prisma migrate deploy || exit 1; fi; exec node dist/server.js"]

@@ -112,7 +112,10 @@ async function bootstrap() {
   if (newKey) {
     console.log('\n🔑  Generated Nexus API Key — SAVE IT NOW, it cannot be shown again:');
     console.log(`    ${newKey}`);
-    console.log('    Add it to Cursor as: Authorization: Bearer <key>\n');
+    // Named no single tool. This line greets everyone who ever starts a gateway, and a Cursor user
+    // is not the common case — Cursor cannot even reach a localhost gateway, as the README says a
+    // few sections later. Say what the key IS, and let the reader map it to their own client.
+    console.log('    Send it as:  Authorization: Bearer <key>   (or  x-api-key: <key>)\n');
   }
 
   const app = Fastify({

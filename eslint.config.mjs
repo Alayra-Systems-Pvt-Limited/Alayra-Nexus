@@ -34,6 +34,23 @@ export default tseslint.config(
     },
   },
   {
+    // The two plain-CommonJS entry points: the published `bin` shim and the npm lifecycle script.
+    // Both are deliberately untyped JavaScript, because both run in situations where the compiled
+    // output may not exist yet — the shim reports a missing build, and the postinstall runs before
+    // anything has been built at all. `require` is not a style choice here, it is the only thing
+    // available; and `no-undef` needs Node's globals declared, which the TypeScript blocks get for
+    // free from typescript-eslint turning that rule off entirely.
+    files: ['bin/**/*.js', 'scripts/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.node },
+      sourceType: 'commonjs',
+      parserOptions: { ecmaVersion: 2022 },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
     // Test files: allow the usual test-time loosenings.
     files: ['src/**/*.test.ts', 'test/**/*.ts'],
     languageOptions: {

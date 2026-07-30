@@ -296,7 +296,59 @@ providers is identical either way.
 
 ## Quick Start
 
-### Option A — Published image (fastest, no clone)
+### Option A — One command, nothing to provision
+
+```bash
+npx alayra-nexus
+```
+
+That is the whole thing. No clone, no build, no Postgres, no Redis, no Docker. It creates
+`~/.alayra-nexus`, generates its own encryption key and admin password, builds a SQLite database,
+and serves the **full dashboard** — provider pools, team keys, budgets, analytics, backup. Nothing
+is disabled because there is no database server; the engines underneath are different, the product
+is the same.
+
+```
+  Alayra Nexus 1.4.0 — first run
+
+  Data directory   /home/you/.alayra-nexus
+  Encryption key   /home/you/.alayra-nexus/secret.key  (generated)
+
+  ⚠  Back that key file up, somewhere other than this machine.
+     Without it the provider keys stored here can never be decrypted again.
+
+  Admin password   7Kq2vFm9Rt4xLn8p
+  Dashboard        http://127.0.0.1:3000
+```
+
+Open the dashboard, claim it with that password, add a provider key, and point your app at
+`http://127.0.0.1:3000/v1`.
+
+| | |
+|---|---|
+| `--port 3001` | listen somewhere else |
+| `--host 0.0.0.0` | reachable from other machines (loopback only by default) |
+| `--data-dir ./nexus` | keep data somewhere other than your home directory |
+| `--env-file ./.env` | read configuration from a file you name |
+
+> [!NOTE]
+> **A `.env` in the current directory is not read.** It belongs to the project in that directory,
+> not to Nexus — and ten of the variables Nexus reads (`DATABASE_URL`, `ADMIN_PASSWORD`, `PORT`…)
+> have names common enough to appear in someone else's. If one is found, the gateway says so and
+> ignores it. Name the file with `--env-file` to use it deliberately.
+
+To keep it around, install it instead of fetching it each time:
+
+```bash
+npm install -g alayra-nexus
+```
+
+Standalone is for evaluation, local development and CI — one process, one machine, and a restart
+clears sessions and rate-limit windows. When you outgrow it, [Backup & restore](#backup--restore)
+carries everything into a Postgres deployment, provider keys included. See
+[Standalone mode](#standalone-mode--no-postgres-no-redis) for what you give up.
+
+### Option B — Published image (no clone, brings your own Postgres)
 
 A multi-arch image (amd64 + arm64) is published to **Docker Hub** and the **GitHub Container
 Registry** from the same build, so the two are byte-identical — use whichever you prefer. If
@@ -319,7 +371,7 @@ docker run -d --name alayra-nexus -p 3000:3000 \
 Pin a version for production (e.g. `:1.4.0`) rather than `:latest`.
 
 <details>
-<summary><b>Option B — Docker Compose (brings its own Postgres + Redis)</b></summary>
+<summary><b>Option C — Docker Compose (brings its own Postgres + Redis)</b></summary>
 
 
 Nothing to clone and nothing to compile: Compose downloads the published image and
@@ -368,7 +420,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ---
 
 <details>
-<summary><b>Option C — Railway (managed cloud, no server to run)</b></summary>
+<summary><b>Option D — Railway (managed cloud, no server to run)</b></summary>
 
 
 The gateway builds from the repo and serves the dashboard from a single service, so a
@@ -446,13 +498,21 @@ Dashboard is live at `http://localhost:3000`
 
 ## Standalone mode — no Postgres, no Redis
 
-> [!NOTE]
-> **Ships in 1.4.0, but not from the container.** The image's start command is
-> `prisma migrate deploy && node dist/server.js`, and that migration step needs a `DATABASE_URL` —
-> so a container started without one stops before the gateway runs. Standalone today means a source
-> checkout or a built `dist/`. A published package that starts a gateway in one command
-> (`npx alayra-nexus`) is the next phase, and a standalone-capable container entry point goes with
-> it. The `docker run` and Compose recipes above are server mode.
+The easiest way in is [`npx alayra-nexus`](#option-a--one-command-nothing-to-provision), which does
+all of the below for you. It also runs from the container, with no database alongside it:
+
+```bash
+docker run -d --name alayra-nexus -p 3000:3000 \
+  -e MASTER_ENCRYPTION_KEY="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" \
+  -e ADMIN_PASSWORD="change-me" \
+  -v nexus-data:/app/.nexus \
+  alayrasystems/nexus:latest
+```
+
+> [!WARNING]
+> **The `-v` is not optional.** Without it the database lives inside the container's writable layer
+> and disappears the moment the container is removed — along with every provider key in it. The
+> gateway cannot tell the difference, so nothing will warn you.
 
 Set neither `DATABASE_URL` nor `REDIS_URL` and the gateway runs on a local **SQLite file** and
 **in-process memory** instead. One process, one directory, nothing to provision — for trying Nexus

@@ -66,3 +66,44 @@ describe('formatStartupFailure', () => {
     expect(formatStartupFailure('redis', 'redis://h:1', 'plain string')).toContain('plain string');
   });
 });
+
+describe('formatStartupFailure — on SQLite, where every Postgres word is wrong', () => {
+  const msg = () => formatStartupFailure('database', 'file:/app/.nexus/nexus.db', new Error('unable to open the database file'));
+
+  it('names SQLite, not PostgreSQL', () => {
+    expect(msg()).toContain('Cannot reach SQLite');
+    expect(msg()).not.toContain('PostgreSQL');
+  });
+
+  it('prints the file it could not open, instead of an empty address', () => {
+    // A file: URL has no hostname, so the host:port reduction rendered this as nothing at all.
+    expect(msg()).toContain('/app/.nexus/nexus.db');
+  });
+
+  it('does not tell the operator to start a server that does not exist', () => {
+    expect(msg()).not.toContain('docker compose up -d postgres');
+    expect(msg()).not.toContain('npm run migrate');
+  });
+
+  it('points at the real cause — a directory it cannot write', () => {
+    expect(msg()).toContain('writable');
+    expect(msg()).toContain('NEXUS_DATA_DIR');
+  });
+
+  it('leaves the PostgreSQL case exactly as it was', () => {
+    const pg = formatStartupFailure('database', 'postgresql://u:p@db:5432/nexus', new Error('ECONNREFUSED'));
+    expect(pg).toContain('Cannot reach PostgreSQL at db:5432');
+    expect(pg).toContain('npm run migrate');
+    expect(pg).not.toContain('hunter2');
+  });
+});
+
+describe('redactUrl — SQLite', () => {
+  it('shows the path rather than an empty host', () => {
+    expect(redactUrl('file:/app/.nexus/nexus.db')).toBe('/app/.nexus/nexus.db');
+  });
+
+  it('still reduces a server URL to host:port', () => {
+    expect(redactUrl('postgresql://admin:hunter2@db:5432/nexus')).toBe('db:5432');
+  });
+});

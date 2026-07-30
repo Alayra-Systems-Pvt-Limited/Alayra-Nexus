@@ -9,6 +9,67 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+- **`npx alayra-nexus` — one command, nothing to provision.** No clone, no build, no Postgres, no
+  Redis, no Docker. It creates `~/.alayra-nexus`, generates and persists its own encryption key and
+  admin password, builds a SQLite database from the schema shipped in the package, and serves the
+  **full dashboard** — provider pools, team keys, budgets, analytics, backup. Nothing is disabled
+  because there is no database server. `npm install -g alayra-nexus` for the same thing kept around.
+  **It is a launcher, not a CLI.** There are no subcommands for pools, keys or analytics, because
+  those already exist in the dashboard it serves. A command-line interface remains a separate,
+  later thing, and a thin one — every operation is already an HTTP endpoint.
+  **A `.env` in the launch directory is not read.** It belongs to the project in that directory, and
+  Nexus is not that project — the tools that legitimately read `./.env` are all operating *on* your
+  project. This is not a rule about `DATABASE_URL`: ten of the variables the gateway reads have
+  names ordinary enough to appear in someone else's file, and `ADMIN_PASSWORD` is the alarming one,
+  since it would silently become the owner credential *and* the second proof required to authorise
+  a destructive restore. When such a file is found, the launcher names what it ignored and how to
+  use it deliberately (`--env-file ./.env`). Nothing is inherited from where you happened to stand.
+  Three defaults chosen rather than accepted: it binds **loopback only** unless `--host` says
+  otherwise; the admin password is **generated, never defaulted**; and the encryption key is written
+  once at `0600` and never regenerated, because a fresh key each run would be silent, unrecoverable
+  data loss. It also refuses to start a **second gateway over the same data directory** — SQLite
+  takes one writer and counters live per process, so two instances do not share a gateway, they
+  disagree about one.
+  **Measured, not estimated:** 0.7 MB compressed, **48.4 s** from tarball to a gateway answering
+  HTTP, 279.7 MB installed. Almost all of that weight is Prisma's query engine and its two generated
+  clients; the package's own payload is about 2 MB.
+
+### Changed
+- **A container can now run without a database.** The image started with
+  `prisma migrate deploy && node dist/server.js`, and that migration needs a `DATABASE_URL` — so a
+  container launched without one died before the gateway existed. That is why standalone mode
+  shipped in 1.4.0 and could not be reached from the published image. The migration now runs only
+  when there is a database to migrate; SQLite needs no migration step, since the gateway creates its
+  schema on first connection. A failed migration still stops everything. The server is also now
+  `exec`'d rather than left a child of the shell, so `docker stop` reaches its SIGTERM handler — the
+  one that drains buffered usage and audit rows before exit.
+  Two further defects surfaced only once a container was actually started without a `DATABASE_URL`,
+  neither of them the migration step. **The image had never contained the SQLite client at all** —
+  the build ran `npx prisma generate`, which builds only the default schema, so standalone shipped
+  in 1.4.0 with no engine in the image to run it on. A Postgres deployment never touches that
+  client, which is why every existing install and every test against one was blind to it; the build
+  now generates both and **fails if either is missing**, so it cannot happen quietly again. And the
+  data directory did not exist in the image, so Docker created that mount point as root while the
+  gateway runs as an unprivileged user, and SQLite could not open its own database.
+  Verified end to end: a container with no `DATABASE_URL` serves `/health`, `/ready` and the
+  dashboard, builds its own 16-table database, and reuses it across a restart.
+
+### Fixed
+- **A failed startup no longer confidently names the wrong database.** On SQLite the message read
+  `Cannot reach PostgreSQL at` — with an empty address, because the formatter reduced every URL to
+  `host:port` and a `file:` URL has no host — and then advised `docker compose up -d postgres` and
+  `npm run migrate`. Every line of that is wrong for an engine with no server to start and a schema
+  the gateway creates itself, and it would send an operator to fix a database they are not running.
+  It now names SQLite, prints the file it could not open, and points at the actual cause. The
+  PostgreSQL wording is untouched, and still redacts credentials.
+- **The first-run output is no longer interrupted by its own logging.** `Ctrl-C to stop` printed in
+  the middle, four paragraphs before the end; the launcher now prints it once the gateway genuinely
+  answers, so "Ready" is a fact rather than a hope. `npx` also defaults to a quiet log level — a
+  gateway running in front of you in a terminal should not bury its one useful screen in
+  per-request JSON — and an explicit `LOG_LEVEL` still wins. The generated API key notice no longer
+  names one specific editor.
+
 ### Fixed
 - **A gateway told to run standalone can no longer be talked out of it by a file nobody named.**
   Importing `@prisma/client` loads the `.env` beside its schema — the checkout's — and sets whatever
