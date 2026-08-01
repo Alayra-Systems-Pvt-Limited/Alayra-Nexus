@@ -57,7 +57,7 @@ describe('ensureSqliteSchema', () => {
     const r = await ensureSqliteSchema(db);
 
     expect(r.created).toBe(true);
-    expect(r.tables).toBe(16);            // every model in the schema, not merely "some"
+    expect(r.tables).toBe(18);            // every model in the schema, not merely "some"
 
     // And the tables actually work, which a CREATE that silently produced nothing would not.
     await db.appSettings.create({ data: { key: 'first-run', value: 'ok' } });
@@ -109,7 +109,7 @@ describe('ensureSqliteSchema', () => {
 
     const second = await ensureSqliteSchema(db);
     expect(second.created).toBe(false);
-    expect(second.tables).toBe(16);
+    expect(second.tables).toBe(18);
 
     // The data is still there — this must never be mistaken for a reset.
     expect((await db.appSettings.findUnique({ where: { key: 'survives' } }))?.value).toBe('yes');

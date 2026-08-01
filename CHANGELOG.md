@@ -9,6 +9,36 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+
+- **The gateway keeps its own backups, and you can download them.** A scheduled backup used to be
+  written only to a folder path on the server. That is durable on a VM and wiped on every redeploy
+  inside a container — and nothing in the gateway can tell those two situations apart, so on a
+  hosted platform the feature produced files that ceased to exist on the next push, and that nobody
+  without shell access could have retrieved anyway.
+
+  Every backup is now stored in the gateway's own database, which is the only storage that exists
+  and survives in every deployment shape. There is nothing to configure: switch the schedule on, or
+  press **Back up now**, and the file appears in a list with a download button. Held in chunked rows
+  rather than one column so the export stays streamed in both directions, and the backup tables are
+  excluded from both the export and the schema fingerprint — otherwise each backup would contain the
+  one before it, and every backup taken before this shipped would report drift on restore.
+
+- **An optional second copy, kept off the machine.** A folder on the server is now an *extra* copy
+  rather than the destination, written by streaming the stored backup out byte-for-byte, so the copy
+  on your disk and the copy you download are the same artifact. A copy that fails is reported as a
+  copy that failed — the backup itself still succeeded and is still downloadable.
+
+- **A plain statement of the one thing these backups cannot survive.** Losing the database takes the
+  backups with it. The panel says so, at a strength that tracks the actual risk: prominent when the
+  backups exist in one place only, softened once a second copy is genuinely being written, and gone
+  when that copy is off the machine entirely.
+
+### Fixed
+
+- **"Back up now" can no longer be offered and then refuse.** It was withdrawn until a folder had
+  been configured, which on a host with no persistent disk meant it could never be pressed at all.
+
 ## [1.5.3] - 2026-08-01
 
 **Upgrade if you are on any earlier version.** This closes a rate-limit bypass that made the

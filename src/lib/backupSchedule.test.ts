@@ -105,10 +105,24 @@ describe('scheduleProblem', () => {
     expect(scheduleProblem(nightly())).toBeNull();
   });
 
-  it('does not demand a destination while the schedule is switched off', () => {
-    // An operator setting the time first and the folder second must not be blocked halfway.
+  it('never demands a destination, because the gateway always has one', () => {
+    // Every backup is stored in the database, so switching the schedule on cannot be blocked on
+    // configuration — that is the whole reason it works unchanged on a host with no disk.
     expect(scheduleProblem({ ...DEFAULT_SCHEDULE, enabled: false })).toBeNull();
-    expect(scheduleProblem(nightly({ destination: { kind: 'directory', path: '' } }))).toContain('Choose a folder');
+    expect(scheduleProblem({ ...DEFAULT_SCHEDULE, enabled: true })).toBeNull();
+    expect(scheduleProblem(nightly({ copyOffMachine: false, destination: { kind: 'directory', path: '' } })))
+      .toBeNull();
+  });
+
+  it('demands a folder only once the off-machine copy is switched on', () => {
+    // The copy is the one part that needs somewhere to go. An operator who typed half a path and
+    // left the copy off has not made a mistake worth refusing.
+    expect(scheduleProblem(nightly({ copyOffMachine: true, destination: { kind: 'directory', path: '' } })))
+      .toContain('Choose a folder');
+    // And it is enforced even with the schedule off, because "Back up now" copies too.
+    expect(scheduleProblem(nightly({
+      enabled: false, copyOffMachine: true, destination: { kind: 'directory', path: '' },
+    }))).toContain('Choose a folder');
   });
 
   it('names the field that is wrong', () => {

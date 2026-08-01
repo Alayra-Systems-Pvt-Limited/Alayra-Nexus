@@ -15,7 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { MODEL_ORDER, DELETE_ORDER, delegateName, modelName } from './modelOrder';
+import { MODEL_ORDER, DELETE_ORDER, EXCLUDED_MODELS, delegateName, modelName } from './modelOrder';
 import { dmmfModels } from './provenance';
 
 const schema = readFileSync(resolve(__dirname, '..', '..', '..', 'prisma', 'schema.prisma'), 'utf8');
@@ -46,11 +46,28 @@ function relations(): { child: string; parent: string }[] {
 }
 
 describe('the write order covers the schema', () => {
-  it('lists every model exactly once', () => {
+  it('lists every model exactly once, except the ones deliberately excluded', () => {
     // The failure: a model ships, nobody adds it here, and it is silently absent from every backup
     // taken from that day on — discovered only by someone restoring and finding it empty.
-    const expected = schemaModels().map(delegateName).sort();
+    const expected = schemaModels()
+      .map(delegateName)
+      .filter((m) => !EXCLUDED_MODELS.includes(m))
+      .sort();
     expect([...MODEL_ORDER].sort()).toEqual(expected);
+  });
+
+  it('excludes only models that actually exist in the schema', () => {
+    // Without this, renaming or dropping an excluded model leaves a dead string in EXCLUDED_MODELS
+    // and the exclusion quietly stops matching anything. The completeness test above would then go
+    // red for a reason that points nowhere near the cause.
+    const known = new Set(schemaModels().map(delegateName));
+    for (const excluded of EXCLUDED_MODELS) expect(known).toContain(excluded);
+  });
+
+  it('never lets an excluded model appear in the write order', () => {
+    // Belt and braces against the tempting repair: someone hits the completeness failure, adds
+    // `backup` to MODEL_ORDER, every test goes green, and backups start containing backups.
+    for (const excluded of EXCLUDED_MODELS) expect(MODEL_ORDER).not.toContain(excluded);
   });
 
   it('contains no duplicates', () => {
@@ -110,7 +127,9 @@ describe('every backed-up model can actually be paged (C3)', () => {
   const models = dmmfModels();
 
   it('found the models it claims to be checking', () => {
-    expect(models.length).toBe(MODEL_ORDER.length);
+    // The DMMF carries every model in the schema, including the excluded ones — so the count this
+    // compares against is the write order PLUS the exclusions, not the write order alone.
+    expect(models.length).toBe(MODEL_ORDER.length + EXCLUDED_MODELS.length);
   });
 
   it('gives every model exactly one id field, named id', () => {

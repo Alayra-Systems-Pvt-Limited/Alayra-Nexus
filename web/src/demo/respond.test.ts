@@ -132,6 +132,8 @@ describe('demo responder — every endpoint the dashboard calls', () => {
     '/admin/me/password', '/admin/me/recovery-key', '/admin/me/sessions/revoke-others',
     '/admin/api-key/regenerate', '/admin/cache/purge',
     '/admin/notifications/read-all', '/admin/invites/accept',
+    // "Back up now" — the same machinery the schedule uses, on demand. POST only.
+    '/admin/backup/schedule/run',
   ]);
 
   // Endpoints that never pass through `api()` at all, so `demoRespond` is not on their path and a

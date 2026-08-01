@@ -762,6 +762,99 @@ export interface MaintenanceView {
 
 export interface MaintenanceStatus { active: boolean; maintenance?: MaintenanceView }
 
+// ── Scheduled backups (B2) ────────────────────────────────────────────────────
+// These three DO go through `api()` — a schedule is ordinary JSON in both directions. Only the
+// export, the restore and the maintenance poll need the transport next door.
+
+/** Mirrors BackupDestination in lib/backupSchedule.ts. One kind today; B3 adds others. */
+export interface BackupDestination {
+  kind: 'directory';
+  path: string;
+}
+
+/** Mirrors BackupSchedule in lib/backupSchedule.ts. Times are UTC — see the note there. */
+export interface BackupSchedule {
+  enabled: boolean;
+  everyDays: number;
+  hourUtc: number;
+  minuteUtc: number;
+  keep: number;
+  /**
+   * Whether a copy is ALSO written outside the gateway's database.
+   *
+   * Every backup is stored in the database, always, with no configuration. This is the extra copy.
+   */
+  copyOffMachine: boolean;
+  destination: BackupDestination;
+}
+
+/** Mirrors ScheduleRunState in services/backupSchedule.service.ts. All null before the first run. */
+export interface BackupScheduleState {
+  lastRunAt: number | null;
+  lastOutcome: 'ok' | 'failed' | null;
+  /** The gateway's own sentence about the last failure. Rendered as-is. */
+  lastError: string | null;
+  lastFilename: string | null;
+  lastBytes: number | null;
+  lastRows: number | null;
+  lastPruned: number | null;
+  /**
+   * How the off-machine copy went, separately from the backup itself.
+   *
+   * Null when none was asked for — which is what lets the panel tell "you never configured one"
+   * apart from "the one you configured is broken".
+   */
+  lastCopyOutcome: 'ok' | 'failed' | null;
+  lastCopyError: string | null;
+  lastCopyDestination: string | null;
+}
+
+/** What `scheduleOverview()` answers: the settings, the last run, and when the next one is due. */
+export interface BackupScheduleOverview {
+  schedule: BackupSchedule;
+  state: BackupScheduleState;
+  /** Null when the schedule is off — there is no next run to name. */
+  nextRunAt: string | null;
+  /**
+   * Whether a run is owed right now, which `nextRunAt` cannot say.
+   *
+   * `nextRunAt` is strictly after now, so a gateway that has never run reports tomorrow morning
+   * while the runner is about to take a backup within the minute. Both are true; this is the one
+   * the operator needs first.
+   */
+  dueNow: boolean;
+  /**
+   * Whether an unattended backup could ever be opened without this same server.
+   *
+   * Surfaced rather than inferred: "backups are on" and "backups survive this machine" are different
+   * claims, and only the second is what an operator thinks they have.
+   */
+  hasRecoveryKey: boolean;
+  /** Total bytes the stored backups occupy. Backups in the database are not free. */
+  storedBytes: number;
+}
+
+/** One backup the gateway is holding, as `/admin/backup/archive` lists it. */
+export interface StoredBackup {
+  filename: string;
+  /** ISO 8601. */
+  createdAt: string;
+  bytes: number;
+  rows: number;
+  /** scheduled | manual — whether the schedule took it or somebody pressed the button. */
+  origin: string;
+}
+
+/** What "Back up now" answers with: the outcome, plus the refreshed overview. */
+export interface BackupRunResult extends BackupScheduleOverview {
+  ran: boolean;
+  filename?: string;
+  bytes?: number;
+  rows?: number;
+  pruned?: number;
+  copy?: { copied: boolean; destination?: string; pruned?: number; error?: string };
+}
+
 export const GET   = <T = unknown>(p: string) => api<T>('GET', p);
 export const POST  = <T = unknown>(p: string, b?: unknown) => api<T>('POST', p, b);
 export const PUT   = <T = unknown>(p: string, b?: unknown) => api<T>('PUT', p, b);

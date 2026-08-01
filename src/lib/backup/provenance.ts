@@ -38,6 +38,7 @@
 // output, and a parity test keeps it that way; if they ever diverge, that test is what says so.
 
 import { Prisma } from '@prisma/client';
+import { EXCLUDED_MODELS, delegateName } from './modelOrder';
 
 /**
  * One model's columns, as `name:type:required:defaultable`.
@@ -78,6 +79,14 @@ export function describeField(f: DmmfField): string {
 export function schemaShape(models: readonly DmmfModel[] = dmmfModels()): SchemaShape {
   const out: SchemaShape = {};
   for (const model of models) {
+    // The models that STORE backups are not part of the shape a backup describes.
+    //
+    // They are excluded from the export (see modelOrder.ts), so a fingerprint that mentioned them
+    // would be describing tables the file cannot contain. Worse, it would make every backup taken
+    // before stored backups shipped report drift on restore — a real warning, raised for a change
+    // that cannot affect the data being restored, in the one place an operator most needs to trust
+    // what they are told. Excluded on both sides, so old and new files compare identically.
+    if (EXCLUDED_MODELS.includes(delegateName(model.name))) continue;
     out[model.name] = model.fields.filter((f) => f.kind === 'scalar').map(describeField).sort();
   }
   return out;

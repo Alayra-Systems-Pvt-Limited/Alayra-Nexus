@@ -72,8 +72,8 @@ const DEFAULT_MAX_BACKUP_BYTES = 2 * 1024 * 1024 * 1024;
 const maxBackupBytes = (): number =>
   envInt('NEXUS_MAX_BACKUP_BYTES', DEFAULT_MAX_BACKUP_BYTES, { min: 1024 });
 
-/** The audit fields every entry here shares. */
-function actor(request: FastifyRequest) {
+/** The audit fields every entry here shares. Also used by the archive routes next door. */
+export function actor(request: FastifyRequest) {
   return {
     actorRole: request.adminRole ?? 'system',
     actorId:   request.adminUserId ?? null,
@@ -122,6 +122,9 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
       hourUtc:   z.number().int(),
       minuteUtc: z.number().int(),
       keep:      z.number().int(),
+      // Defaulted rather than required so a client that predates the off-machine copy keeps working
+      // and simply does not ask for one.
+      copyOffMachine: z.boolean().default(false),
       destination: z.object({ kind: z.literal('directory'), path: z.string() }),
     }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'That is not a backup schedule.' });
@@ -135,7 +138,8 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
         detail: JSON.stringify({
           enabled: saved.enabled, everyDays: saved.everyDays,
           hourUtc: saved.hourUtc, minuteUtc: saved.minuteUtc,
-          keep: saved.keep, destination: saved.destination.path,
+          keep: saved.keep, copyOffMachine: saved.copyOffMachine,
+          destination: saved.destination.path,
         }),
       });
       return reply.send(await scheduleOverview());
