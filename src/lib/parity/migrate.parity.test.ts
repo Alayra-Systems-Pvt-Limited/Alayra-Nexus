@@ -32,7 +32,12 @@ import { MODEL_ORDER } from '../backup/modelOrder';
 
 const enabled = !!PARITY_DATABASE_URL;
 
-describe.skipIf(!enabled)('moving to PostgreSQL, against a real one', { timeout: PARITY_TIMEOUT * 4 }, () => {
+// `shuffle: false` is load-bearing here for the same reason it is in reset.parity.test.ts: these
+// are one narrative told in order — empty, then built, then built again, then filled. Shuffled, the
+// test that inserts a row runs before the one asserting there are none, and the suite fails for a
+// reason that has nothing to do with the code. `npm run test:hunt -- --shuffle-tests` turns
+// shuffling on, which is how this was found.
+describe.skipIf(!enabled)('moving to PostgreSQL, against a real one', { timeout: PARITY_TIMEOUT * 4, shuffle: false }, () => {
   let url = '';
 
   beforeAll(() => { url = freshDatabase('migrate'); });
@@ -48,9 +53,23 @@ describe.skipIf(!enabled)('moving to PostgreSQL, against a real one', { timeout:
     expect(seen.version).toMatch(/postgresql/i);
   });
 
-  it('never puts the credential in what it reports', async () => {
-    const seen = await inspectTarget(url);
-    expect(JSON.stringify(seen)).not.toContain(new URL(url).password);
+  it('never puts the credential in what it reports, even when the connection is refused', async () => {
+    // A sentinel password rather than the real one. CI's Postgres password is literally "nexus",
+    // which is also in the host and the database name — so asserting the real password is absent
+    // fails against correct output, and would have to be deleted rather than fixed.
+    //
+    // The wrong password is the point as well as the workaround: authentication failure is the path
+    // where a driver is most likely to quote the whole datasource back, so this exercises the leak
+    // that matters instead of the one that cannot happen.
+    const sentinel = 'zzsentinelpw9137';
+    const wrong = new URL(url);
+    wrong.password = sentinel;
+
+    const seen = await inspectTarget(wrong.toString());
+
+    expect(seen.reachable).toBe(false);
+    expect(JSON.stringify(seen)).not.toContain(sentinel);
+    expect(seen.problem).toBeTruthy();
   });
 
   it('builds the whole schema by spawning the Prisma CLI', async () => {
