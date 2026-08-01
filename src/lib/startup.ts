@@ -89,11 +89,19 @@ function engineAware(dep: Dependency, url: string | undefined): { label: string;
     envVar: 'database file',
     hint: [
       'Standalone mode keeps its database in a local file, so nothing needs starting —',
-      'but the directory holding it has to exist and be writable by this process.',
+      'but the directory holding it has to be writable by this process.',
       '',
-      'In Docker, a volume mounted at a path the image does not create is owned by root,',
-      'while the gateway runs as an unprivileged user. Check the mount, or point the',
-      'gateway somewhere it can write with NEXUS_DATA_DIR.',
+      'In Docker this is nearly always a bind mount. Docker creates the host directory as',
+      'root while the gateway runs unprivileged, so it cannot write there. A named volume',
+      'is seeded from the image and inherits its ownership, so it just works:',
+      '',
+      '    -v nexus-data:/app/.nexus',
+      '',
+      'To keep the data somewhere you can see it, own that directory and run as yourself:',
+      '',
+      '    docker run --user "$(id -u):$(id -g)" -v "$PWD/nexus-data:/app/.nexus" …',
+      '',
+      'Or point the gateway somewhere it can write with NEXUS_DATA_DIR.',
     ],
   };
 }

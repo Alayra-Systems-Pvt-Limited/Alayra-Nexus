@@ -59,7 +59,7 @@ export function PoolCard({ pool, models, onChanged }: { pool: NexusPool; models:
             />
           ))}</div>}
 
-      <PoolModels models={models} onChanged={onChanged} />
+      <PoolModels pool={pool} models={models} onChanged={onChanged} />
 
       {addingKey && (
         <AddKeyDialog

@@ -525,6 +525,27 @@ docker run -d --name alayra-nexus -p 3000:3000 \
 > and disappears the moment the container is removed — along with every provider key in it. The
 > gateway cannot tell the difference, so nothing will warn you.
 
+`nexus-data` there is a **named volume**: Docker creates it, seeds it from the image, and it inherits
+the ownership the gateway needs. There is nothing to prepare.
+
+To keep the database somewhere you can see it instead, own the directory and run as yourself:
+
+```bash
+mkdir -p ./nexus-data
+docker run -d --name alayra-nexus -p 3000:3000 \
+  -e MASTER_ENCRYPTION_KEY="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" \
+  -e ADMIN_PASSWORD="change-me" \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD/nexus-data:/app/.nexus" \
+  alayrasystems/nexus:latest
+```
+
+> [!NOTE]
+> A bind mount **without** `--user` fails with `unable to open the database file`. Docker creates a
+> missing host directory as root and mounts it exactly as it finds it, while the gateway runs
+> unprivileged — so it cannot write there. Every image that drops privileges behaves this way, and no
+> change to the image can alter it. `--user` is the fix; a named volume avoids the question entirely.
+
 Set neither `DATABASE_URL` nor `REDIS_URL` and the gateway runs on a local **SQLite file** and
 **in-process memory** instead. One process, one directory, nothing to provision — for trying Nexus
 out, for local development against a real gateway, and for CI.
