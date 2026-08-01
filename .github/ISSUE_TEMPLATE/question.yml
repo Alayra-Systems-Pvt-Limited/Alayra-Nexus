@@ -1,0 +1,70 @@
+name: Question or inquiry
+description: Ask how something works, or whether Nexus can do what you need
+labels: ["question", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask away. A question that turns out to be a gap in the documentation is a useful bug report in
+        disguise, and several of ours arrived that way.
+
+        Keep this one short — unlike a bug report, we would rather have the question quickly than the
+        complete version eventually.
+
+        > If your question is about a **security weakness** you have found, don't ask it here. Follow the
+        > [Security Policy](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/security/policy) —
+        > asking in public is disclosing in public.
+        >
+        > And **never paste a real API key**, even in a snippet you are asking about.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What would you like to know?
+      placeholder: |
+        Can a team be limited to specific models rather than a whole tier?
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+      description: |
+        The situation behind the question. It is what lets us answer the thing you actually need rather than
+        the thing you literally asked — and those are different more often than you would think.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you already tried or read?
+      description: Saves us pointing you at a page you have read, and tells us which page failed to answer it.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of Nexus?
+      multiple: true
+      options:
+        - Getting started / installation
+        - Proxy and the OpenAI-compatible surface
+        - Routing, failover or the circuit breaker
+        - Rate limits and budgets
+        - Response cache
+        - Cost tracking and analytics
+        - Dashboard (web UI)
+        - Admin API
+        - Authentication, teams or BYOK
+        - Backup and restore
+        - Deployment and operations
+        - Licensing or commercial use
+        - Something else
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Only if the question is about behaviour you are seeing.
+      placeholder: 1.5.2
