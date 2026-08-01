@@ -79,7 +79,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -121,7 +121,7 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No setup-qemu-action: that is the thing being removed. Each runner is native.
       - uses: docker/setup-buildx-action@v3
@@ -397,7 +397,7 @@ jobs:
       contents: read
       id-token: write        # the whole mechanism; without it there is nothing to sign
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
