@@ -22,6 +22,30 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@prisma/client"
         update-types: ["version-update:semver-major"]
+
+      # TypeScript 7 cannot land while typescript-eslint has no stable release that accepts it.
+      # With 7 installed `npm run lint` does not report errors — it crashes before it starts, on
+      # `Cannot read properties of undefined (reading 'Cjs')` inside typescript-estree, which reads
+      # a TypeScript internal that no longer exists in 7. The latest stable typescript-eslint
+      # (8.65.0) declares `typescript: ">=4.8.4 <6.1.0"`; only 8.65.1-alpha.* prereleases go
+      # further. #16 was exactly this PR, and it failed exactly this way.
+      #
+      # This blocks 6 as well as 7. That is deliberate rather than incidental: 6.0.x is inside
+      # typescript-eslint's supported range and can be taken, but a compiler major is a change to
+      # make on purpose with the suites in front of you, not to discover from a red PR on a Monday.
+      #
+      # REMOVE once typescript-eslint publishes a stable release whose peer range includes 7.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+      # @types/node describes the runtime; it must not lead it. `engines` requires Node 22, and the
+      # images, the CI jobs and the release verification all run 22 — so typing against 26 would let
+      # code compile against APIs the process does not have. That failure is the expensive kind: a
+      # green typecheck and a gateway that throws in production, with nothing in between to catch it.
+      #
+      # REMOVE when the runtime itself moves to a newer Node major — and move it, don't raise it.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     labels:
       - dependencies
 
