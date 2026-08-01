@@ -85,11 +85,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^22.20.0",
+    "@types/node": "^26.1.2",
     "eslint": "^10.8.0",
     "globals": "^17.8.0",
     "tsx": "^4.7.1",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.63.0",
     "vitest": "^4.1.10"
   },
