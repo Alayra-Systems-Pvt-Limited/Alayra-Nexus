@@ -10,12 +10,12 @@
 
 import { describe, it, expect } from 'vitest';
 import { Writable } from 'node:stream';
-import { createDecipheriv } from 'node:crypto';
+import { createDecipheriv, generateKeyPairSync } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { encrypt } from '../encryption';
 import { writeBackup } from './export';
 import { MODEL_ORDER } from './modelOrder';
-import { CIPHER, TAG_BYTES, parseHeader, unwrapFileKey } from './format';
+import { CIPHER, TAG_BYTES, parseHeader, unwrapFileKey, sealWithPassphrase } from './format';
 import { decodeRow } from './rowCodec';
 
 const PASS = 'a-long-enough-backup-passphrase';
@@ -275,4 +275,59 @@ describe('the trailer proves the export finished', () => {
     expect(trailer.rowsByModel.adminUser).toBe(25);
     expect(summary).toEqual({ rowsByModel: trailer.rowsByModel, totalRows: 27, secrets: 0 });
   });
+});
+
+// ── Unattended exports (B2) ───────────────────────────────────────────────────────────────────
+//
+// A scheduled backup runs at 04:00 with nobody present to type a passphrase. What makes that
+// possible without storing one anywhere is the recovery recipient: the gateway wraps the file key
+// for the operator's public half, which the server itself cannot open.
+//
+// The rule the format enforces is NOT "a passphrase recipient is mandatory" — it is "at least one
+// recipient survives the machine", which a recovery recipient satisfies and a gateway key does not.
+// These tests pin that distinction, because losing it in either direction is severe: strict, and
+// scheduled backups become impossible; loose, and the gateway can write a file that dies with it.
+describe('a backup taken with nobody present', () => {
+  const RECOVERY_PASS = 'the-operators-recovery-passphrase';
+
+  /** An operator's recovery key as the gateway holds it: a public half, and a sealed private half. */
+  const recoveryMaterial = async () => {
+    const { publicKey, privateKey } = generateKeyPairSync('x25519');
+    return {
+      der: publicKey.export({ format: 'der', type: 'spki' }),
+      sealed: await sealWithPassphrase(privateKey.export({ format: 'der', type: 'pkcs8' }), RECOVERY_PASS),
+    };
+  };
+
+  it('carries no passphrase recipient, and the operator can still open it', async () => {
+    const recovery = await recoveryMaterial();
+    const { file } = await run(
+      { adminUser: [{ id: 'a', email: 'owner@example.com' }] },
+      { passphrase: undefined, includeGatewayRecipient: true, recovery },
+    );
+
+    const header = parseHeader(file.subarray(0, file.indexOf(0x0a)).toString('utf8'));
+    const types = header.recipients.map((r) => r.type);
+    expect(types).not.toContain('passphrase');
+    expect(types).toEqual(expect.arrayContaining(['gateway', 'recovery']));
+
+    // The operator types ONE thing and it works, because the sealed private key travels inside the
+    // file. They should never have to know that a scheduled backup and a manual one were locked
+    // differently — and this is what makes that true.
+    const { lines } = await open(file, RECOVERY_PASS);
+    expect(lines.length).toBeGreaterThan(0);
+  });
+
+  it('is refused outright on a gateway that has no recovery key', async () => {
+    // Without a passphrase AND without a recovery key, the only possible recipient is the gateway's
+    // own — a file unopenable the moment the machine is gone. Refusing here is the last point at
+    // which that can be prevented, and it must not be possible to reach it by omission.
+    await expect(run({}, { passphrase: undefined, includeGatewayRecipient: true }))
+      .rejects.toThrow(/openable by something other than this gateway/i);
+
+    // Not even with no recipients requested at all.
+    await expect(run({}, { passphrase: undefined }))
+      .rejects.toThrow(/openable by something other than this gateway/i);
+  });
+
 });

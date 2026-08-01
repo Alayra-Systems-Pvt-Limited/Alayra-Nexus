@@ -57,8 +57,15 @@ const DEFAULT_PAGE = 500;
 export interface ExportOptions {
   client: PrismaClient;
   engine: DbEngine;
-  /** The operator's backup passphrase. Losing it means losing the backup. */
-  passphrase: string;
+  /**
+   * The operator's backup passphrase. Losing it means losing the backup.
+   *
+   * Optional ONLY because a scheduled backup (B2) runs with nobody present to type one. Such a file
+   * is wrapped for this gateway and for the operator's recovery key instead, and `buildHeader`
+   * refuses the result if neither of those can outlive the machine — so omitting this can never
+   * quietly produce a backup that dies with the server. Every human-initiated export supplies it.
+   */
+  passphrase?: string;
   /** Where the file goes — a file stream, or an HTTP response. */
   out: Writable;
   /** Recorded in the manifest so a restore can say what wrote the file. */
@@ -154,15 +161,26 @@ function write(stream: Writable, chunk: string | Buffer): Promise<void> {
  * is repeating an observation rather than an intention.
  */
 export async function writeBackup(opts: ExportOptions): Promise<ExportSummary> {
-  const problem = passphraseProblem(opts.passphrase);
-  if (problem) throw new Error(problem);
+  // Validated when supplied. When it is absent this is an unattended backup, and the recipient set
+  // is what has to justify itself — see buildHeader below.
+  if (opts.passphrase !== undefined) {
+    const problem = passphraseProblem(opts.passphrase);
+    if (problem) throw new Error(problem);
+  }
 
   const pageSize = opts.pageSize ?? DEFAULT_PAGE;
 
-  // One random key encrypts the body; it is then wrapped for each way the file may be opened. The
-  // passphrase recipient is not optional — buildHeader refuses a set without one.
+  // One random key encrypts the body; it is then wrapped for each way the file may be opened.
+  //
+  // What buildHeader actually enforces is that at least one recipient SURVIVES THE MACHINE — a
+  // passphrase the operator knows, or their recovery key. Not that a passphrase is present. That
+  // distinction is what makes an unattended backup possible at all: a scheduled run has nobody to
+  // type a passphrase, and leans on the recovery recipient instead. A gateway that has never been
+  // given a recovery key therefore cannot take one, and is refused here rather than handed a file
+  // that dies with the server.
   const fileKey = newFileKey();
-  const recipients: Recipient[] = [await wrapForPassphrase(fileKey, opts.passphrase)];
+  const recipients: Recipient[] = [];
+  if (opts.passphrase !== undefined) recipients.push(await wrapForPassphrase(fileKey, opts.passphrase));
   if (opts.includeGatewayRecipient) recipients.push(wrapForGateway(fileKey));
   // Added whenever the gateway has one (C6). It costs a few hundred bytes and is the recipient that
   // will let a scheduled backup, taken with nobody present, still be opened by the operator alone.
