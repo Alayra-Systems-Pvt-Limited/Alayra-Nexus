@@ -12,8 +12,8 @@ import { describe, it, expect } from 'vitest';
 import { isAbsolute, join, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import {
-  parseArgs, assembleEnv, collidingNamesIn, parseEnvFile, pidAlive,
-  DATA_DIR_NAME, DEFAULT_HOST, DEFAULT_PORT,
+  parseArgs, assembleEnv, collidingNamesIn, parseEnvFile, pidAlive, lockIsHeld,
+  DATA_DIR_NAME, DEFAULT_HOST, DEFAULT_PORT, LOCK_STARTUP_GRACE_MS,
 } from './cli';
 
 const HOME = join('/tmp', 'home');
@@ -206,6 +206,49 @@ describe('pidAlive — so a stale lock does not brick the data directory', () =>
 
   it.each([0, -1, 1.5, NaN])('rejects %s as a pid', (pid) => {
     expect(pidAlive(pid)).toBe(false);
+  });
+});
+
+/**
+ * The bug these exist for: `alayra-nexus` refused to start, reporting a gateway already running on
+ * pid 14436 — which was Phone Link. A real gateway had exited without cleaning up its lock, Windows
+ * reissued the number, and the launcher treated "a process has this pid" as "our process is alive".
+ *
+ * A pid is not identity. What a running gateway also does, and no unrelated process can imitate by
+ * accident, is listen on the port recorded in our own lock file.
+ */
+describe('lockIsHeld — a pid is not identity', () => {
+  const FRESH = 1_000;                        // just started
+  const OLD   = LOCK_STARTUP_GRACE_MS + 1;    // long past any plausible startup
+
+  it('releases a lock whose process is gone', () => {
+    expect(lockIsHeld(false, false, OLD)).toBe(false);
+  });
+
+  it('holds a lock whose gateway is serving on the recorded port', () => {
+    expect(lockIsHeld(true, true, OLD)).toBe(true);
+  });
+
+  it('releases a lock when the pid exists but nothing is serving — the recycled-pid case', () => {
+    // Exactly what was found: pid alive (Phone Link), port 3000 silent, lock hours old.
+    expect(lockIsHeld(true, false, OLD)).toBe(false);
+  });
+
+  it('holds a lock that is still starting up', () => {
+    // The lock is written before the server binds, so a live gateway is briefly silent. Taking the
+    // lock here would put two writers on one SQLite file — the thing the lock exists to prevent.
+    expect(lockIsHeld(true, false, FRESH)).toBe(true);
+  });
+
+  it('does not release a fresh lock merely because the port is slow to bind', () => {
+    expect(lockIsHeld(true, false, LOCK_STARTUP_GRACE_MS - 1)).toBe(true);
+    expect(lockIsHeld(true, false, LOCK_STARTUP_GRACE_MS)).toBe(false);
+  });
+
+  it('treats an unreadable timestamp as old rather than fresh', () => {
+    // `Date.parse` of a corrupt startedAt is NaN; acquireLock passes Infinity so the grace period
+    // cannot be entered by accident. A lock nobody can date is a lock nobody should be trapped by.
+    expect(lockIsHeld(true, false, Infinity)).toBe(false);
   });
 });
 
