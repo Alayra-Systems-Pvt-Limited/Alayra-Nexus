@@ -49,6 +49,7 @@ import { hasLiveSession } from '../../services/adminAuth.service';
 import { readMaintenance } from '../../services/maintenance.service';
 import { envInt } from '../../lib/envNumber';
 import { exportBackup, restoreBackup, backupFilename, RESTORE_TIMEOUT_ENV } from '../../services/backup.service';
+import { scheduleOverview, writeSchedule, runNow } from '../../services/backupSchedule.service';
 import { passphraseProblem } from '../../lib/backup/format';
 import { RestoreTimeoutError, type RestoreMode } from '../../lib/backup/restore';
 import { SchemaDriftError } from '../../lib/backup/schemaDrift';
@@ -104,6 +105,62 @@ export default async function adminBackupRoutes(fastify: FastifyInstance) {
       active: state !== null,
       ...(state ? { maintenance: state } : {}),
     });
+  });
+
+  // ── The schedule (B2) ─────────────────────────────────────────────
+  //
+  // Owner-only, like everything else here: a schedule decides where a file containing every
+  // credential in this gateway is written, and how many copies of it exist.
+  fastify.get('/admin/backup/schedule', adminOwnerGuard, async (_request, reply) => {
+    return reply.header('cache-control', 'no-store').send(await scheduleOverview());
+  });
+
+  fastify.put('/admin/backup/schedule', withRateLimit(adminOwnerGuard, AUTH_RATE_LIMIT), async (request, reply) => {
+    const parsed = z.object({
+      enabled:   z.boolean(),
+      everyDays: z.number().int(),
+      hourUtc:   z.number().int(),
+      minuteUtc: z.number().int(),
+      keep:      z.number().int(),
+      destination: z.object({ kind: z.literal('directory'), path: z.string() }),
+    }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'That is not a backup schedule.' });
+
+    try {
+      const saved = await writeSchedule(parsed.data);
+      recordAudit({
+        action: 'backup.schedule', method: 'PUT', ...actor(request), status: 200,
+        // The destination is recorded because "where do copies of every credential go" is exactly
+        // the question an auditor asks, and it is the field most worth noticing a change to.
+        detail: JSON.stringify({
+          enabled: saved.enabled, everyDays: saved.everyDays,
+          hourUtc: saved.hourUtc, minuteUtc: saved.minuteUtc,
+          keep: saved.keep, destination: saved.destination.path,
+        }),
+      });
+      return reply.send(await scheduleOverview());
+    } catch (err) {
+      // `writeSchedule` throws only sentences meant for an operator — a missing recovery key, a
+      // relative path — so the message is the answer rather than something to translate.
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  // "Back up now": the same machinery the schedule uses, on demand. Distinct from /export, which
+  // streams a file to the browser — this one writes to the configured destination, unattended-style.
+  fastify.post('/admin/backup/schedule/run', withRateLimit(adminOwnerGuard, AUTH_RATE_LIMIT), async (request, reply) => {
+    const outcome = await runNow();
+    recordAudit({
+      action: 'backup.schedule.run', method: 'POST', ...actor(request),
+      status: outcome.ran ? 200 : 400,
+      detail: JSON.stringify(outcome),
+    });
+    if (!outcome.ran) {
+      return reply.code(400).send({
+        error: outcome.error ?? 'Another instance is already taking a backup.',
+      });
+    }
+    return reply.send({ ...outcome, ...(await scheduleOverview()) });
   });
 
   // ── Export ────────────────────────────────────────────────────────
