@@ -38,9 +38,12 @@ import { redis } from '../lib/redis';
 import { recordAudit } from './audit.service';
 import { exportBackup, backupFilename } from './backup.service';
 import { hasRecoveryKey } from './backupRecovery.service';
-import { destinationAdapter } from '../lib/backupDestination';
 import {
-  parseSchedule, scheduleProblem, destinationProblem, isDue, nextDueAt, prunable,
+  beginStoredBackup, listStoredBackups, findStoredBackup, deleteStoredBackup, storedBackupBytes,
+} from '../lib/backup/backupStore';
+import { copyOffMachine, type CopyOutcome } from './backupCopy.service';
+import {
+  parseSchedule, scheduleProblem, isDue, nextDueAt, prunable,
   type BackupSchedule,
 } from '../lib/backupSchedule';
 
@@ -72,11 +75,22 @@ export interface ScheduleRunState {
   lastRows: number | null;
   /** Old backups removed by retention on the last successful run. */
   lastPruned: number | null;
+  /**
+   * How the OFF-MACHINE copy went, recorded separately from the backup itself.
+   *
+   * A backup that was stored but could not be copied to the NAS is a success with a caveat, not a
+   * failure — and the dashboard has to be able to say exactly that. Null when no copy was asked
+   * for, which is what lets the panel tell "not configured" apart from "configured and broken".
+   */
+  lastCopyOutcome: 'ok' | 'failed' | null;
+  lastCopyError: string | null;
+  lastCopyDestination: string | null;
 }
 
 const EMPTY_STATE: ScheduleRunState = {
   lastRunAt: null, lastOutcome: null, lastError: null,
   lastFilename: null, lastBytes: null, lastRows: null, lastPruned: null,
+  lastCopyOutcome: null, lastCopyError: null, lastCopyDestination: null,
 };
 
 // ── Configuration ─────────────────────────────────────────────────────────────
@@ -159,6 +173,8 @@ export interface RunOutcome {
   rows?: number;
   pruned?: number;
   error?: string;
+  /** Absent when no off-machine copy was asked for. */
+  copy?: CopyOutcome;
 }
 
 /**
@@ -168,43 +184,62 @@ export interface RunOutcome {
  * is precisely the wrong response to a failure, and it is what a naive "make room, then write"
  * ordering would do.
  */
-export async function runBackupNow(schedule: BackupSchedule, now = Date.now()): Promise<RunOutcome> {
-  const adapter = destinationAdapter(schedule.destination);
+export async function runBackupNow(
+  schedule: BackupSchedule,
+  now = Date.now(),
+  origin: 'scheduled' | 'manual' = 'scheduled',
+): Promise<RunOutcome> {
   const filename = backupFilename(new Date(now));
 
   try {
-    await adapter.ensure();
-
-    const sink = await adapter.begin(filename);
+    const writer = await beginStoredBackup(filename, origin);
     let rows: number;
     try {
       // No passphrase: nobody is here to type one. The gateway recipient lets this same gateway
       // restore itself unattended, and the recovery recipient — added automatically whenever the
       // gateway has one — is what lets the operator open it when the gateway is gone.
-      rows = (await exportBackup(undefined, sink.out, true)).totalRows;
+      rows = (await exportBackup(undefined, writer.out, true)).totalRows;
     } catch (err) {
-      await sink.abort();
+      await writer.abort();
       throw err;
     }
-    const bytes = await sink.commit();
+    writer.describeContents({ rows });
+    const bytes = await writer.commit();
 
-    const doomed = prunable(await adapter.list(), schedule.keep);
-    for (const name of doomed) {
-      await adapter.remove(name).catch(() => { /* a backup that was taken beats a tidy folder */ });
+    // Retention over the stored backups, by the same rule and the same helper the folder uses.
+    // `prunable` only ever names files the gateway itself wrote, which is what keeps it from
+    // deleting anything it did not create.
+    const stored = await listStoredBackups();
+    const doomed = prunable(stored.map((b) => b.filename), schedule.keep);
+    for (const name of doomed) await deleteStoredBackup(name);
+
+    // The extra copy, if asked for. Deliberately AFTER the backup is committed and counted: it is a
+    // copy of a backup that already exists, so a destination that is unreachable tonight cannot
+    // cost the operator the backup itself.
+    let copy: CopyOutcome | undefined;
+    if (schedule.copyOffMachine) {
+      const saved = await findStoredBackup(filename);
+      if (saved) copy = await copyOffMachine(saved, schedule.destination, schedule.keep);
     }
 
     recordAudit({
-      action: 'backup.scheduled', method: 'SYSTEM', actorRole: 'system', status: 200,
-      detail: JSON.stringify({ filename, bytes, rows, pruned: doomed.length, destination: adapter.describe() }),
+      action: 'backup.scheduled', method: 'SYSTEM', actorRole: 'system',
+      // A backup that was stored but not copied is not a clean 200. It is recorded as a warning so
+      // an operator scanning the audit trail sees the one night the NAS was unreachable.
+      status: copy && !copy.copied ? 207 : 200,
+      detail: JSON.stringify({
+        filename, bytes, rows, pruned: doomed.length, origin,
+        copy: copy ? { copied: copy.copied, destination: copy.destination, error: copy.error } : null,
+      }),
     });
-    return { ran: true, filename, bytes, rows, pruned: doomed.length };
+    return { ran: true, filename, bytes, rows, pruned: doomed.length, copy };
   } catch (err) {
     const error = (err as Error).message;
     // Audited at status 500 so a silently failing schedule is visible in the one place an operator
     // already looks. A backup nobody knows stopped happening is worse than no backup at all.
     recordAudit({
       action: 'backup.scheduled', method: 'SYSTEM', actorRole: 'system', status: 500,
-      detail: JSON.stringify({ outcome: 'failed', error, destination: adapter.describe() }),
+      detail: JSON.stringify({ outcome: 'failed', error, origin }),
     });
     return { ran: false, error };
   }
@@ -242,10 +277,10 @@ export async function tick(now = Date.now()): Promise<RunOutcome> {
  */
 export async function runNow(now = Date.now()): Promise<RunOutcome> {
   const schedule = await readSchedule();
-  const problem = destinationProblem(schedule.destination);
-  if (problem) return { ran: false, error: problem };
-
-  return underLock(schedule, now, () => runBackupNow(schedule, now));
+  // No destination check any more: there is always somewhere to put it. "Back up now" works on a
+  // gateway that has configured nothing at all, which is the entire point of storing backups in the
+  // database — the button can never be offered and then refuse.
+  return underLock(schedule, now, () => runBackupNow(schedule, now, 'manual'));
 }
 
 /** Hold the lock, run, record what happened. Never leaves the lock behind. */
@@ -271,6 +306,11 @@ async function underLock(
       lastBytes: outcome.bytes ?? null,
       lastRows: outcome.rows ?? null,
       lastPruned: outcome.pruned ?? null,
+      // Null, not 'failed', when no copy was attempted — the panel needs to tell "you never asked
+      // for one" apart from "the one you asked for did not happen".
+      lastCopyOutcome: outcome.copy ? (outcome.copy.copied ? 'ok' : 'failed') : null,
+      lastCopyError: outcome.copy?.error ?? null,
+      lastCopyDestination: outcome.copy?.destination ?? null,
     });
     return outcome;
   } finally {
@@ -304,8 +344,20 @@ export async function scheduleOverview(now = Date.now()) {
     schedule,
     state,
     nextRunAt: schedule.enabled ? new Date(nextDueAt(schedule, now)).toISOString() : null,
+    // Whether a run is owed RIGHT NOW, which `nextRunAt` alone cannot say.
+    //
+    // `nextDueAt` answers strictly-after-now, so a gateway that has never run — or one that was
+    // switched off through its window — reports tomorrow morning while the runner is about to take
+    // a backup within the minute. Shown separately rather than folded into `nextRunAt`, because
+    // both facts are true and the dashboard needs to say the more urgent one first: a panel that
+    // promises "in 12 hours" and produces a file thirty seconds later has taught its operator that
+    // it does not know what the gateway is doing.
+    dueNow: isDue(schedule, state.lastRunAt, now),
     // Surfaced rather than inferred: "backups are on" and "backups can be opened without this
     // server" are different claims, and only one of them is what an operator thinks they bought.
     hasRecoveryKey: await hasRecoveryKey(),
+    // Backups in the database are not free, and the operator choosing how many to keep is the one
+    // person who can weigh that. Shown rather than enforced.
+    storedBytes: await storedBackupBytes(),
   };
 }

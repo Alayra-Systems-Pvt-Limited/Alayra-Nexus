@@ -70,6 +70,27 @@ export const MODEL_ORDER: readonly string[] = [
   'tokenUsage',         // → nexusTeamKey
 ] as const;
 
+/**
+ * Models deliberately NOT backed up, and the reason, which matters more than the list.
+ *
+ * `Backup` and `BackupChunk` hold previous exports. Including them would put backup #1 inside
+ * backup #2 and #2 inside #3, so every backup would carry the sum of every backup before it until
+ * a gateway could no longer export at all. This is not a size optimisation; it is the difference
+ * between a feature that works and one that destroys itself on a schedule.
+ *
+ * Written as a LIST rather than a silent omission, because the completeness test asserts that
+ * MODEL_ORDER and the schema agree. Leaving these out quietly turns that test red, and the obvious
+ * repair — adding them to MODEL_ORDER — is exactly the bug. Naming them here makes the exclusion a
+ * reviewed decision instead of a puzzle for whoever hits the failure at 2am.
+ *
+ * The consequence, stated where someone will read it before they are surprised by it: restoring a
+ * backup does not restore the list of backups. A gateway keeps its own.
+ */
+export const EXCLUDED_MODELS: readonly string[] = [
+  'backup',
+  'backupChunk',
+] as const;
+
 /** The reverse, for emptying: children before parents. */
 export const DELETE_ORDER: readonly string[] = [...MODEL_ORDER].reverse();
 

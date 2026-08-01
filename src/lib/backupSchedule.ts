@@ -48,8 +48,18 @@ export interface BackupSchedule {
    */
   hourUtc: number;
   minuteUtc: number;
-  /** How many files to keep at the destination. Older ones are removed after a successful run. */
+  /** How many backups to keep. Older ones are removed after a successful run, everywhere. */
   keep: number;
+  /**
+   * Whether a copy is ALSO written outside the gateway's database.
+   *
+   * Every backup is stored in the database, always, with no configuration — that is the only
+   * storage which exists and survives in every deployment. This is the extra copy, and it is
+   * explicit rather than inferred from a non-empty path for two reasons: an operator who switches
+   * the copy off should not lose the path they configured, and a path left behind by a disabled
+   * copy must never cause a write.
+   */
+  copyOffMachine: boolean;
   destination: BackupDestination;
 }
 
@@ -61,6 +71,7 @@ export const DEFAULT_SCHEDULE: BackupSchedule = {
   hourUtc: 4,
   minuteUtc: 0,
   keep: 7,
+  copyOffMachine: false,
   destination: { kind: 'directory', path: '' },
 };
 
@@ -106,6 +117,13 @@ export function parseSchedule(raw: string | null): BackupSchedule {
     hourUtc:   int(parsed.hourUtc,   DEFAULT_SCHEDULE.hourUtc,   0, 23),
     minuteUtc: int(parsed.minuteUtc, DEFAULT_SCHEDULE.minuteUtc, 0, 59),
     keep:      int(parsed.keep,      DEFAULT_SCHEDULE.keep,      1, MAX_KEEP),
+    // A schedule stored before the off-machine copy became explicit has a path and no flag. Reading
+    // that as "off" would silently stop copying for someone who had configured it deliberately, so
+    // a configured path is taken as the intent it plainly was.
+    copyOffMachine:
+      typeof parsed.copyOffMachine === 'boolean'
+        ? parsed.copyOffMachine
+        : typeof parsed.destination?.path === 'string' && parsed.destination.path.trim().length > 0,
     destination: {
       kind: 'directory',
       path: typeof parsed.destination?.path === 'string' ? parsed.destination.path : '',
@@ -138,9 +156,12 @@ export function scheduleProblem(s: BackupSchedule): string | null {
   if (!Number.isInteger(s.hourUtc) || s.hourUtc < 0 || s.hourUtc > 23) return 'Choose an hour between 0 and 23.';
   if (!Number.isInteger(s.minuteUtc) || s.minuteUtc < 0 || s.minuteUtc > 59) return 'Choose a minute between 0 and 59.';
   if (!Number.isInteger(s.keep) || s.keep < 1 || s.keep > MAX_KEEP) return `Keep between 1 and ${MAX_KEEP} backups.`;
-  // A schedule that is off does not need a destination — an operator configuring the time first and
-  // the folder second should not be blocked halfway.
-  return s.enabled ? destinationProblem(s.destination) : null;
+  // A schedule needs no destination AT ALL. Every backup is stored in the gateway's own database,
+  // which is the only storage that exists in every deployment, so switching the schedule on can
+  // never be blocked on configuration. The folder is an extra copy, and it is validated only when
+  // that copy is actually switched on — an operator who typed half a path and turned the copy off
+  // has not made a mistake worth refusing.
+  return s.copyOffMachine ? destinationProblem(s.destination) : null;
 }
 
 /** Whether a UTC day number falls on the cycle. Anchored to the epoch so nothing has to be stored. */

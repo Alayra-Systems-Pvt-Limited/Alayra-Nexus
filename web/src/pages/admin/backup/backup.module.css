@@ -581,6 +581,100 @@
 }
 .refusalHint svg { color: var(--muted); flex: none; margin-top: 2px; }
 
+/* ── Scheduled backups (B2) ───────────────────────────────────────────── */
+
+.loadingRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  color: var(--subtle);
+  padding: 4px 0 2px;
+}
+
+.scheduleForm { display: flex; flex-direction: column; gap: 15px; }
+
+/* Cadence, time and retention read as one setting, so they sit on one line until there is no room
+   for it. The minimum is set by the time row, which cannot wrap without the colon losing its two
+   halves. */
+.scheduleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px 14px;
+  align-items: end;
+}
+
+.timeRow { display: flex; align-items: center; gap: 7px; }
+.timeRow select { flex: 1; min-width: 0; text-align: center; font-variant-numeric: tabular-nums; }
+.timeColon { color: var(--subtle); font-weight: 600; }
+
+.pathInput { font-family: var(--font-mono); font-size: 12px; }
+
+/* The two explanatory lines under the controls: the local-clock translation and the read-back
+   sentence. Quiet by design — they explain a setting rather than competing with it. */
+.clockNote,
+.summary {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  margin: -4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 74ch;
+}
+.clockNote svg,
+.summary svg { color: var(--subtle); flex: none; margin-top: 2px; }
+.clockNote strong { color: var(--text); font-weight: 600; }
+.summary { padding: 10px 12px; margin-top: 2px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.summary code { font-family: var(--font-mono); font-size: 11px; color: var(--text); overflow-wrap: anywhere; }
+
+/* Pushes "Back up now" to the far end, so the destructive-adjacent action is never adjacent to
+   Save — a mis-click between the two costs an unplanned full export of the database. */
+.actionsSpacer { flex: 1; min-width: 0; }
+
+.savedNote { font-size: 11.5px; color: var(--green); margin: -6px 0 0; }
+
+/* A finding block used outside the restore report needs its own spacing; the report supplies its
+   own gap between them and this one stands alone. */
+.runNote { margin-bottom: 14px; }
+
+/* ── The state strip ──────────────────────────────────────────────────── */
+
+/* What the schedule is actually doing, as four facts rather than a paragraph. Sits at the bottom
+   because it answers "is this working" — the question asked on the way out, not on the way in. */
+.runStrip {
+  display: grid;
+  /* 200px, not 180: at a typical panel width 180 fits three across and leaves the fourth stranded
+     on a line of its own, which reads as a wrap rather than a layout. 200 gives an even 2×2 there
+     and all four in a row once there is genuinely room. */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px 18px;
+  margin-top: 18px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.runItem { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.runLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.runLabel svg { flex: none; }
+
+.runValue { font-size: 12.5px; color: var(--text); line-height: 1.5; overflow-wrap: anywhere; }
+.runMuted { color: var(--subtle); }
+.runPath { font-family: var(--font-mono); font-size: 11.5px; color: var(--text); }
+
 /* ── Narrow screens ───────────────────────────────────────────────────── */
 
 @media (max-width: 560px) {
@@ -588,4 +682,158 @@
   .progressPercent { font-size: 16px; }
   .step + .step::before { display: none; }
   .drop { padding: 22px 14px; }
+  /* The spacer would strand "Back up now" on a line of its own with a gap above it. */
+  .actionsSpacer { display: none; }
+}
+
+/* ── The data-loss notice ─────────────────────────────────────────────────
+   Three strengths for one fact, because the risk actually changes: red when backups exist only in
+   the database, amber when a copy is reaching a folder on the same machine, and a single quiet line
+   once a copy is genuinely off the box. A full border rather than `.finding`'s left bar — findings
+   come and go, this is permanent, and the two must not read alike.
+
+   Both themes already define --red / --red-bg / --yellow / --green (dark and light values are tuned
+   separately in styles/tokens.css), so none of this needs a theme-specific rule. */
+
+.dataLoss {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  background: var(--red-bg);
+}
+
+.dataLossHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.45;
+  color: var(--text);
+}
+.dataLossHead svg { color: var(--red); flex: none; }
+
+/* --text, not --muted. This is the one block in the panel that must not read as secondary, and the
+   existing .findingBody grey is how a caution becomes something people scroll past. */
+.dataLossBody {
+  margin: 0;
+  max-width: 74ch;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text);
+}
+.dataLossBody code,
+.onMachineHead code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-2);
+}
+
+.onMachine {
+  display: grid;
+  gap: 7px;
+  padding: 13px 15px;
+  border: 1px solid var(--yellow);
+  border-radius: var(--radius);
+  background: var(--yellow-bg);
+}
+
+.onMachineHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text);
+}
+.onMachineHead svg { color: var(--yellow); flex: none; }
+
+.onMachineBody {
+  margin: 0;
+  max-width: 74ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+/* No box at all once the risk is gone — a reassurance that occupied as much space as the warning
+   would be its own kind of noise. */
+.safeNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.safeNote svg { color: var(--green); flex: none; margin-top: 2px; }
+.safeNote code { font-family: var(--font-mono); font-size: 11.5px; color: var(--text); }
+
+/* ── The stored backups list ──────────────────────────────────────────── */
+
+.archiveHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 2px;
+}
+
+.archiveCount { font-size: 12px; color: var(--muted); }
+
+.archiveList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.archiveRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.archiveMain { min-width: 0; flex: 1; }
+
+.archiveName {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archiveMeta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.archiveActions { display: flex; align-items: center; gap: 6px; flex: none; }
+
+.archiveEmpty {
+  padding: 18px 15px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  text-align: center;
 }

@@ -364,3 +364,48 @@ model DomainAlias {
 
   @@index([teamId])
 }
+
+// ── Stored backups (Phase B2) ─────────────────────────────────────────────────
+//
+// The gateway keeps its own backups, because the database is the only storage that exists and
+// survives everywhere this is deployed. A folder on the app's filesystem is durable on a VM and
+// wiped on every redeploy inside a container — and nothing in here can tell those two apart, so a
+// destination the operator has to choose correctly is one most of them will get wrong. Kept here,
+// an unattended backup needs no configuration at all and can be downloaded from the dashboard.
+//
+// These two models are EXCLUDED from the export and from the schema fingerprint (see
+// lib/backup/modelOrder.ts). Without the first, backup #2 would contain backup #1 and compound
+// forever; without the second, every backup taken before this shipped would report drift on
+// restore. Both exclusions are enforced by tests, because omitting them silently is the mistake
+// that looks correct.
+//
+// The honest limit, stated in the dashboard as plainly as it is here: these do not survive losing
+// the database itself. That is what the optional off-machine copy exists for.
+model Backup {
+  id        String        @id @default(uuid())
+  filename  String        @unique // the name it carries when downloaded or copied off-machine
+  createdAt DateTime      @default(now())
+  // Size of the assembled file. Beyond int4 (2.1 GB) this fails loudly at insert rather than
+  // truncating — and a gateway that large should be writing off-machine, not into itself.
+  bytes     Int
+  rows      Int
+  // scheduled | manual — surfaced in the panel, because "did the schedule actually fire, or is
+  // every backup here one I took by hand?" is a question an operator cannot otherwise answer.
+  origin    String        @default("scheduled")
+  chunks    BackupChunk[]
+
+  @@index([createdAt])
+}
+
+// Held in pieces rather than one column so the export stays STREAMED in both directions. B1 was
+// built to stream precisely so a large gateway never has to hold its own database in memory, and a
+// single Bytes column would have thrown that away at the last step.
+model BackupChunk {
+  id       String @id @default(uuid())
+  backupId String
+  backup   Backup @relation(fields: [backupId], references: [id], onDelete: Cascade)
+  seq      Int    // position in the file; reassembly orders by this, never by id or insertion
+  data     Bytes
+
+  @@unique([backupId, seq])
+}

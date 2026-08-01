@@ -78,6 +78,18 @@ export const DEMO_IDENTITY = {
  * Addresses use .invalid (reserved by RFC 2606 and guaranteed never to resolve): this is published
  * to a public page, and the dataset's own tests reject e-mail-shaped strings for the same reason.
  */
+/**
+ * The demo's last backup: today's 04:00 UTC window, or yesterday's if that has not arrived yet.
+ *
+ * Computed at load rather than hard-coded so the card always reads "this morning" instead of ageing
+ * into "8 months ago", and never written to a file, so it creates no fixture diff.
+ */
+const DEMO_LAST_BACKUP = (() => {
+  const window = new Date();
+  window.setUTCHours(4, 0, 0, 0);
+  return window.getTime() > Date.now() ? window.getTime() - 86_400_000 : window.getTime();
+})();
+
 const DEMO_USERS = [
   { id: 'u-owner',  email: 'abbas@example.invalid',  name: 'Abbas Baber', role: 'owner',  status: 'active',    source: 'local', twoFactorEnabled: true,  lastLoginAt: '2026-07-20T09:14:00.000Z', createdAt: '2026-04-22T08:00:00.000Z' },
   { id: 'u-admin1', email: 'liaqat@example.invalid', name: 'Liaqat Ali',  role: 'admin',  status: 'active',    source: 'local', twoFactorEnabled: true,  lastLoginAt: '2026-07-19T16:02:00.000Z', createdAt: '2026-04-23T10:30:00.000Z' },
@@ -116,6 +128,39 @@ export function demoRespond<T>(method: string, path: string): T {
     case '/admin/notifications':       return dataset.notifications as T;
     case '/admin/health/overview':     return dataset.health as T;
     case '/admin/cache/stats':         return dataset.cacheStats as T;
+
+    // Backups (B2). The demo answered nothing here at all, so a visitor could not tell that the
+    // gateway backs itself up — which is among the most reassuring things it does. Written inline
+    // rather than captured, like the other configuration surfaces above: the fixture builder reads
+    // a live gateway, and a seeded demo gateway has never taken a backup, so there is nothing there
+    // to photograph. Shown as a healthy install — schedule on, this morning's run succeeded, files
+    // present to download.
+    case '/admin/backup/schedule':
+      return {
+        schedule: {
+          enabled: true, everyDays: 1, hourUtc: 4, minuteUtc: 0, keep: 7,
+          copyOffMachine: false,
+          destination: { kind: 'directory', path: '' },
+        },
+        state: {
+          lastRunAt: DEMO_LAST_BACKUP, lastOutcome: 'ok', lastError: null,
+          lastFilename: 'alayra-nexus-backup-2026-08-01-04-00-00.nxb',
+          lastBytes: 4_204_112, lastRows: 18_314, lastPruned: 1,
+          lastCopyOutcome: null, lastCopyError: null, lastCopyDestination: null,
+        },
+        nextRunAt: new Date(DEMO_LAST_BACKUP + 86_400_000).toISOString(),
+        dueNow: false,
+        hasRecoveryKey: true,
+        storedBytes: 4_204_112 * 3,
+      } as T;
+    case '/admin/backup/archive':
+      return {
+        backups: [
+          { filename: 'alayra-nexus-backup-2026-08-01-04-00-00.nxb', createdAt: new Date(DEMO_LAST_BACKUP).toISOString(),                bytes: 4_204_112, rows: 18_314, origin: 'scheduled' },
+          { filename: 'alayra-nexus-backup-2026-07-31-04-00-00.nxb', createdAt: new Date(DEMO_LAST_BACKUP - 86_400_000).toISOString(),   bytes: 4_188_003, rows: 18_201, origin: 'scheduled' },
+          { filename: 'alayra-nexus-backup-2026-07-30-04-00-00.nxb', createdAt: new Date(DEMO_LAST_BACKUP - 172_800_000).toISOString(),  bytes: 4_151_880, rows: 18_044, origin: 'manual' },
+        ],
+      } as T;
     case '/admin/settings/cache':      return dataset.cacheConfig as T;
 
     // Identity and session shape, so the shell renders a signed-in viewer.

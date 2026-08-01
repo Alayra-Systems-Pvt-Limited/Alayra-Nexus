@@ -230,6 +230,25 @@ CREATE TABLE "DomainAlias" (
     CONSTRAINT "DomainAlias_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "Team" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- CreateTable
+CREATE TABLE "Backup" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "filename" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "bytes" INTEGER NOT NULL,
+    "rows" INTEGER NOT NULL,
+    "origin" TEXT NOT NULL DEFAULT 'scheduled'
+);
+
+-- CreateTable
+CREATE TABLE "BackupChunk" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "backupId" TEXT NOT NULL,
+    "seq" INTEGER NOT NULL,
+    "data" BLOB NOT NULL,
+    CONSTRAINT "BackupChunk_backupId_fkey" FOREIGN KEY ("backupId") REFERENCES "Backup" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "NexusProvider_slug_key" ON "NexusProvider"("slug");
 
@@ -301,4 +320,13 @@ CREATE UNIQUE INDEX "DomainAlias_domain_key" ON "DomainAlias"("domain");
 
 -- CreateIndex
 CREATE INDEX "DomainAlias_teamId_idx" ON "DomainAlias"("teamId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Backup_filename_key" ON "Backup"("filename");
+
+-- CreateIndex
+CREATE INDEX "Backup_createdAt_idx" ON "Backup"("createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "BackupChunk_backupId_seq_key" ON "BackupChunk"("backupId", "seq");
 

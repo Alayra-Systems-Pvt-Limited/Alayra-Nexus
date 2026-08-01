@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { MODEL_ORDER, delegateName } from './modelOrder';
+import { MODEL_ORDER, EXCLUDED_MODELS, delegateName } from './modelOrder';
 import {
   UNIQUE_COLUMNS, MAX_EXAMPLES, MODELS_WITH_UNIQUE_COLUMNS,
   findCollisions, mergeCollisions, type Collision,
@@ -25,12 +25,20 @@ import {
 
 const schema = readFileSync(resolve(__dirname, '..', '..', '..', 'prisma', 'schema.prisma'), 'utf8');
 
-/** Every single-column `@unique` in the schema, as delegate name + column. */
+/**
+ * Every single-column `@unique` in the schema, as delegate name + column.
+ *
+ * Models excluded from the backup are skipped. A collision is a restore-time event — two rows
+ * competing for one unique value — and a table that is never exported and never restored cannot
+ * produce one. Counting its constraints here would demand registry entries for columns the restore
+ * path will never so much as read.
+ */
 function schemaUniques(): { model: string; column: string }[] {
   const out: { model: string; column: string }[] = [];
 
   for (const block of schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
     const model = delegateName(block[1]);
+    if (EXCLUDED_MODELS.includes(model)) continue;
     for (const line of block[2].split('\n')) {
       const trimmed = line.trim();
       if (trimmed.startsWith('//')) continue;   // a commented-out field is not a constraint
@@ -43,9 +51,21 @@ function schemaUniques(): { model: string; column: string }[] {
   return out;
 }
 
-/** Every composite `@@unique(...)`. */
+/**
+ * Every composite `@@unique(...)`, on models that are actually backed up.
+ *
+ * Scanned per-model rather than across the whole file so the exclusion above applies here too.
+ * `BackupChunk` carries `@@unique([backupId, seq])` — a real composite, on a table no restore ever
+ * touches. Counting it would trip the "teach findCollisions about composites" guard below for a
+ * constraint that cannot reach the code that guard protects.
+ */
 function schemaCompositeUniques(): string[] {
-  return [...schema.matchAll(/^\s*@@unique\s*\(([^)]*)\)/gm)].map((m) => m[1].trim());
+  const out: string[] = [];
+  for (const block of schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
+    if (EXCLUDED_MODELS.includes(delegateName(block[1]))) continue;
+    for (const m of block[2].matchAll(/^\s*@@unique\s*\(([^)]*)\)/gm)) out.push(m[1].trim());
+  }
+  return out;
 }
 
 const key = (c: { model: string; column: string }): string => `${c.model}.${c.column}`;
