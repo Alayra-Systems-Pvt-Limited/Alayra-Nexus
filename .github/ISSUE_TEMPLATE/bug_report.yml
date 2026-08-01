@@ -1,57 +1,232 @@
 name: Bug report
-description: Report something that isn't working as expected
-labels: ["bug"]
+description: Something isn't working as expected
+labels: ["bug", "needs-triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report a bug. Please **do not include real API keys, tokens, or `.env` values** — redact them.
-  - type: textarea
-    id: what-happened
+        Thanks for reporting this properly — a report that can be reproduced gets fixed, and one that can't
+        usually doesn't.
+
+        Most of these fields exist because **the same symptom has different causes depending on how Nexus is
+        running**. A routing bug on Postgres + Redis and the same symptom on standalone SQLite are usually two
+        different bugs. Telling us the mode up front is often the difference between a fix today and three
+        rounds of questions.
+
+        > **Never paste a real API key, token, password, or `.env` value.** Replace them with `sk-REDACTED`.
+        > If the bug *is* a security vulnerability, close this and follow the
+        > [Security Policy](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/security/policy) instead —
+        > a public issue is a public disclosure.
+
+  - type: checkboxes
+    id: preflight
     attributes:
-      label: What happened?
-      description: A clear description of the bug and what you expected instead.
-      placeholder: When I send a request to /v1/chat/completions with ..., I get ... but expected ...
+      label: Before you start
+      options:
+        - label: I searched existing issues, including closed ones, and this isn't a duplicate
+          required: true
+        - label: This is not a security vulnerability (those go to the Security Policy, privately)
+          required: true
+        - label: I have removed every real credential from everything I'm about to paste
+          required: true
+
+  - type: input
+    id: summary
+    attributes:
+      label: One-line summary
+      description: The symptom in a single sentence, as you'd want to read it in a list of fifty issues.
+      placeholder: Streaming responses hang after ~30s when the provider is slow
     validations:
       required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: The request should fail over to the next key in the pool after the timeout.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+      description: Include the exact error text or HTTP status if there was one.
+      placeholder: The connection stayed open until the client gave up. No error was logged.
+    validations:
+      required: true
+
   - type: textarea
     id: reproduce
     attributes:
       label: Steps to reproduce
-      description: Exact steps (and a minimal request/config) that reproduce the issue.
+      description: |
+        Numbered, from a clean start, with the smallest setup that still shows the problem. If you can
+        reproduce it with a `curl` command, that is worth more than three paragraphs.
       placeholder: |
-        1. Configure provider pool with ...
-        2. Send request ...
-        3. See error ...
+        1. Start with: npx @alayrasystems/nexus
+        2. Add an OpenAI pool with one key
+        3. curl -X POST http://127.0.0.1:3000/v1/chat/completions -H "Authorization: Bearer nx-..." \
+             -d '{"model":"alayra-nexus-1","messages":[{"role":"user","content":"hi"}],"stream":true}'
+        4. Observe: ...
     validations:
       required: true
-  - type: textarea
-    id: logs
+
+  - type: dropdown
+    id: frequency
     attributes:
-      label: Relevant logs or error output
-      description: Paste any server logs or error responses. Redact secrets.
-      render: shell
+      label: How often does it happen?
+      description: An intermittent bug and a consistent one are hunted completely differently.
+      options:
+        - Every time — 100% reproducible
+        - Most times — but not always
+        - Intermittent — rarely, and unpredictably
+        - Once — I have not seen it again
+        - Not sure yet
+    validations:
+      required: true
+
   - type: input
     id: version
     attributes:
-      label: Version / commit
-      description: Which release or git commit are you running?
+      label: Version
+      description: 'Output of `alayra-nexus --version`, the image tag, or the commit SHA.'
+      placeholder: 1.5.2
     validations:
       required: true
+
   - type: dropdown
-    id: deployment
+    id: install
     attributes:
-      label: How are you running Alayra Nexus?
+      label: How did you install it?
       options:
+        - npx @alayrasystems/nexus
+        - npm install (as a dependency)
+        - Docker image (docker run)
         - Docker Compose
-        - Manual (Node.js)
-        - Railway / other PaaS
+        - Kubernetes / Helm
+        - Railway, Render, Fly or similar PaaS
+        - From source (git clone)
         - Other
     validations:
       required: true
+
+  - type: dropdown
+    id: storage
+    attributes:
+      label: Which storage is it running on?
+      description: |
+        Standalone means you set neither `DATABASE_URL` nor `REDIS_URL`. The startup banner prints this —
+        look for the `Storage →` line.
+      options:
+        - Standalone — SQLite + in-process memory
+        - PostgreSQL + Redis
+        - PostgreSQL only (no Redis)
+        - SQLite + Redis
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of Nexus?
+      description: Pick every part that seems involved.
+      multiple: true
+      options:
+        - Proxy — /v1/chat/completions
+        - Proxy — /v1/messages (Anthropic style)
+        - Proxy — embeddings, images, audio, completions
+        - Routing, failover or the circuit breaker
+        - Rate limits or admission control
+        - Response cache
+        - Cost tracking or analytics
+        - Dashboard (web UI)
+        - Admin API
+        - Authentication, teams or BYOK
+        - Backup and restore
+        - CLI / first-run setup
+        - Installation or startup
+        - Documentation
+        - Something else
+    validations:
+      required: true
+
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Did this work before?
+      description: A regression is far quicker to find, because the change that caused it is in a known range.
+      options:
+        - This is a new setup — I have nothing to compare against
+        - Yes — it worked in an earlier version (say which below)
+        - No — it has never worked for me
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: last-good
+    attributes:
+      label: Last version where it worked
+      description: Only if you answered "it worked in an earlier version" above.
+      placeholder: 1.5.1
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Gateway output from startup through to the failure. **Paste the text, not a screenshot** — logs in an
+        image can't be searched, quoted, or diffed. Redact any keys.
+      render: shell
+
+  - type: textarea
+    id: request
+    attributes:
+      label: The request and response
+      description: For a proxy bug — the request body you sent and what came back, including status and headers.
+      render: json
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: |
+        Relevant environment variables and pool setup, **with every value redacted**. Names alone are often
+        enough: knowing `REDIS_URL` is set matters, its value never does.
+      render: shell
+      placeholder: |
+        DATABASE_URL=postgresql://REDACTED
+        REDIS_URL=redis://REDACTED
+        CACHE_ENABLED=true
+
+  - type: input
+    id: providers
+    attributes:
+      label: Which providers were involved?
+      placeholder: OpenRouter (google/gemini-2.5-flash-lite), Anthropic
+
   - type: input
     id: environment
     attributes:
-      label: Environment
-      description: Node.js version, OS, PostgreSQL and Redis versions.
-      placeholder: Node 20.x, Ubuntu 24.04, PostgreSQL 16, Redis 7
+      label: Operating system and Node version
+      placeholder: Ubuntu 24.04, Node 22.11.0
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: Only for dashboard bugs.
+      placeholder: Chrome 140, Firefox 141, Safari 18
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: |
+        What you were doing when it happened, what you'd already tried, whether it's under load or idle, or
+        anything that felt related even if you can't say why. Hunches from the person who saw it are often
+        the most useful part of a report.
