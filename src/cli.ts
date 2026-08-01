@@ -44,7 +44,7 @@
 // not an inconsistency, it is a consequence of who owns the directory.
 
 import { randomBytes } from 'node:crypto';
-import { createServer } from 'node:net';
+import { createServer, connect } from 'node:net';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -245,7 +245,38 @@ export function parseEnvFile(body: string): Record<string, string> {
 }
 
 /** A lock's contents. The pid is what makes a stale lock recoverable rather than permanent. */
-export interface LockInfo { pid: number; port: number; startedAt: string }
+export interface LockInfo { pid: number; port: number; startedAt: string; host?: string }
+
+/**
+ * How long a lock is believed on the strength of its pid alone.
+ *
+ * The lock is written before the server binds its port, so for the first moment of a normal start
+ * there IS a live gateway with nothing listening yet. Inside this window a lock is trusted; past it,
+ * a silent port is taken as evidence the process it names is not ours.
+ */
+export const LOCK_STARTUP_GRACE_MS = 15_000;
+
+/**
+ * Is this lock still held by a running gateway?
+ *
+ * A pid is not identity. When a process exits without cleaning up — closing the terminal window, a
+ * reboot, a kill -9 — the lock survives, and the operating system is free to hand that number to
+ * something unrelated. On Windows it does so quickly: the lock on the machine this was found on
+ * pointed at `PhoneExperienceHost`, and the gateway refused to start because Phone Link happened to
+ * inherit the number a dead gateway once had.
+ *
+ * So the pid is necessary and not sufficient. A gateway that is running is also listening, which is
+ * the part no unrelated process can accidentally imitate — it would have to be on the same port,
+ * recorded in our own lock file. The grace period covers the one case where a live gateway is
+ * legitimately silent: it has not finished starting.
+ *
+ * Pure, so the decision can be tested without sockets, clocks or a second process.
+ */
+export function lockIsHeld(pidAlive: boolean, portListening: boolean, ageMs: number): boolean {
+  if (!pidAlive) return false;          // nothing there at all — the pre-existing case
+  if (portListening) return true;       // something is serving on the port this lock recorded
+  return ageMs < LOCK_STARTUP_GRACE_MS; // still within a plausible startup
+}
 
 /** True when a process with this pid exists. Signal 0 tests for existence without delivering one. */
 export function pidAlive(pid: number, kill: (p: number, s: number) => void = process.kill): boolean {
@@ -357,37 +388,73 @@ function writeSecret(path: string, body: string): void {
   try { chmodSync(path, 0o600); } catch { /* windows does not enforce this; see the plan */ }
 }
 
+/** Is anything accepting connections there? Used to tell a live gateway from a recycled pid. */
+function portListening(port: number, host: string, timeoutMs = 700): Promise<boolean> {
+  return new Promise((done) => {
+    const socket = connect({ port, host });
+    let settled = false;
+    const finish = (answer: boolean): void => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      done(answer);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error',   () => finish(false));  // ECONNREFUSED: nobody home
+  });
+}
+
 /**
  * Refuse to run a second gateway over the same data directory.
  *
  * SQLite takes one writer, and counters and sessions live in each process — so two instances on one
- * directory do not share a gateway, they disagree about one. A dead pid is taken over rather than
+ * directory do not share a gateway, they disagree about one. A stale lock is taken over rather than
  * obeyed, so a killed process cannot leave the directory permanently unusable.
+ *
+ * "Stale" used to mean only "no process has that pid", which is not the same question. See
+ * `lockIsHeld`: a pid is a number the operating system reuses, and on the machine this bug was found
+ * on it had been reused by Phone Link.
  */
-function acquireLock(dir: string, port: number): void {
+async function acquireLock(dir: string, port: number, host: string): Promise<void> {
   const path = join(dir, LOCK_FILE);
 
   if (existsSync(path)) {
     let held: LockInfo | null;
     try { held = JSON.parse(readFileSync(path, 'utf8')) as LockInfo; } catch { held = null; }
 
-    if (held && pidAlive(held.pid)) {
-      fail([
-        `A gateway is already running on this data directory (pid ${held.pid}, port ${held.port}).`,
-        '',
-        `  data directory   ${dir}`,
-        `  started          ${held.startedAt}`,
-        '',
-        'Two gateways cannot share one directory: SQLite takes a single writer, and each process',
-        'keeps its own counters and sessions, so they would disagree about the same database.',
-        '',
-        'Stop it first, or start a separate gateway with its own directory:',
-        '  alayra-nexus --data-dir ./another --port 3001',
-      ]);
+    if (held) {
+      const alive     = pidAlive(held.pid);
+      // Older locks predate this field; they were written by a gateway that bound the default.
+      const heldHost  = held.host ?? DEFAULT_HOST;
+      const listening = alive && await portListening(held.port, heldHost);
+      const ageMs     = Date.now() - Date.parse(held.startedAt);
+
+      if (lockIsHeld(alive, listening, Number.isFinite(ageMs) ? ageMs : Infinity)) {
+        fail([
+          `A gateway is already running on this data directory (pid ${held.pid}, port ${held.port}).`,
+          '',
+          `  data directory   ${dir}`,
+          `  started          ${held.startedAt}`,
+          '',
+          'Two gateways cannot share one directory: SQLite takes a single writer, and each process',
+          'keeps its own counters and sessions, so they would disagree about the same database.',
+          '',
+          'Stop it first, or start a separate gateway with its own directory:',
+          '  alayra-nexus --data-dir ./another --port 3001',
+        ]);
+      }
+
+      // Say so rather than starting silently. Somebody who has just been told twice that a gateway
+      // was already running deserves to see the moment that stopped being true.
+      if (alive) {
+        console.log(`  Note: took over a stale lock — pid ${held.pid} exists but nothing is serving on port ${held.port}.`);
+      }
     }
   }
 
-  const info: LockInfo = { pid: process.pid, port, startedAt: new Date().toISOString() };
+  const info: LockInfo = { pid: process.pid, port, startedAt: new Date().toISOString(), host };
   writeFileSync(path, JSON.stringify(info, null, 2));
 
   // `exit` covers a clean stop, the server's own SIGINT/SIGTERM handling, and an uncaught throw.
@@ -570,7 +637,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   process.env.DOTENV_CONFIG_PATH = o.envFile ?? join(o.dataDir, '.env');
 
   await checkPortFree(o.port, o.host);
-  acquireLock(o.dataDir, o.port);
+  await acquireLock(o.dataDir, o.port, o.host);
   banner(o, { key: keyCreated, password: passwordCreated }, password);
 
   // LATE, and this is load-bearing. Requiring the server at the top of this file would run
