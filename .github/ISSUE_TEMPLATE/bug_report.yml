@@ -40,6 +40,16 @@ body:
       required: true
 
   - type: textarea
+    id: goal
+    attributes:
+      label: What were you trying to do?
+      description: |
+        The goal, not the steps — what you were actually building or running when this got in the way.
+        It is the context that makes everything below legible, and it occasionally reveals that the
+        real answer is a different feature entirely.
+      placeholder: Putting a gateway in front of three providers so our staging app fails over automatically.
+
+  - type: textarea
     id: expected
     attributes:
       label: What did you expect to happen?
@@ -225,8 +235,12 @@ body:
   - type: textarea
     id: context
     attributes:
-      label: Anything else
+      label: What do you think is going on?
       description: |
-        What you were doing when it happened, what you'd already tried, whether it's under load or idle, or
-        anything that felt related even if you can't say why. Hunches from the person who saw it are often
-        the most useful part of a report.
+        Anything you noticed, already tried, or suspect — **even if you can't explain why**. Whether it only
+        happens under load, only after a restart, only with one provider, or only since you changed something
+        unrelated.
+
+        This field is not filler. The person who watched it happen knows things the logs don't record, and a
+        hunch from them has more than once been worth more than every structured field above it. Say the
+        half-formed thing.
