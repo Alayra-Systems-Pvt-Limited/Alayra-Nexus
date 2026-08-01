@@ -134,6 +134,9 @@ describe('demo responder — every endpoint the dashboard calls', () => {
     '/admin/notifications/read-all', '/admin/invites/accept',
     // "Back up now" — the same machinery the schedule uses, on demand. POST only.
     '/admin/backup/schedule/run',
+    // Moving to PostgreSQL (S3): one looks at a database the caller names, the other moves data
+    // into it. Neither is readable, and the demo refuses writes outright.
+    '/admin/migrate/inspect', '/admin/migrate/run',
   ]);
 
   // Endpoints that never pass through `api()` at all, so `demoRespond` is not on their path and a

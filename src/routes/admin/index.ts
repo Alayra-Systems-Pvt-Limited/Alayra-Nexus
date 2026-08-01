@@ -35,6 +35,7 @@ import adminHealthRoutes    from './health.routes';
 import adminUsersRoutes     from './users.routes';
 import adminBackupRoutes    from './backup.routes';
 import adminBackupArchiveRoutes from './backupArchive.routes';
+import adminMigrateRoutes   from './migrate.routes';
 import { recordAudit }      from '../../services/audit.service';
 import { deriveAction, shouldAutoAudit } from '../../lib/audit';
 
@@ -90,6 +91,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   await fastify.register(adminBrandingRoutes);
   await fastify.register(adminBackupRoutes);
   await fastify.register(adminBackupArchiveRoutes);
+  await fastify.register(adminMigrateRoutes);
   await fastify.register(adminHealthRoutes);
   await fastify.register(adminUsersRoutes);
 }

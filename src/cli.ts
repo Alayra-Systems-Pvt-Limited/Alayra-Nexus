@@ -84,7 +84,21 @@ export interface CliOptions {
   envFile: string | null;
   help: boolean;
   version: boolean;
+  /** Move this gateway's data to PostgreSQL and exit, instead of starting it (Phase S3). */
+  migrate: boolean;
 }
+
+/**
+ * Where `--migrate` reads its destination from.
+ *
+ * An environment variable and NOT a flag value, deliberately. A connection string carries a
+ * database password, and process arguments are readable by every other process on the machine —
+ * `ps`, /proc, Task Manager. A CLI whose documented usage is
+ * `alayra-nexus migrate --to postgres://user:password@host/db` teaches operators to leak the
+ * credential to their own machine every time they use it, and CI systems already pass secrets this
+ * way. The gateway itself takes the same care: see lib/prismaCli.
+ */
+export const MIGRATE_TARGET_ENV = 'NEXUS_MIGRATE_TO';
 
 export interface ParseResult {
   options?: CliOptions;
@@ -109,6 +123,7 @@ export function parseArgs(
     dataDir: join(homeDir, DATA_DIR_NAME),
     envFile: null,
     help: false,
+    migrate: false,
     version: false,
   };
 
@@ -129,6 +144,7 @@ export function parseArgs(
     const arg = argv[i];
     switch (arg) {
       case '-h': case '--help':    options.help = true; break;
+      case '--migrate':            options.migrate = true; break;
       case '-v': case '--version': options.version = true; break;
 
       case '-p': case '--port': {
@@ -310,8 +326,18 @@ function usage(): string {
         --host <addr>    address to bind              (default ${DEFAULT_HOST}, loopback only)
         --data-dir <p>   where to keep data and keys  (default ~/${DATA_DIR_NAME})
         --env-file <p>   read configuration from this file
+        --migrate        move this gateway's data to PostgreSQL, then exit
     -h, --help           show this
     -v, --version        print the version
+
+  Moving to PostgreSQL
+    Set the destination in the environment, never on the command line — an argument
+    is visible to every process on the machine, and this one holds a password.
+
+      NEXUS_MIGRATE_TO=postgresql://user:password@host:5432/nexus alayra-nexus --migrate
+
+    Nothing is deleted. The gateway refuses traffic while it runs, checks every row
+    count afterwards, and tells you what to change only once they match.
 
   Notes
     A .env in the current directory is NOT read. It belongs to the project in that
@@ -636,6 +662,15 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   // changing the server at all.
   process.env.DOTENV_CONFIG_PATH = o.envFile ?? join(o.dataDir, '.env');
 
+  // The move happens INSTEAD of starting, and before anything binds a port or takes the lock: it
+  // is not a gateway that is running, and a half-started one holding the port would stop the
+  // operator retrying. Placed after the environment is assembled because the migration reads this
+  // gateway's own database through exactly the configuration a normal start would have used.
+  if (o.migrate) {
+    await runMigration();
+    return;
+  }
+
   await checkPortFree(o.port, o.host);
   await acquireLock(o.dataDir, o.port, o.host);
   banner(o, { key: keyCreated, password: passwordCreated }, password);
@@ -649,4 +684,47 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   require('./server');
 
   await announceReady(o);
+}
+
+/**
+ * `--migrate`: move this gateway's data to PostgreSQL and say what happened.
+ *
+ * Required LATE for the same load-bearing reason the server is: a static import would be hoisted
+ * above the environment assembly above, and the database client resolves its engine and URL the
+ * moment it is first imported. Reading it too early would open SQLite at the wrong path — or open
+ * nothing at all — before this function had a chance to be right.
+ */
+async function runMigration(): Promise<void> {
+  const url = (process.env[MIGRATE_TARGET_ENV] ?? '').trim();
+  if (!url) {
+    fail([
+      `Set ${MIGRATE_TARGET_ENV} to the PostgreSQL address you are moving to.`,
+      '',
+      `  ${MIGRATE_TARGET_ENV}=postgresql://user:password@host:5432/nexus alayra-nexus --migrate`,
+      '',
+      'It is read from the environment rather than an option because a command-line argument is',
+      'visible to every process on this machine, and that string holds a password.',
+    ]);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { migrateToPostgres } = require('./services/pgMigrate.service') as
+    typeof import('./services/pgMigrate.service');
+
+  console.log('');
+  console.log('  Moving to PostgreSQL. The gateway will refuse requests until this finishes.');
+  console.log('');
+  const outcome = await migrateToPostgres(url);
+
+  if (!outcome.ok) {
+    fail([outcome.error ?? 'The move did not finish.', ...(outcome.detail ? ['', outcome.detail] : [])]);
+  }
+
+  console.log(`  Moved ${outcome.rowsCopied?.toLocaleString() ?? '0'} rows to ${outcome.target}.`);
+  console.log(`  Every table matched. Not copied: ${outcome.notMigrated.join(', ')} — stored backups stay`);
+  console.log('  with the old gateway, which has not been touched.');
+  console.log('');
+  console.log('  To switch over, set DATABASE_URL to that address and start the gateway again.');
+  console.log('  Until you do, this gateway keeps running on its own file exactly as before.');
+  console.log('');
 }

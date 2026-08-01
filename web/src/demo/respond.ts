@@ -153,6 +153,11 @@ export function demoRespond<T>(method: string, path: string): T {
         hasRecoveryKey: true,
         storedBytes: 4_204_112 * 3,
       } as T;
+    // The demo gateway is presented as a real deployment, so it is already on PostgreSQL and the
+    // move does not apply to it. Answering honestly is better than hiding the tab: a visitor sees
+    // the option exists and that a grown-up install is past it.
+    case '/admin/migrate/status':
+      return { engine: 'postgres', canMigrate: false, notMigrated: ['backup', 'backupChunk'] } as T;
     case '/admin/backup/archive':
       return {
         backups: [
