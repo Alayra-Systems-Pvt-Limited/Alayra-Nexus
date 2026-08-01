@@ -20,9 +20,23 @@
 - [ ] `npm run lint` passes with 0 errors
 - [ ] `npm run typecheck` passes
 - [ ] `npm test` passes
-- [ ] I added/updated tests for my change where it made sense
+- [ ] `npm run build` passes
+- [ ] Dashboard checks pass, if I touched `web/` (`cd web && npm run lint && npm run typecheck && npm test`)
+- [ ] I added/updated tests for my change where it made sense — and checked they fail without it
 - [ ] I updated the README / docs if behavior or the API changed
-- [ ] No secrets, real API keys, or `.env` values are included in this PR
+- [ ] This PR is **one logical change**, not several bundled together
+- [ ] No generated or build output is committed (`dist/`, `web/dist/`, coverage)
+
+## Security
+
+<!-- Alayra Nexus handles provider credentials and production traffic, so every PR is read with
+     this in mind. See the security rules in CONTRIBUTING.md. -->
+
+- [ ] No secrets, real API keys, tokens, or `.env` values anywhere in this diff — including tests and fixtures
+- [ ] This PR does not weaken authentication, authorization, encryption, or audit logging
+- [ ] This PR does not disable, reorder, or bypass security middleware
+- [ ] Any new dependency is justified in the summary above
+- [ ] This is **not** a fix for an undisclosed vulnerability — those go to [SECURITY.md](../SECURITY.md), never a public PR
 
 ## Notes for reviewers
 
