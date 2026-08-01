@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Security vulnerability
+  - name: 🔒 Security vulnerability — report privately
     url: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/security/policy
-    about: Please report security issues privately via our Security Policy — do not open a public issue.
-  - name: Question or discussion
+    about: Never open a public issue for a security problem. A public report is a public disclosure, with a window before anyone can upgrade.
+  - name: 💬 Question, idea or "am I doing this right?"
     url: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/discussions
-    about: For usage questions and general discussion, please use Discussions.
+    about: Usage questions and open-ended discussion belong here, not in the issue tracker.
+  - name: 📖 Documentation
+    url: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus#readme
+    about: Quick start, standalone mode, configuration reference and the API surface.

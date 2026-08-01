@@ -1,30 +1,135 @@
 name: Feature request
-description: Suggest a new capability or improvement
-labels: ["enhancement"]
+description: Suggest a new capability or an improvement
+labels: ["enhancement", "needs-triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Good feature requests describe a **problem**, not a solution. The best ones we have received named
+        something that was hard to do and left the design open — which is usually where a better answer than
+        the one first imagined comes from.
+
+        Please read the [roadmap and maintainer discretion section](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/blob/main/CONTRIBUTING.md#maintainer-discretion)
+        before filing. Not every good idea belongs in this project, and it is kinder to say so early than
+        after you have written it.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched existing issues and discussions, including closed ones
+          required: true
+
   - type: textarea
     id: problem
     attributes:
-      label: What problem does this solve?
-      description: Describe the use case or pain point behind the request.
-      placeholder: As a team running multiple providers, I need ... because ...
+      label: What problem are you trying to solve?
+      description: |
+        Describe the situation, not the feature. What are you doing today, and what makes it hard, slow,
+        risky or impossible?
+      placeholder: |
+        We run three teams against one gateway. When one team's spend spikes we only find out from the
+        monthly bill, because there is no way to be told at the moment a threshold is crossed.
     validations:
       required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you work around it today?
+      description: |
+        Even an ugly workaround is useful — it shows what the real requirement is, and sometimes it turns out
+        the capability already exists under a name you did not find.
+    validations:
+      required: true
+
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed solution
-      description: What would you like Alayra Nexus to do?
+      label: What would you like it to do?
+      description: Your proposed behaviour, if you have one. It is fine to leave this open.
     validations:
       required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: How would you know it works?
+      description: |
+        The concrete, checkable version: what would you do, and what would you see? This is the single most
+        useful field on this form — it turns an idea into something that can be built and verified, and it
+        often exposes a disagreement about scope before anyone writes code.
+      placeholder: |
+        - Set a team budget of $50/month with "notify at 80%"
+        - Drive spend to $40
+        - An alert arrives naming the team, the threshold and the current spend
+        - No alert is sent again for the same threshold in the same period
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of Nexus?
+      multiple: true
+      options:
+        - Proxy and the OpenAI-compatible surface
+        - Routing, failover or the circuit breaker
+        - Rate limits and admission control
+        - Response cache
+        - Cost tracking and analytics
+        - Dashboard (web UI)
+        - Admin API
+        - Authentication, teams or BYOK
+        - Backup and restore
+        - CLI / first-run setup
+        - Deployment, packaging or operations
+        - Documentation
+        - Something else
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: modes
+    attributes:
+      label: Which deployments must this work in?
+      description: |
+        Nexus runs on Postgres + Redis **and** on a SQLite file with in-process memory, with no feature
+        disabled by engine. Anything added has to work on both — so it is worth saying up front if you only
+        care about one, because that changes how much work it is.
+      options:
+        - label: PostgreSQL + Redis
+        - label: Standalone — SQLite + in-process memory
+
+  - type: dropdown
+    id: security
+    attributes:
+      label: Does this touch credentials, authentication or audit?
+      description: |
+        Anything that reads, stores, moves or exposes provider keys, team keys, sessions or the audit trail
+        gets designed before it gets built, so flagging it early saves a rewrite.
+      options:
+        - "No — it touches none of those"
+        - "Yes — it involves provider or team credentials"
+        - "Yes — it involves authentication, sessions or permissions"
+        - "Yes — it changes what is written to the audit log"
+        - Not sure
+    validations:
+      required: true
+
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
-      description: Any workarounds or other approaches you've thought about.
+      label: What else did you consider?
+      description: |
+        Other approaches, other tools that solve it, or the reason an obvious-looking solution does not work.
+        Ruling things out is real information.
+
   - type: checkboxes
     id: scope
     attributes:
-      label: Scope
+      label: Taking part
       options:
         - label: I'm willing to help implement this
+        - label: I'm willing to test a preview of it
+        - label: I understand a feature request may be declined if it does not fit the roadmap
+          required: true
