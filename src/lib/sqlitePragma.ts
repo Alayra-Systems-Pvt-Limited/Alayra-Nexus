@@ -95,7 +95,8 @@ export interface SqliteTuning {
  * would turn a performance caveat into an outage.
  */
 export async function configureSqlite(client: PrismaClient): Promise<SqliteTuning> {
-  let mode: string | null = null;
+  // No initialiser: the catch below returns, so every path that reaches the read has assigned it.
+  let mode: string | null;
 
   try {
     // $queryRawUnsafe, not $executeRawUnsafe: this returns a row, and the execute path rejects

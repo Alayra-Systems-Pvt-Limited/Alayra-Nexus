@@ -273,7 +273,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     steps:
-      - uses: actions/download-artifact@v4
+      # Upload is v7 and download is v8 — they are released independently and their major numbers
+      # have not lined up since the v4 backend rewrite, which was the last version boundary that
+      # actually mattered between them. Do not "fix" this to match.
+      #
+      # v8 errors on a hash mismatch rather than warning, which is the behaviour worth having here:
+      # these artifacts carry the digests that the manifest is built from, so a corrupted one would
+      # otherwise produce a tag pointing at something nobody intended.
+      - uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*

@@ -216,13 +216,13 @@ export async function dispatchProxy(
   }
 
   const controller = new AbortController();
-  let ttft: ReturnType<typeof setTimeout> | null = setTimeout(() => controller.abort(), UPSTREAM_TTFT_MS);
+  const ttft = setTimeout(() => controller.abort(), UPSTREAM_TTFT_MS);
 
   let upstream: Response;
   try {
     upstream = await safeFetch(url, { method: 'POST', headers, body: fetchBody, signal: controller.signal });
   } catch (err) {
-    if (ttft) clearTimeout(ttft);
+    clearTimeout(ttft);
     refund();
     await reportServerFailure(keyId, route.isProbe);
     metrics.providerError(route.providerSlug, 'timeout');
@@ -230,7 +230,7 @@ export async function dispatchProxy(
     const aborted = err instanceof Error && err.name === 'AbortError';
     return reply.code(504).send({ error: aborted ? 'Upstream timed out before responding.' : 'Upstream connection failed.' });
   }
-  if (ttft) { clearTimeout(ttft); ttft = null; }
+  clearTimeout(ttft);
   metrics.observeTtfb((Date.now() - t0) / 1000);
 
   if (!upstream.ok) {
