@@ -9,6 +9,84 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-08-01
+
+**Upgrade if you are on any earlier version.** This closes a rate-limit bypass that made the
+protection on unauthenticated endpoints — sign-in among them — ineffective against an IPv6 client.
+
+### Security
+
+- **An IPv6 client could not be rate-limited at all.** The abuse guard keyed its buckets on the
+  verbatim client address, which does not work for IPv6 in two independent ways. A single customer
+  `/64` holds 2^64 addresses, so a new source address per request means a new bucket per request
+  without ever leaving the allocation you were given. And one address has several spellings —
+  `2001:db8::1`, `2001:0db8:0000:…:0001`, `2001:DB8::1` — so even a client that cannot rotate can
+  simply rewrite the text.
+
+  The endpoint that matters is **sign-in**: unauthenticated, so it takes the IP path, and
+  brute-force protection is the entire reason a limit is on it. Password reset and invite
+  redemption are the same shape.
+
+  Addresses are now canonicalised and masked to their `/64` before becoming a key, so every address
+  one attacker plausibly controls shares a bucket and the textual variants collapse onto each other.
+  IPv4 is unchanged; an IPv4-mapped address buckets as the IPv4 address it actually is.
+
+  `@fastify/rate-limit` also goes to **11.2.0**, which fixes the same class of problem
+  ([GHSA-grpc-p53c-r64v](https://github.com/fastify/fastify-rate-limit/security/advisories/GHSA-grpc-p53c-r64v),
+  CVSS 7.3). **That upgrade alone would not have fixed this gateway**, and this is the part worth
+  reading twice: the plugin's fix lives in its own key generator, and Nexus supplies a custom one.
+  Anyone who upgraded the dependency themselves — or whose scanner told them to — would have seen a
+  patched version number and remained exactly as exposed.
+
+### Fixed
+
+- **"A gateway is already running" when nothing was.** A pid is not an identity. When a gateway
+  exits without cleaning up its lock — closing the terminal window, a reboot, anything short of a
+  clean Ctrl-C — the operating system is free to reissue that number, and Windows does so quickly.
+  On the machine this was found on, the lock pointed at **Phone Link**, and the data directory was
+  unusable until somebody knew to delete a file nobody had told them about.
+
+  A lock is now held only when the pid is alive **and** something is serving on the port the lock
+  itself recorded, which is the part no unrelated process can imitate by accident. A 15-second
+  grace period covers the one moment a live gateway is legitimately silent: it has not finished
+  starting. Taking a stale lock over says so on the way past.
+
+- **Every dialog in the dashboard lost focus after one keystroke.** The modal's focus effect
+  listed `onClose` as a dependency, and every caller passes an inline arrow — a new function on
+  every render. Typing one character re-ran the effect, which handed focus back to whatever opened
+  the dialog. It looked like a separate small bug on each screen it happened on; it was one bug,
+  in every form in the product.
+
+- **A pool's models could not be changed after it was created.** Models could only be chosen while
+  a key was being added, so the list froze the moment the pool existed and growing it meant
+  deleting the pool and rebuilding it — discarding a working encrypted credential to edit a list
+  that has nothing to do with it. "Add models" now sits beside the model list, fetches using the
+  key the pool already holds, and hides what is already there.
+
+### Changed
+
+- **ESLint 10**, whose two new rules found eight real things: three rethrows that flattened the
+  original error into a sentence and lost its stack, now carrying `{ cause }`; and five dead
+  assignments, two of which were `timer = null` writes nothing ever read.
+- **TypeScript is held at 5.9.3 and `@types/node` at 22.** Not oversights. No stable
+  `typescript-eslint` accepts TypeScript 7 — with 7 installed, linting does not report errors, it
+  crashes. And `@types/node` must describe the runtime rather than lead it: this runs on Node 22,
+  and typing against 26 would let code compile against APIs the process does not have.
+- **The release pipeline waits for the registry** before calling a release broken. 1.5.2 published
+  correctly to npm and both container registries and the run still went red, because the final
+  visibility check asked a CDN seconds after writing to it.
+
+### Documentation
+
+- **CONTRIBUTING.md now describes how this repository is actually defended** — the path every
+  change takes, and the security rules that are not stylistic. `CODEOWNERS` is new and is the half
+  that enforces it.
+- **Issue templates that know what Nexus is.** The old ones could have belonged to any Node
+  project; they did not ask which storage engine you were on, which is the fact that most often
+  decides whether two identical symptoms are the same bug.
+- **SECURITY.md** drops the "pre-1.0" line it had carried since 1.0.0 shipped, and says the thing
+  a well-meaning finder most often gets wrong: do not fix a vulnerability in a public pull request.
+
 ## [1.5.2] - 2026-07-30
 
 Everything here came from watching one person install the published package and use it, which is
@@ -834,6 +912,7 @@ First tagged release and first published container image
   protect the admin password and API key accordingly for now.
 
 [Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.2...HEAD
+[1.5.3]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.4.0...v1.5.0
