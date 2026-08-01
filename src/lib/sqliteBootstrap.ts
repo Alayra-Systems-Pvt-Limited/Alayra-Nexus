@@ -102,6 +102,7 @@ export async function ensureSqliteSchema(client: PrismaClient): Promise<SchemaBo
       `Standalone mode needs its database schema, and ${DDL_PATH} could not be read ` +
       `(${(e as Error).message}). This file ships with the package; if it is missing, the install ` +
       `is incomplete. Run \`npm run db:sqlite-schema\` from a source checkout to regenerate it.`,
+      { cause: e },
     );
   }
 

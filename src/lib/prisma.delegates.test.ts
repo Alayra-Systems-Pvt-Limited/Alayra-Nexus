@@ -34,6 +34,7 @@ function loadSqliteDmmf(): Dmmf {
     throw new Error(
       `The SQLite client is not generated, so engine parity cannot be checked. ` +
       `Run \`npm run db:generate\`. (${(e as Error).message.split('\n')[0]})`,
+      { cause: e },
     );
   }
 }

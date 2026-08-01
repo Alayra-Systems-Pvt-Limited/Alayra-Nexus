@@ -363,7 +363,7 @@ export async function handleProxy(
   // A single controller governs the whole upstream call. A time-to-first-byte
   // timer aborts if response headers never arrive; it is cleared once they do.
   const controller = new AbortController();
-  let ttftTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => controller.abort(), UPSTREAM_TTFT_MS);
+  const ttftTimer = setTimeout(() => controller.abort(), UPSTREAM_TTFT_MS);
 
   // OTel: span for the gateway → provider call (no-op unless an SDK is attached).
   const tFetch = Date.now();
@@ -373,7 +373,7 @@ export async function handleProxy(
   try {
     upstream = await safeFetch(upstreamUrl, { method: 'POST', headers, body: JSON.stringify(upstreamBody), signal: controller.signal });
   } catch (err) {
-    if (ttftTimer) clearTimeout(ttftTimer);
+    clearTimeout(ttftTimer);
     refundReservation();
     // A timeout/connection failure is a server-side fault: feed the breaker.
     await reportServerFailure(keyId, route.isProbe);
@@ -383,7 +383,7 @@ export async function handleProxy(
     const aborted = err instanceof Error && err.name === 'AbortError';
     return reply.code(504).send({ error: aborted ? 'Upstream timed out before responding.' : 'Upstream connection failed.' });
   }
-  if (ttftTimer) { clearTimeout(ttftTimer); ttftTimer = null; }
+  clearTimeout(ttftTimer);
   metrics.observeTtfb((Date.now() - tFetch) / 1000);
   span.setAttribute('http.status_code', upstream.status);
 

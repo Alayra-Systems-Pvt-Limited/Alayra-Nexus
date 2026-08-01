@@ -162,6 +162,9 @@ export function rekeyRow(model: string, row: Row, transform: (value: string) => 
         `Could not re-encrypt ${model}.${field} on row ${id}: ${(err as Error).message}. ` +
         'That value is not something this gateway\'s master key produced — it was written by a ' +
         'different key, or by something that bypassed encrypt(). Nothing was exported.',
+        // The decryption failure itself, kept rather than flattened into the sentence above: the
+        // message says which row and why it matters, the cause says which cipher operation failed.
+        { cause: err },
       );
     }
   };
