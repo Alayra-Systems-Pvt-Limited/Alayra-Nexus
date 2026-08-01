@@ -368,7 +368,7 @@ function acquireLock(dir: string, port: number): void {
   const path = join(dir, LOCK_FILE);
 
   if (existsSync(path)) {
-    let held: LockInfo | null = null;
+    let held: LockInfo | null;
     try { held = JSON.parse(readFileSync(path, 'utf8')) as LockInfo; } catch { held = null; }
 
     if (held && pidAlive(held.pid)) {

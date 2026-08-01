@@ -168,7 +168,7 @@ export function openAIToAnthropic(completion: Json, fallbackModel = CANONICAL_MO
   }
   for (const tc of Array.isArray(message.tool_calls) ? message.tool_calls as Json[] : []) {
     const fn = (tc.function ?? {}) as Json;
-    let input: unknown = {};
+    let input: unknown;
     try { input = JSON.parse(String(fn.arguments ?? '{}')); } catch { input = {}; }
     content.push({ type: 'tool_use', id: tc.id ?? newMessageId(), name: fn.name ?? '', input });
   }
