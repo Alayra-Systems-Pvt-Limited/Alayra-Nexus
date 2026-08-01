@@ -33,6 +33,7 @@ import proxyRoutes        from './routes/proxy';
 import adminRoutes        from './routes/admin';
 import brandingRoutes     from './routes/branding.routes';
 import { startHealthSampler, runReadyChecks } from './services/healthSampler.service';
+import { startBackupScheduler } from './services/backupSchedule.service';
 import { redis, usingMemoryKv } from './lib/redis';
 import { deriveRateLimitKey } from './lib/rateLimitKey';
 import { ensureApiKey }    from './services/apiKey.service';
@@ -242,6 +243,12 @@ async function bootstrap() {
   // in-memory ring buffer — the hour of history behind the Health page's sparklines and status
   // strip. Off the request path; its own timer is unref'd inside.
   startHealthSampler();
+
+  // Scheduled backups (Phase B2): once a minute, ask whether one is owed and take it if so. Off
+  // until an operator switches it on, so this costs one small query a minute on a gateway that has
+  // not configured it. A Redis lock means only one instance of a scaled deployment ever runs it,
+  // and the timer is unref'd so it cannot hold the process open.
+  startBackupScheduler();
 }
 
 bootstrap().catch((err) => {

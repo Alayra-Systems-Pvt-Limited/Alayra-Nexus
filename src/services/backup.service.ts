@@ -72,7 +72,12 @@ export function backupFilename(now = new Date()): string {
  * job has nobody to type a passphrase — and the passphrase recipient is added regardless, so such a
  * backup still survives the machine.
  */
-export async function exportBackup(passphrase: string, out: Writable, includeGatewayRecipient = false): Promise<ExportSummary> {
+export async function exportBackup(
+  /** Undefined only on the scheduled path (B2), where nobody is present to type one. */
+  passphrase: string | undefined,
+  out: Writable,
+  includeGatewayRecipient = false,
+): Promise<ExportSummary> {
   return writeBackup({
     client: prisma, engine: dbEngine, passphrase, out,
     gatewayVersion: gatewayVersion(), includeGatewayRecipient,
