@@ -82,8 +82,9 @@ class DirectoryDestination implements BackupDestinationAdapter {
       await mkdir(this.dir, { recursive: true });
     } catch (err) {
       // The operator chose this path and can fix it, but only if told which path and what went
-      // wrong. "ENOENT" alone has sent people looking in the wrong place.
-      throw new Error(`Could not use ${this.dir} for backups: ${(err as Error).message}`);
+      // wrong. "ENOENT" alone has sent people looking in the wrong place. The original is kept as
+      // `cause` so the errno and syscall survive for whoever reads the logs.
+      throw new Error(`Could not use ${this.dir} for backups: ${(err as Error).message}`, { cause: err });
     }
 
     const info = await stat(this.dir).catch(() => null);
