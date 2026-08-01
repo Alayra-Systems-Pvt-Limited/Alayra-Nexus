@@ -94,7 +94,7 @@ jobs:
           test -f _site/demo/404.html   || { echo "::error::staging did not produce _site/demo/404.html"; exit 1; }
           echo "staged: $(find _site -type f | wc -l) files"
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
@@ -108,4 +108,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
