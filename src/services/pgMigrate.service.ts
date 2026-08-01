@@ -57,14 +57,28 @@ import {
 import { modelName, DELETE_ORDER } from '../lib/backup/modelOrder';
 
 /**
- * The value migration 0001 gives the rows it seeds into AppSettings.
+ * Exactly the rows migration 0001 seeds into AppSettings, as key AND value.
  *
- * A fresh install needs NEXUS_API_KEY, ENCRYPTION_SECRET and AI_MODEL_REGISTRY to exist before
- * anything can replace them, so the very first migration inserts them as placeholders. Correct for
- * an install, and squarely in the way of a migration: it means `migrate deploy` never leaves an
- * empty database, so the target has three rows before a single one has been copied.
+ * A fresh install needs these to exist before anything can replace them, so the very first
+ * migration inserts them. Correct for an install, and squarely in the way of a migration: it means
+ * `migrate deploy` never leaves an empty database, so the target holds three rows before a single
+ * one has been copied.
+ *
+ * Matched as PAIRS rather than by a single marker. Two of the three carry 'REPLACE_ON_INIT' and the
+ * third carries '[]' — a marker-only rule silently misses that one, which is a failure that looks
+ * exactly like the bug it was meant to fix. Pairs also keep this honest in the other direction: a
+ * live gateway's own NEXUS_API_KEY has a real value, so it does not match, and still counts as the
+ * data it is.
  */
-const SEED_PLACEHOLDER = 'REPLACE_ON_INIT';
+const SEEDED_SETTINGS: ReadonlyArray<{ key: string; value: string }> = [
+  { key: 'NEXUS_API_KEY',     value: 'REPLACE_ON_INIT' },
+  { key: 'ENCRYPTION_SECRET', value: 'REPLACE_ON_INIT' },
+  { key: 'AI_MODEL_REGISTRY', value: '[]' },
+];
+
+/** `NOT ( (key=… AND value=…) OR … )` — built from the list above, never from anything typed. */
+const notSeeded = (): string =>
+  `NOT (${SEEDED_SETTINGS.map((r) => `("key" = '${r.key}' AND "value" = '${r.value}')`).join(' OR ')})`;
 
 /** A Prisma delegate, reduced to the calls this module makes. */
 interface Delegate {
@@ -126,12 +140,11 @@ export async function inspectTarget(url: string): Promise<TargetReport> {
     // partway, and refusing that would leave the operator with no way forward but dropping the
     // database they just created.
     //
-    // `migrate deploy` is not neutral here: migration 0001 SEEDS three placeholder rows into
-    // AppSettings (NEXUS_API_KEY, ENCRYPTION_SECRET, AI_MODEL_REGISTRY, all valued
-    // 'REPLACE_ON_INIT') so that a fresh install has something to replace. Counted as data, they
-    // make every database this feature has ever touched look permanently occupied — so a retry is
-    // refused for the schema the previous attempt built. They are excluded by that exact marker,
-    // not by table, so a REAL AppSettings row still counts as what it is.
+    // `migrate deploy` is not neutral here: migration 0001 SEEDS three rows into AppSettings so
+    // that a fresh install has something to replace. Counted as data, they make every database this
+    // feature has ever touched look permanently occupied — so a retry is refused for the schema the
+    // previous attempt built. They are excluded by exact key AND value (see SEEDED_SETTINGS), never
+    // by table, so a REAL AppSettings row still counts as what it is.
     const occupied: string[] = [];
     for (const model of MIGRATE_ORDER) {
       const table = modelName(model);
@@ -140,7 +153,7 @@ export async function inspectTarget(url: string): Promise<TargetReport> {
       // an operator typed. Quoted because Prisma's names are case-sensitive in Postgres.
       const [row] = await client.$queryRawUnsafe<{ n: bigint }[]>(
         table === 'AppSettings'
-          ? `SELECT COUNT(*)::bigint AS n FROM "AppSettings" WHERE "value" <> '${SEED_PLACEHOLDER}'`
+          ? `SELECT COUNT(*)::bigint AS n FROM "AppSettings" WHERE ${notSeeded()}`
           : `SELECT COUNT(*)::bigint AS n FROM "${table}"`,
       );
       if (Number(row?.n ?? 0) > 0) occupied.push(table);

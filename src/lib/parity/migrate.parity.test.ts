@@ -118,13 +118,19 @@ describe.skipIf(!enabled)('moving to PostgreSQL, against a real one', { timeout:
     // This is what found that. It cannot be reproduced without a real PostgreSQL, because the seed
     // lives in the migration rather than the schema.
     const client = new PrismaClient({ datasources: { db: { url } }, log: ['error'] });
-    let seeded = 0;
-    try {
-      seeded = await client.appSettings.count();
-    } finally {
-      await client.$disconnect();
-    }
-    expect(seeded, 'migration 0001 is expected to seed placeholder settings').toBeGreaterThan(0);
+    const seeded = await client.appSettings
+      .findMany({ select: { key: true, value: true } })
+      .finally(() => client.$disconnect());
+
+    expect(seeded.length, 'migration 0001 is expected to seed settings').toBeGreaterThan(0);
+    // Named, because the values are NOT uniform and assuming they were is what broke this once:
+    // two carry 'REPLACE_ON_INIT' and AI_MODEL_REGISTRY carries '[]'. If a future migration changes
+    // either, this says so here rather than as a mystifying "already in use" on a fresh database.
+    expect(new Set(seeded.map((r) => `${r.key}=${r.value}`))).toEqual(new Set([
+      'NEXUS_API_KEY=REPLACE_ON_INIT',
+      'ENCRYPTION_SECRET=REPLACE_ON_INIT',
+      'AI_MODEL_REGISTRY=[]',
+    ]));
 
     const seen = await inspectTarget(url);
     expect(seen.reachable).toBe(true);
