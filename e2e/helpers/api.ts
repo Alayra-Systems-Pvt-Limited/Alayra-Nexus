@@ -24,6 +24,13 @@ export interface WireResponse<T = Record<string, unknown>> {
   body: T;
 }
 
+/** A reply kept as bytes rather than parsed. What an export answers with. */
+export interface BinaryResponse {
+  status: number;
+  headers: Headers;
+  bytes: Buffer;
+}
+
 export class Gateway {
   constructor(private baseURL: string) {}
 
@@ -54,6 +61,64 @@ export class Gateway {
 
   post<T = Record<string, unknown>>(path: string, opts: { token?: string; body?: unknown; headers?: Record<string, string> } = {}) {
     return this.send<T>('POST', path, opts);
+  }
+
+  /**
+   * POST a JSON body and keep the reply as BYTES.
+   *
+   * The export route answers with an octet-stream, and `send()` would put a backup file through a
+   * UTF-8 decode nobody asked for — every byte above 0x7f replaced, the ciphertext destroyed, and
+   * the damage invisible because the result is still a string. A spec that means to re-upload what
+   * it downloaded has to hold the real bytes.
+   *
+   * The headers come back too: an export's `content-disposition` and `cache-control` are part of
+   * what the route promises, not incidental.
+   */
+  async download(path: string, opts: { token?: string; body?: unknown } = {}): Promise<BinaryResponse> {
+    const headers: Record<string, string> = {};
+    if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
+    if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+
+    const res = await fetch(`${this.baseURL}${path}`, {
+      method: 'POST',
+      headers,
+      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+    });
+    return { status: res.status, headers: res.headers, bytes: Buffer.from(await res.arrayBuffer()) };
+  }
+
+  /**
+   * POST multipart/form-data: one file part plus text fields.
+   *
+   * Content-Type is deliberately NOT set here. `fetch` writes it from the FormData, boundary and
+   * all; setting it by hand produces a header with no boundary and a body the server cannot parse.
+   * That is the same trap the dashboard's own upload documents at `web/src/lib/backupClient.ts`,
+   * and a suite that fell into it would be testing a broken client rather than the server.
+   */
+  async upload<T = Record<string, unknown>>(
+    path: string,
+    opts: {
+      token?: string;
+      file?: { bytes: Buffer; filename: string };
+      fields?: Record<string, string>;
+    },
+  ): Promise<WireResponse<T>> {
+    const form = new FormData();
+    // `new Uint8Array(buf)` rather than the Buffer itself: a Buffer's backing store is typed
+    // `ArrayBufferLike`, which includes SharedArrayBuffer and so is not a `BlobPart`. This copies
+    // into a plain ArrayBuffer — the bytes are identical, and the alternative is an assertion that
+    // silences the compiler without making the claim true.
+    if (opts.file) form.append('file', new Blob([new Uint8Array(opts.file.bytes)]), opts.file.filename);
+    for (const [name, value] of Object.entries(opts.fields ?? {})) form.append(name, value);
+
+    const headers: Record<string, string> = {};
+    if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
+
+    const res = await fetch(`${this.baseURL}${path}`, { method: 'POST', headers, body: form });
+    const text = await res.text();
+    let body: T;
+    try { body = JSON.parse(text) as T; } catch { body = { raw: text } as T; }
+    return { status: res.status, body };
   }
 
   /** Sign in with email + password and hand back the session token. Throws if refused. */
