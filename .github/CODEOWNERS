@@ -1,0 +1,35 @@
+# Code owners — who must approve a change before it can merge.
+#
+# This file is the enforcement half of CONTRIBUTING.md. "Require review from Code Owners" in the
+# branch ruleset reads it, so a pull request touching any path below cannot merge until an owner
+# has approved it. Without this file that rule matches nothing and silently passes.
+#
+# Order matters: the LAST matching pattern wins, so the broad rule comes first.
+
+# Everything, by default.
+*                           @Alayra-Systems-Pvt-Limited/maintainers
+
+# ── Paths where a bad change is worst ────────────────────────────────────────────────────────────
+
+# CI and release automation. A pull request that edits a workflow is a pull request asking for the
+# permissions that workflow holds — this repository publishes to npm via OIDC and to two container
+# registries. Treat any change here as a credential change, because that is what it is.
+/.github/                   @Alayra-Systems-Pvt-Limited/maintainers
+
+# Secrets at rest, and the boundary that decides who may touch them.
+/src/lib/crypto.ts          @Alayra-Systems-Pvt-Limited/maintainers
+/src/lib/backup/            @Alayra-Systems-Pvt-Limited/maintainers
+/src/middleware/            @Alayra-Systems-Pvt-Limited/maintainers
+/src/routes/admin/          @Alayra-Systems-Pvt-Limited/maintainers
+/src/services/auth*         @Alayra-Systems-Pvt-Limited/maintainers
+/src/services/ssrf*         @Alayra-Systems-Pvt-Limited/maintainers
+
+# The database shape. A migration is the one change that cannot be rolled back by reverting a commit.
+/prisma/                    @Alayra-Systems-Pvt-Limited/maintainers
+
+# Licensing and project governance.
+/LICENSE                    @Alayra-Systems-Pvt-Limited/maintainers
+/SECURITY.md                @Alayra-Systems-Pvt-Limited/maintainers
+/CODE_OF_CONDUCT.md         @Alayra-Systems-Pvt-Limited/maintainers
+/CONTRIBUTING.md            @Alayra-Systems-Pvt-Limited/maintainers
+/.github/CODEOWNERS         @Alayra-Systems-Pvt-Limited/maintainers

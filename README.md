@@ -316,7 +316,7 @@ is disabled because there is no database server; the engines underneath are diff
 is the same.
 
 ```
-  Alayra Nexus 1.5.1 — first run
+  Alayra Nexus 1.5.2 — first run
 
   Data directory   /home/you/.alayra-nexus
   Encryption key   /home/you/.alayra-nexus/secret.key  (generated)
@@ -379,7 +379,7 @@ docker run -d --name alayra-nexus -p 3000:3000 \
 | Docker Hub | `alayrasystems/nexus` |
 | GHCR | `ghcr.io/alayra-systems-pvt-limited/alayra-nexus` |
 
-Pin a version for production (e.g. `:1.5.1`) rather than `:latest`.
+Pin a version for production (e.g. `:1.5.2`) rather than `:latest`.
 
 <details>
 <summary><b>Option C — Docker Compose (brings its own Postgres + Redis)</b></summary>
@@ -398,7 +398,7 @@ curl -O https://raw.githubusercontent.com/Alayra-Systems-Pvt-Limited/Alayra-Nexu
 cat > .env <<EOF
 MASTER_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 ADMIN_PASSWORD=change-me
-NEXUS_VERSION=1.5.1
+NEXUS_VERSION=1.5.2
 EOF
 
 docker compose up -d
@@ -524,6 +524,27 @@ docker run -d --name alayra-nexus -p 3000:3000 \
 > **The `-v` is not optional.** Without it the database lives inside the container's writable layer
 > and disappears the moment the container is removed — along with every provider key in it. The
 > gateway cannot tell the difference, so nothing will warn you.
+
+`nexus-data` there is a **named volume**: Docker creates it, seeds it from the image, and it inherits
+the ownership the gateway needs. There is nothing to prepare.
+
+To keep the database somewhere you can see it instead, own the directory and run as yourself:
+
+```bash
+mkdir -p ./nexus-data
+docker run -d --name alayra-nexus -p 3000:3000 \
+  -e MASTER_ENCRYPTION_KEY="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" \
+  -e ADMIN_PASSWORD="change-me" \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD/nexus-data:/app/.nexus" \
+  alayrasystems/nexus:latest
+```
+
+> [!NOTE]
+> A bind mount **without** `--user` fails with `unable to open the database file`. Docker creates a
+> missing host directory as root and mounts it exactly as it finds it, while the gateway runs
+> unprivileged — so it cannot write there. Every image that drops privileges behaves this way, and no
+> change to the image can alter it. `--user` is the fix; a named volume avoids the question entirely.
 
 Set neither `DATABASE_URL` nor `REDIS_URL` and the gateway runs on a local **SQLite file** and
 **in-process memory** instead. One process, one directory, nothing to provision — for trying Nexus

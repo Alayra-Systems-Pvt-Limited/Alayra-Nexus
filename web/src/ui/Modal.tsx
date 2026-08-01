@@ -27,14 +27,27 @@ export function Modal({ title, onClose, children, footer }: Props) {
   const dialogRef  = useRef<HTMLDivElement | null>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
 
+  // `onClose` is read through a ref so the effect below can call the CURRENT one without listing it
+  // as a dependency. Every caller passes an inline arrow — `onClose={() => !saving && setDraft(null)}`
+  // — which is a new function on every render, and that is the whole bug this ref exists to kill.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
   useEffect(() => {
     // Move focus into the dialog on open and put it back on close. Without this a keyboard or
     // screen-reader user stays parked on whatever button opened the dialog, tabbing through the
     // page behind it while the dialog claims to be modal.
+    //
+    // The dependency list MUST stay empty: this is open/close behaviour, and it has to run once
+    // when the dialog appears and once when it goes away. It used to depend on `onClose`, whose
+    // identity changes on every render, so typing a single character into any field re-ran the
+    // whole effect — the cleanup handed focus back to the button that opened the dialog and the
+    // body moved it to the dialog shell, one keystroke in. Every text input in every dialog in the
+    // dashboard was affected; each looked like its own small bug.
     restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialogRef.current?.focus();
 
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current(); };
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -43,7 +56,7 @@ export function Modal({ title, onClose, children, footer }: Props) {
       document.body.style.overflow = prev;
       restoreRef.current?.focus();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     // The overlay stays a div with role="presentation", NOT a <button> as one review suggested:

@@ -22,8 +22,22 @@ to release a fix before any public disclosure, and we are happy to credit you
 
 ## Supported versions
 
-Alayra Nexus is pre-1.0 and under active development. Security fixes are applied
-to the latest `main`. We recommend always running the most recent release.
+Security fixes land on the latest minor release and on `main`. Older minors are not
+back-patched — the project moves quickly and the upgrade path is deliberately small, so the
+supported version is **the most recent release**. Always run it.
+
+| Version | Supported |
+|---|---|
+| Latest release (`1.5.x`) | ✅ |
+| Anything older | ❌ — upgrade |
+
+## Never fix a vulnerability in a public pull request
+
+A public fix is a public disclosure. It names the flaw, shows exactly how to exploit the versions
+already deployed, and starts a race between attackers and everyone who has to upgrade.
+
+If you have found a vulnerability, **email us instead of opening a PR** — even if the fix is one
+line and you have it ready. We will bring you into the fix privately and credit you when it ships.
 
 ## Scope
 
