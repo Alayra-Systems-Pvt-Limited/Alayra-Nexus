@@ -49,9 +49,13 @@ describe.skipIf(!enabled)('factory reset empties everything, on both engines', {
 
     const cleared = await emptyEveryTable(db, engine);
 
-    // 16 models in the schema. Asserting the NUMBER matters: a discovery query that silently
+    // 18 models in the schema. Asserting the NUMBER matters: a discovery query that silently
     // returned a subset would still "empty everything it found" and report success.
-    expect(cleared).toBe(16);
+    //
+    // The count includes Backup and BackupChunk. Those two are excluded from the backup EXPORT,
+    // but a reset must still clear them, and for a reason stronger than tidiness — see the test
+    // below.
+    expect(cleared).toBe(18);
 
     expect(await db.tokenUsage.count()).toBe(0);
     expect(await db.team.count()).toBe(0);
@@ -73,7 +77,7 @@ describe.skipIf(!enabled)('factory reset empties everything, on both engines', {
 
   it('is idempotent — resetting an already-empty gateway is not an error', async () => {
     for (const [engine, db] of [['postgres', e.pg], ['sqlite', e.sqlite]] as const) {
-      expect(await emptyEveryTable(db, engine)).toBe(16);
+      expect(await emptyEveryTable(db, engine)).toBe(18);
     }
   });
 
@@ -102,9 +106,32 @@ describe.skipIf(!enabled)('factory reset empties everything, on both engines', {
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> '_prisma_migrations'`,
     );
     const names = rows.map((r) => r.name);
-    expect(names).toHaveLength(16);
+    expect(names).toHaveLength(18);
     for (const n of names) expect(n.startsWith('sqlite_')).toBe(false);
     expect(names).toContain('TokenUsage');
     expect(names).toContain('AdminUser');
+  });
+
+  it('clears the stored backups, so a reset gateway cannot hand the previous keys to its next owner', async () => {
+    // This is a security property, not housekeeping.
+    //
+    // A stored backup is every provider key, every team key and every TOTP secret of the install
+    // that took it, and the archive endpoint will hand it to whoever is the owner NOW. A factory
+    // reset returns the gateway to its claim screen for somebody new — so a reset that left the
+    // rows behind would let the next person to claim it download the previous install's
+    // credentials in one file. `emptyEveryTable` discovers its tables from the live schema rather
+    // than a hand-written list, which is what makes this true by construction; this asserts it,
+    // because a future exclusion added for the export could quietly reach here too.
+    for (const [engine, db] of [['postgres', e.pg], ['sqlite', e.sqlite]] as const) {
+      const backup = await db.backup.create({
+        data: { filename: `alayra-nexus-backup-2026-08-01-04-00-0${engine === 'sqlite' ? 1 : 2}.nxb`, bytes: 3, rows: 1 },
+      });
+      await db.backupChunk.create({ data: { backupId: backup.id, seq: 0, data: Buffer.from('abc') } });
+
+      await emptyEveryTable(db, engine);
+
+      expect(await db.backup.count()).toBe(0);
+      expect(await db.backupChunk.count()).toBe(0);
+    }
   });
 });
