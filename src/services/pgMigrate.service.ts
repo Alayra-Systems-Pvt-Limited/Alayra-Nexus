@@ -54,12 +54,23 @@ import {
   targetUrlProblem, describeTarget, countMismatches, totalRows, readableDbError,
   MIGRATE_ORDER, NOT_MIGRATED, type TableCounts, type CountMismatch,
 } from '../lib/migrateTarget';
-import { modelName } from '../lib/backup/modelOrder';
+import { modelName, DELETE_ORDER } from '../lib/backup/modelOrder';
+
+/**
+ * The value migration 0001 gives the rows it seeds into AppSettings.
+ *
+ * A fresh install needs NEXUS_API_KEY, ENCRYPTION_SECRET and AI_MODEL_REGISTRY to exist before
+ * anything can replace them, so the very first migration inserts them as placeholders. Correct for
+ * an install, and squarely in the way of a migration: it means `migrate deploy` never leaves an
+ * empty database, so the target has three rows before a single one has been copied.
+ */
+const SEED_PLACEHOLDER = 'REPLACE_ON_INIT';
 
 /** A Prisma delegate, reduced to the calls this module makes. */
 interface Delegate {
   findMany(args: unknown): Promise<Record<string, unknown>[]>;
   createMany(args: unknown): Promise<{ count: number }>;
+  deleteMany(args?: unknown): Promise<{ count: number }>;
   count(): Promise<number>;
 }
 
@@ -110,16 +121,28 @@ export async function inspectTarget(url: string): Promise<TargetReport> {
     `;
     const here = new Set(present.map((r) => r.table_name));
 
-    // Only OUR tables are considered, and only ones that actually hold something. A database with
-    // the schema already applied but no rows is the normal state after a failed first attempt, and
-    // refusing that would leave the operator stuck with no way forward but dropping the database.
+    // Only OUR tables are considered, and only ones holding something that is actually data. A
+    // database with the schema already applied is the normal state after an attempt that failed
+    // partway, and refusing that would leave the operator with no way forward but dropping the
+    // database they just created.
+    //
+    // `migrate deploy` is not neutral here: migration 0001 SEEDS three placeholder rows into
+    // AppSettings (NEXUS_API_KEY, ENCRYPTION_SECRET, AI_MODEL_REGISTRY, all valued
+    // 'REPLACE_ON_INIT') so that a fresh install has something to replace. Counted as data, they
+    // make every database this feature has ever touched look permanently occupied — so a retry is
+    // refused for the schema the previous attempt built. They are excluded by that exact marker,
+    // not by table, so a REAL AppSettings row still counts as what it is.
     const occupied: string[] = [];
     for (const model of MIGRATE_ORDER) {
       const table = modelName(model);
       if (!here.has(table)) continue;
       // The table name comes from MODEL_ORDER, never from the request, so it cannot carry anything
       // an operator typed. Quoted because Prisma's names are case-sensitive in Postgres.
-      const [row] = await client.$queryRawUnsafe<{ n: bigint }[]>(`SELECT COUNT(*)::bigint AS n FROM "${table}"`);
+      const [row] = await client.$queryRawUnsafe<{ n: bigint }[]>(
+        table === 'AppSettings'
+          ? `SELECT COUNT(*)::bigint AS n FROM "AppSettings" WHERE "value" <> '${SEED_PLACEHOLDER}'`
+          : `SELECT COUNT(*)::bigint AS n FROM "${table}"`,
+      );
       if (Number(row?.n ?? 0) > 0) occupied.push(table);
     }
 
@@ -133,6 +156,20 @@ export async function inspectTarget(url: string): Promise<TargetReport> {
     };
   } finally {
     await client.$disconnect().catch(() => { /* nothing left to do about it */ });
+  }
+}
+
+/**
+ * Empty every migratable table on the target, children before parents.
+ *
+ * `DELETE_ORDER` is `MODEL_ORDER` reversed, which is what keeps a delete from stranding a row that
+ * still points at it — the same constraint the copy satisfies in the opposite direction.
+ */
+async function clearTarget(client: PrismaClient): Promise<void> {
+  const d = delegates(client);
+  for (const model of DELETE_ORDER) {
+    if (!MIGRATE_ORDER.includes(model)) continue;
+    await d[model].deleteMany();
   }
 }
 
@@ -252,6 +289,15 @@ export async function migrateToPostgres(url: string): Promise<MigrationOutcome> 
   // returned, and managed Postgres providers charge for — and cap — exactly that.
   const client = openTarget(url);
   try {
+    // Everything `migrate deploy` just put there is cleared before a single row is copied.
+    //
+    // Not housekeeping — without it the move FAILS. Migration 0001 seeds three AppSettings rows,
+    // and the source has its own NEXUS_API_KEY, so the first batch violates the unique index on
+    // `key` and the migration dies having written part of a database. This is safe precisely
+    // because the target was checked for real data BEFORE the schema was built: anything present
+    // now was created by the build, and the copy is authoritative.
+    await clearTarget(client);
+
     const rowsCopied = await copyRows(client, (n) => {
       void reportProgress(n).catch(() => { /* progress is a courtesy, never the operation */ });
     });

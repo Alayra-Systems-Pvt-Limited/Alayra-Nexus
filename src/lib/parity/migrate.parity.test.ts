@@ -109,12 +109,41 @@ describe.skipIf(!enabled)('moving to PostgreSQL, against a real one', { timeout:
     expect(again.ok, again.output).toBe(true);
   });
 
-  it('still reports the database as unoccupied when it has a schema but no rows', async () => {
-    // The state after a failed first attempt. Refusing this would leave the operator stuck with no
-    // way forward but dropping the database they just created.
+  it('still reports the database as unoccupied when it has a schema but only seeded placeholders', async () => {
+    // The state after a failed first attempt, and the state of EVERY database this feature builds:
+    // migration 0001 seeds three placeholder rows into AppSettings so a fresh install has something
+    // to replace. Counted as data they would make a retry impossible forever, against the schema
+    // the previous attempt had just created.
+    //
+    // This is what found that. It cannot be reproduced without a real PostgreSQL, because the seed
+    // lives in the migration rather than the schema.
+    const client = new PrismaClient({ datasources: { db: { url } }, log: ['error'] });
+    let seeded = 0;
+    try {
+      seeded = await client.appSettings.count();
+    } finally {
+      await client.$disconnect();
+    }
+    expect(seeded, 'migration 0001 is expected to seed placeholder settings').toBeGreaterThan(0);
+
     const seen = await inspectTarget(url);
     expect(seen.reachable).toBe(true);
     expect(seen.occupied).toEqual([]);
+  });
+
+  it('counts a real setting as data, even though the placeholders beside it are not', async () => {
+    // The exclusion is by the placeholder MARKER, not by table — so AppSettings still protects a
+    // real gateway. Had it been "ignore AppSettings", this would pass while the feature happily
+    // overwrote somebody's live configuration.
+    const client = new PrismaClient({ datasources: { db: { url } }, log: ['error'] });
+    try {
+      await client.appSettings.create({ data: { key: 'a-real-setting', value: 'a real value' } });
+      const seen = await inspectTarget(url);
+      expect(seen.occupied).toContain('AppSettings');
+    } finally {
+      await client.appSettings.deleteMany({ where: { key: 'a-real-setting' } });
+      await client.$disconnect();
+    }
   });
 
   it('refuses a database that already holds a gateway', async () => {
