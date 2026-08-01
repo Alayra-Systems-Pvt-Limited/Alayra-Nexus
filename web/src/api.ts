@@ -855,6 +855,44 @@ export interface BackupRunResult extends BackupScheduleOverview {
   copy?: { copied: boolean; destination?: string; pruned?: number; error?: string };
 }
 
+/** What engine this gateway runs on, and whether the move to Postgres applies (S3). */
+export interface MigrateStatus {
+  engine: 'postgres' | 'sqlite';
+  canMigrate: boolean;
+  /** Models deliberately left behind — named so the screen can say so before anyone commits. */
+  notMigrated: string[];
+}
+
+/** A look at the destination that changes nothing. */
+export interface MigrateTargetReport {
+  reachable: boolean;
+  version: string | null;
+  /** Nexus tables already holding rows. Non-empty means the move will refuse. */
+  occupied: string[];
+  /** Host and database only — never the credential. */
+  describes: string;
+  problem: string | null;
+}
+
+export interface MigrateCountMismatch {
+  model: string;
+  source: number;
+  target: number;
+}
+
+export interface MigrateOutcome {
+  ok: boolean;
+  target: string;
+  rowsCopied?: number;
+  sourceCounts?: Record<string, number>;
+  targetCounts?: Record<string, number>;
+  mismatches?: MigrateCountMismatch[];
+  notMigrated: string[];
+  error?: string;
+  /** Prisma's own words when the schema step failed. Already scrubbed of connection strings. */
+  detail?: string;
+}
+
 export const GET   = <T = unknown>(p: string) => api<T>('GET', p);
 export const POST  = <T = unknown>(p: string, b?: unknown) => api<T>('POST', p, b);
 export const PUT   = <T = unknown>(p: string, b?: unknown) => api<T>('PUT', p, b);

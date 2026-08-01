@@ -105,6 +105,37 @@ function databaseFor(namespace: string): string {
 }
 
 /**
+ * An EMPTY Postgres database, dropped and recreated, with no schema in it.
+ *
+ * `startEngines` pushes a schema, which is right for every suite that wants tables to compare. The
+ * migration suite wants the opposite: a database in the state a customer's new one is in, so that
+ * building the schema is the thing under test rather than a precondition. Dropped first because
+ * "already exists with last run's tables" would make an idempotency assertion pass for the wrong
+ * reason.
+ */
+export function freshDatabase(namespace: string): string {
+  const name = databaseFor(namespace);
+  dropDatabase(name);
+  createDatabase(name);
+  return withDatabase(PARITY_DATABASE_URL, name);
+}
+
+/** Remove a per-file database if it is there. Absent is the normal case on a first run. */
+function dropDatabase(name: string): void {
+  execFileSync(
+    'node',
+    ['-e', `
+      const { PrismaClient } = require('@prisma/client');
+      const p = new PrismaClient({ datasources: { db: { url: process.env.URL } }, log: [] });
+      p.$executeRawUnsafe('DROP DATABASE IF EXISTS "' + process.env.NAME.replace(/"/g, '""') + '"')
+        .catch((e) => { console.error(e.message); process.exit(1); })
+        .finally(() => p.$disconnect());
+    `],
+    { env: { ...process.env, URL: PARITY_DATABASE_URL, NAME: name }, stdio: 'pipe', cwd: ROOT },
+  );
+}
+
+/**
  * Stand up both engines with the schema applied.
  *
  * `--force-reset` on the Postgres side is why PARITY_DATABASE_URL must name a throwaway database

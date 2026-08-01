@@ -1,0 +1,109 @@
+/* Where the gateway keeps its data, and moving it (Phase S3).
+   Colours come from the shared tokens, so both themes are covered without a rule of their own. */
+
+.panel { display: grid; gap: 16px; }
+
+.cardHead { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 14px; }
+.cardIcon { color: var(--accent); flex: none; margin-top: 1px; }
+.headMain { flex: 1; min-width: 0; }
+.cardTitle { margin: 0 0 3px; font-size: 14px; font-weight: 620; color: var(--text); }
+.cardSub { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); max-width: 76ch; }
+
+.loadingRow { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--muted); }
+
+.settled,
+.current {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  max-width: 82ch;
+}
+.settled svg { color: var(--green); flex: none; margin-top: 1px; }
+.current svg { color: var(--muted); flex: none; margin-top: 1px; }
+
+.move { display: grid; gap: 13px; margin-top: 16px; }
+
+/* Monospace because a connection string is read character by character when it is wrong. */
+.urlInput { font-family: var(--font-mono); font-size: 12px; }
+
+.actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+
+/* One <span> inside, deliberately: this is a flex row, so every bare text run would otherwise
+   become its own flex ITEM and the sentence would lay itself out in columns. */
+.reassure {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 80ch;
+}
+.reassure svg { color: var(--blue); flex: none; margin-top: 2px; }
+
+.working {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 15px;
+  border: 1px solid var(--blue);
+  border-radius: var(--radius);
+  background: var(--blue-bg);
+}
+.workingHead { margin: 0 0 4px; font-size: 13px; font-weight: 620; color: var(--text); }
+.workingBody { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--text); max-width: 74ch; }
+
+.finding { padding: 13px 15px; border-radius: var(--radius); border: 1px solid var(--border); display: grid; gap: 7px; }
+.good { border-color: var(--green); background: var(--green-bg); }
+.bad  { border-color: var(--red);   background: var(--red-bg); }
+
+.findingHead { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 620; color: var(--text); }
+.good .findingHead svg { color: var(--green); flex: none; }
+.bad  .findingHead svg { color: var(--red);   flex: none; }
+
+.findingBody { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--text); max-width: 76ch; }
+.findingBody code,
+.next code { font-family: var(--font-mono); font-size: 11.5px; padding: 1px 5px; border-radius: 5px; background: var(--surface-2); }
+
+.mismatches { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.7; color: var(--text); }
+.mismatches code { font-family: var(--font-mono); font-size: 11.5px; }
+
+/* Prisma's own output. Scrolls rather than stretching the card, and wraps rather than
+   overflowing the page. */
+.detail {
+  margin: 0;
+  padding: 9px 11px;
+  max-height: 190px;
+  overflow: auto;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.next {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text);
+  max-width: 76ch;
+}
+.next svg { color: var(--accent); flex: none; margin-top: 2px; }

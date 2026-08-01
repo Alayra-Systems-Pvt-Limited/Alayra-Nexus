@@ -11,6 +11,33 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **Move to PostgreSQL, from the dashboard.** A gateway started with `npx` runs on a single file,
+  which is why it starts in seconds and needs nothing set up. Growing out of that — a team, real
+  traffic, a server — meant knowing to point `DATABASE_URL` at Postgres, restart, and restore a
+  backup. Every piece worked; the screen that walks somebody through it did not exist, and that step
+  is where people either commit to the product or give up.
+
+  Admin → Database now checks the destination before touching it (can it be reached, what is it, is
+  something already in it), builds the schema with `prisma migrate deploy` so the new database keeps
+  a migration history and stays upgradeable, copies every table parents-first, and counts both sides
+  afterwards. "Moved" is claimed only once every count matches.
+
+  The gateway refuses requests while it runs, for the same reason a `replace` restore does: a copy
+  taken over time would silently miss anything written after its table was read. Nothing is deleted
+  and nothing switches over — the old gateway keeps running until the operator changes
+  `DATABASE_URL` themselves, which is what makes it safe to attempt.
+
+- **`alayra-nexus --migrate`**, the same move for headless and CI use. The destination is read from
+  `NEXUS_MIGRATE_TO` rather than an option, because a command-line argument is readable by every
+  other process on the machine and that string holds a database password.
+
+### Fixed
+
+- **The demo answered nothing for the database section**, so a visitor could not tell that moving
+  between engines is a supported step.
+
+### Added
+
 - **The gateway keeps its own backups, and you can download them.** A scheduled backup used to be
   written only to a folder path on the server. That is durable on a VM and wiped on every redeploy
   inside a container — and nothing in the gateway can tell those two situations apart, so on a
