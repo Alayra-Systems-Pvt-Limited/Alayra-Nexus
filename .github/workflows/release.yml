@@ -143,7 +143,7 @@ jobs:
 
       - name: Derive labels
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             ${{ env.IMAGE }}
@@ -296,7 +296,7 @@ jobs:
 
       - name: Derive image tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         env:
           # Annotate the manifest LIST, not the platform manifests. Labels on the platform images
           # are invisible to a registry browsing a multi-arch tag: GHCR's package page has read
