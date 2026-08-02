@@ -9,6 +9,23 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The migrations and `schema.prisma` had drifted apart, and now cannot again.** Nineteen
+  differences had accumulated over eighteen hand-written migrations: database-level defaults on
+  `id` and `updatedAt` that the schema does not declare, and five foreign keys missing
+  `ON UPDATE CASCADE`.
+
+  None of it changed behaviour — every `ON DELETE` action already matched, and `ON UPDATE` fires
+  only when a primary key value changes, which never happens to a uuid written once. That is
+  precisely why it survived. The cost lands later: the next person to run `prisma migrate dev` for a
+  one-line change receives all nineteen statements folded into their migration, and either ships
+  them unread or unpicks them under pressure.
+
+  Migration `0019` applies them deliberately, and a new check replays every migration into a real
+  PostgreSQL and fails if anything is left over — so this is now caught by CI rather than by
+  whoever happens to touch the schema next. `npm run db:drift` runs the same check by hand.
+
 ### Added
 
 - **Move to PostgreSQL, from the dashboard.** A gateway started with `npx` runs on a single file,
