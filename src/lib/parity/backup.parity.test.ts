@@ -289,9 +289,31 @@ describe.skipIf(!enabled)('a restore that runs out of time says so, and changes 
   let e: Engines;
   let file: Buffer;
 
+  /** What `seedSecrets` writes, named so the control test below cannot drift from it silently. */
+  const SEEDED_ROWS = 6;
+  /** Padding, so the restore outlasts a one-millisecond budget. See the note in beforeAll. */
+  const SLOW_ROWS = 1_000;
+
   beforeAll(async () => {
     e = startEngines('backup-timeout');
     await seedSecrets(e.pg);
+
+    // Enough rows that the restore CANNOT finish inside the one-millisecond budget the tests below
+    // impose. `seedSecrets` alone produces a six-row file, and a six-row replace completes in well
+    // under a millisecond — so the promise resolves and the expiry is never observed.
+    //
+    // That is what made this the suite's longest-running intermittent failure, and it was diagnosed
+    // backwards for months: recorded as racy "under load", when in fact it fails when the machine is
+    // FAST. Slowness was never the problem; the work simply had to outlast the budget, and six rows
+    // do not. Caught here by a full local run on an otherwise idle box.
+    //
+    // Scoped to this describe's own database, so nothing else in this file changes.
+    await e.pg.auditLog.createMany({
+      data: Array.from({ length: SLOW_ROWS }, (_, i) => ({
+        id: `slow-${i}`, action: 'keys.create', actorRole: 'owner',
+      })),
+    });
+
     file = await exportFrom(e.pg, 'postgres');
   }, 120_000);
   afterAll(async () => { await e?.dispose(); });
@@ -329,7 +351,7 @@ describe.skipIf(!enabled)('a restore that runs out of time says so, and changes 
   it('succeeds with a realistic budget, so the tiny one proved the timeout and not a broken file', async () => {
     // Without this, every assertion above would still pass if the file were simply unreadable.
     const r = await restoreInto(e.sqlite, 'sqlite', file, { timeoutMs: 120_000 });
-    expect(r.totalWritten).toBe(6);
+    expect(r.totalWritten).toBe(SEEDED_ROWS + SLOW_ROWS);
   });
 });
 

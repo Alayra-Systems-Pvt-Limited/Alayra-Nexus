@@ -187,3 +187,105 @@ test('handing that same file back, the wizard reads it and reports what a restor
   // operator cannot reach a restore without first having been shown what it would do.
   await expect(page.getByRole('button', { name: 'Merge this backup in' })).toBeVisible();
 });
+
+// ── The archive the gateway keeps of itself (B2) ──────────────────────────────
+//
+// Everything above is a file leaving through the browser and coming back. This is the other half:
+// the backups the gateway holds on its own behalf, and the card that is the only way an operator on
+// a hosted platform can ever reach one — there is no filesystem for them to log into.
+//
+// The three states of the data-loss notice are unit-tested next to the component, because two of
+// them cannot be reached by a running gateway (`off-machine` needs object storage, which is B3).
+// What is checked here is the one that a real operator actually meets on day one, on a real page,
+// with real backups underneath it.
+
+/** A stored backup's name, which is also how its row is found — the meta line follows it. */
+const BACKUP_NAME = /alayra-nexus-backup-\d{4}(-\d{2}){5}\.nxb/;
+
+test('the backups card warns, in red, that these live in the database they protect', async () => {
+  await page.reload();
+  await page.getByRole('tab', { name: 'Backup' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Your backups' })).toBeVisible();
+
+  // Nothing has been configured on this gateway, so the notice must be at full strength. It is an
+  // `alert` rather than a note, which is what makes a screen reader announce it rather than leave it
+  // to be discovered.
+  const notice = page.getByRole('alert').filter({ hasText: 'Download these' });
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('no second copy on our side');
+  // And it names the way out in the words of the control that provides it.
+  await expect(notice).toContainText('Keep a copy off this machine');
+
+  // An empty archive says how to stop being empty, rather than only that it is.
+  await expect(page.getByText('No backups yet')).toBeVisible();
+});
+
+test('pressing “Back up now” puts a real backup in the list, marked as taken by hand', async () => {
+  test.setTimeout(120_000);
+
+  await page.getByRole('button', { name: /Back up now/i }).click();
+
+  // The row is the whole point of B2: before it, a backup the gateway took could only be retrieved
+  // by somebody with access to the server, which on a hosted platform is nobody at all.
+  const row = page.locator('li', { hasText: BACKUP_NAME }).first();
+  await expect(row).toBeVisible({ timeout: 90_000 });
+
+  // `origin`, rendered. This is the distinction that answers "did the schedule actually fire, or is
+  // every backup here one I took myself?" — and a button press has to say the honest answer.
+  await expect(row).toContainText('Taken by hand');
+  await expect(page.getByText('1 backup')).toBeVisible();
+});
+
+test('the backup downloads from the list, with the session token a plain link could not carry', async () => {
+  const row = page.locator('li', { hasText: BACKUP_NAME }).first();
+  const name = (await row.locator('span').first().innerText()).trim().split('\n')[0];
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    row.getByRole('button', { name: /Download/i }).click(),
+  ]);
+
+  // The route is owner-only and authenticated by a bearer token held in memory, so this cannot be an
+  // <a href> — a browser navigation carries no Authorization header and would arrive as a 401. The
+  // file is fetched with the header attached and handed over as a blob, and only a real browser can
+  // prove that the blob becomes a file.
+  expect(download.suggestedFilename()).toBe(name);
+
+  const path = (await download.path()) ?? '';
+  expect(path, 'the browser must have written a file').not.toBe('');
+
+  const bytes = readFileSync(path);
+  const newline = bytes.indexOf(0x0a);
+  expect(newline).toBeGreaterThan(0);
+  const header = JSON.parse(bytes.subarray(0, newline).toString('utf8')) as {
+    format: string; recipients: { type: string }[];
+  };
+  expect(header.format).toBe('alayra-nexus-backup');
+
+  // Taken with nobody present to type anything, so it is wrapped for the gateway and for the
+  // recovery key the setup wizard created — and for no passphrase at all.
+  const types = header.recipients.map((r) => r.type);
+  expect(types).not.toContain('passphrase');
+  expect(types).toContain('gateway');
+  expect(types).toContain('recovery');
+});
+
+test('deleting it from the list removes it, and the card goes back to being empty', async () => {
+  const row = page.locator('li', { hasText: BACKUP_NAME }).first();
+  const name = (await row.locator('span').first().innerText()).trim().split('\n')[0];
+
+  await page.getByRole('button', { name: `Delete ${name}` }).click();
+
+  // Scoped to the list, not the page. The schedule card below reports the LAST RUN by name, and it
+  // still says so afterwards — correctly: deleting the file does not rewrite the fact that a backup
+  // was taken at that moment. Asserting the name is gone from the whole page would be asserting the
+  // gateway lies about its own history.
+  await expect(page.locator('li', { hasText: BACKUP_NAME })).toHaveCount(0);
+  await expect(page.getByText('No backups yet')).toBeVisible();
+
+  // 02-sessions-gating-reset runs next and factory-resets this stack; leaving a backup behind is
+  // harmless, but leaving the panel in a state nothing asserted is how a later failure gets blamed
+  // on the wrong spec.
+  await expect(page.getByRole('alert').filter({ hasText: 'Download these' })).toBeVisible();
+});
