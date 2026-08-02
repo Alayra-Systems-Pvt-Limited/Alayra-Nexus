@@ -40,7 +40,13 @@ const enabled = !!PARITY_DATABASE_URL;
 describe.skipIf(!enabled)('moving to PostgreSQL, against a real one', { timeout: PARITY_TIMEOUT * 4, shuffle: false }, () => {
   let url = '';
 
-  beforeAll(() => { url = freshDatabase('migrate'); });
+  // The explicit hook timeout is load-bearing, and its absence was an oversight when this file was
+  // written. `describe`'s `timeout` applies to TESTS; a hook falls back to vitest's 10s default, and
+  // `freshDatabase` spawns two node processes that each load Prisma before touching the database.
+  // On an idle machine that is under a second; during a full parallel suite run it exceeded ten and
+  // failed the whole file — reporting the state of the machine rather than of the code. Every other
+  // hook in this directory already carries this number.
+  beforeAll(() => { url = freshDatabase('migrate'); }, 120_000);
 
   it('reports an empty database as reachable and unoccupied', async () => {
     // Before anything is created. `information_schema` answers on a database with no tables at all,
