@@ -97,6 +97,14 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   same-second backup collision fixed above, and each check was then verified by deliberately
   breaking the code it guards — a test that has never been seen to fail is not evidence of anything.
 
+- **The Move to PostgreSQL screen is covered, including the two things about it that would be worst
+  to get wrong.** A verdict on a destination cannot outlive the connection string it was about — edit
+  the box after a check and the green "ready" and the button both withdraw, because a reassurance
+  about a different database is worse than no reassurance. And a connection that drops mid-move is
+  never reported as "it did not happen": that outcome is genuinely unknown, and saying otherwise
+  invites somebody to run it a second time into a database that is now full. The move itself was
+  already proven against two live engines; this is the part a person actually touches.
+
 - **Two long-standing intermittent test failures were diagnosed and removed.** The older one had
   been recorded for months as a slow-machine problem. It was the reverse: a restore carrying six
   rows finished inside the one-millisecond budget its test imposed, so the expiry it was checking

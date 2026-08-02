@@ -289,3 +289,29 @@ test('deleting it from the list removes it, and the card goes back to being empt
   // on the wrong spec.
   await expect(page.getByRole('alert').filter({ hasText: 'Download these' })).toBeVisible();
 });
+
+// ── Where this gateway keeps its data (S3) ────────────────────────────────────
+//
+// This stack runs on PostgreSQL, so it is past the move rather than able to make it, and the wizard
+// itself is covered next to the component. What only a real gateway can answer is which of the two
+// screens it decides to show — the decision is made from `/admin/migrate/status`, which is a live
+// answer about the engine actually underneath it rather than a fixture somebody wrote down.
+//
+// It is also the more dangerous direction to get wrong. Offering the form here would invite an
+// operator to paste a production connection string into a box whose only possible answer is a
+// refusal, and `migrateToPostgres` rejects a gateway already on Postgres before it does anything at
+// all.
+
+test('the Database tab tells a PostgreSQL gateway it is already where it needs to be', async () => {
+  await page.getByRole('tab', { name: 'Database' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Where this gateway keeps its data' })).toBeVisible();
+
+  // Read from the running gateway, not from anything this spec set up.
+  await expect(page.getByText('PostgreSQL', { exact: true })).toBeVisible();
+  await expect(page.getByText(/already runs on PostgreSQL, so there is nothing to move/i)).toBeVisible();
+
+  // And no form. The tab is still shown rather than hidden — an operator who cannot find the option
+  // assumes it was removed, and a sentence confirming they are past it is worth more than silence.
+  await expect(page.getByPlaceholder('postgresql://user:password@host:5432/nexus')).toBeHidden();
+});
