@@ -145,6 +145,53 @@ function dropDatabase(name: string): void {
 }
 
 /**
+ * Open the second generated client against a SQLite file.
+ *
+ * Required rather than imported for the same reason lib/prisma does it: the specifier only resolves
+ * once `prisma generate` has run against the SQLite schema.
+ */
+function openSqlite(url: string): PrismaClient {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const SqliteClient = (require('.prisma/client-sqlite') as { PrismaClient: new (o?: unknown) => PrismaClient }).PrismaClient;
+  return new SqliteClient({ datasources: { db: { url } }, log: ['error'] }) as PrismaClient;
+}
+
+/** A SQLite gateway on its own throwaway file. Caller must dispose. */
+export interface SqliteGateway {
+  client: PrismaClient;
+  /** The `file:` URL, for anything that needs the path rather than the client. */
+  url: string;
+  dispose: () => Promise<void>;
+}
+
+/**
+ * One SQLite gateway, with no PostgreSQL beside it.
+ *
+ * The inverse pairing from every other file here. The dialect suites want two engines holding the
+ * SAME rows so the twins can be compared; the migration suite wants a populated SQLite as the
+ * SOURCE and an EMPTY Postgres as the destination, because moving between them is the thing under
+ * test. Calling `startEngines` for that would push a Postgres schema that the test then has to
+ * ignore — and worse, would hand it a database that is already correct, which is the one state a
+ * migration must never be tested against.
+ */
+export function startSqlite(namespace: string): SqliteGateway {
+  const dir = mkdtempSync(join(tmpdir(), `nexus-${namespace.replace(/[^a-z0-9]/gi, '')}-`));
+  const url = `file:${join(dir, 'gateway.db')}`;
+
+  push('schema.sqlite.prisma', url);
+  const client = openSqlite(url);
+
+  return {
+    client,
+    url,
+    dispose: async () => {
+      await client.$disconnect();
+      try { rmSync(dir, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ }
+    },
+  };
+}
+
+/**
  * Stand up both engines with the schema applied.
  *
  * `--force-reset` on the Postgres side is why PARITY_DATABASE_URL must name a throwaway database
@@ -162,11 +209,8 @@ export function startEngines(namespace: string): Engines {
   createDatabase(databaseFor(namespace));
   push('schema.prisma', pgUrl);
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const SqliteClient = (require('.prisma/client-sqlite') as { PrismaClient: new (o?: unknown) => PrismaClient }).PrismaClient;
-
   const pg     = new PrismaClient({ datasources: { db: { url: pgUrl } }, log: ['error'] });
-  const sqlite = new SqliteClient({ datasources: { db: { url: fileUrl } }, log: ['error'] });
+  const sqlite = openSqlite(fileUrl);
 
   return {
     pg,
