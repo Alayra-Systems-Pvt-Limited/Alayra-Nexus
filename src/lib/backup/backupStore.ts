@@ -94,6 +94,28 @@ export async function beginStoredBackup(
 ): Promise<StoredBackupWriter> {
   const partialName = `${filename}${PARTIAL_SUFFIX}`;
 
+  // A completed backup already carries this name, so refuse now rather than at the end.
+  //
+  // `backupFilename` has one-second resolution, and the schedule lock serialises runs without
+  // spacing them out — so two backups that finish inside the same second ask for the same name. That
+  // is reachable by pressing "Back up now" twice, or by pressing it in the second a scheduled run
+  // lands. Found by the e2e suite doing exactly that.
+  //
+  // Without this check the collision surfaced at `commit`, which is AFTER the entire database had
+  // been exported, compressed and written into chunk rows: minutes of work on a large gateway, all
+  // of it discarded, reported as a raw "Unique constraint failed on the fields: (`filename`)" — and
+  // the partial row was left behind holding every one of those chunks, invisible to the archive and
+  // counting against the operator's storage forever.
+  //
+  // Refusing is the right answer rather than inventing a suffix: the name IS the timestamp, so a
+  // second backup of the same second is the same backup, and a name that did not match
+  // BACKUP_FILENAME would be invisible to retention and never pruned.
+  if (await prisma.backup.findUnique({ where: { filename }, select: { id: true } })) {
+    throw new Error(
+      `A backup taken this second already exists (${filename}). Wait a moment and take another.`,
+    );
+  }
+
   // Any partial left by a previous crash under the same name is cleared first. Chunks cascade with
   // it. Without this the unique constraint on `filename` would reject the new attempt, and a single
   // interrupted backup would block that name until somebody deleted the row by hand.

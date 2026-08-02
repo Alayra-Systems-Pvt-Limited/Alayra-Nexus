@@ -74,13 +74,19 @@ export class Gateway {
    * The headers come back too: an export's `content-disposition` and `cache-control` are part of
    * what the route promises, not incidental.
    */
-  async download(path: string, opts: { token?: string; body?: unknown } = {}): Promise<BinaryResponse> {
+  async download(
+    path: string,
+    // `method` because the two routes that hand over a backup disagree, for a good reason. /export
+    // POSTs so the passphrase travels in the body rather than in a URL that lands in three logs;
+    // the stored archive has nothing to send, so it is a GET.
+    opts: { token?: string; body?: unknown; method?: 'GET' | 'POST' } = {},
+  ): Promise<BinaryResponse> {
     const headers: Record<string, string> = {};
     if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
     if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
 
     const res = await fetch(`${this.baseURL}${path}`, {
-      method: 'POST',
+      method: opts.method ?? 'POST',
       headers,
       ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
     });
