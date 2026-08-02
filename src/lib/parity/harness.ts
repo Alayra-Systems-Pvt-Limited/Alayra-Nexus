@@ -120,14 +120,23 @@ export function freshDatabase(namespace: string): string {
   return withDatabase(PARITY_DATABASE_URL, name);
 }
 
-/** Remove a per-file database if it is there. Absent is the normal case on a first run. */
+/**
+ * Remove a per-file database if it is there. Absent is the normal case on a first run.
+ *
+ * `WITH (FORCE)` because a plain DROP fails outright with "database is being accessed by other
+ * users" if ANY connection is still open to it — and one always may be. vitest runs these files
+ * concurrently, Prisma pools connections, and a pool from the previous run of this same file can
+ * outlive the client that opened it by a moment. Without FORCE that is an intermittent, wholly
+ * unreproducible CI failure in whichever suite happened to lose the race. PostgreSQL 13 and later
+ * terminate the stragglers instead, which is what we want: the database is about to cease existing.
+ */
 function dropDatabase(name: string): void {
   execFileSync(
     'node',
     ['-e', `
       const { PrismaClient } = require('@prisma/client');
       const p = new PrismaClient({ datasources: { db: { url: process.env.URL } }, log: [] });
-      p.$executeRawUnsafe('DROP DATABASE IF EXISTS "' + process.env.NAME.replace(/"/g, '""') + '"')
+      p.$executeRawUnsafe('DROP DATABASE IF EXISTS "' + process.env.NAME.replace(/"/g, '""') + '" WITH (FORCE)')
         .catch((e) => { console.error(e.message); process.exit(1); })
         .finally(() => p.$disconnect());
     `],
