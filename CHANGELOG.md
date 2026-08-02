@@ -9,23 +9,6 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
-### Fixed
-
-- **The migrations and `schema.prisma` had drifted apart, and now cannot again.** Nineteen
-  differences had accumulated over eighteen hand-written migrations: database-level defaults on
-  `id` and `updatedAt` that the schema does not declare, and five foreign keys missing
-  `ON UPDATE CASCADE`.
-
-  None of it changed behaviour — every `ON DELETE` action already matched, and `ON UPDATE` fires
-  only when a primary key value changes, which never happens to a uuid written once. That is
-  precisely why it survived. The cost lands later: the next person to run `prisma migrate dev` for a
-  one-line change receives all nineteen statements folded into their migration, and either ships
-  them unread or unpicks them under pressure.
-
-  Migration `0019` applies them deliberately, and a new check replays every migration into a real
-  PostgreSQL and fails if anything is left over — so this is now caught by CI rather than by
-  whoever happens to touch the schema next. `npm run db:drift` runs the same check by hand.
-
 ### Added
 
 - **Move to PostgreSQL, from the dashboard.** A gateway started with `npx` runs on a single file,
@@ -47,13 +30,6 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 - **`alayra-nexus --migrate`**, the same move for headless and CI use. The destination is read from
   `NEXUS_MIGRATE_TO` rather than an option, because a command-line argument is readable by every
   other process on the machine and that string holds a database password.
-
-### Fixed
-
-- **The demo answered nothing for the database section**, so a visitor could not tell that moving
-  between engines is a supported step.
-
-### Added
 
 - **The gateway keeps its own backups, and you can download them.** A scheduled backup used to be
   written only to a folder path on the server. That is durable on a VM and wiped on every redeploy
@@ -80,8 +56,52 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
+- **The migrations and `schema.prisma` had drifted apart, and now cannot again.** Nineteen
+  differences had accumulated over eighteen hand-written migrations: database-level defaults on
+  `id` and `updatedAt` that the schema does not declare, and five foreign keys missing
+  `ON UPDATE CASCADE`.
+
+  None of it changed behaviour — every `ON DELETE` action already matched, and `ON UPDATE` fires
+  only when a primary key value changes, which never happens to a uuid written once. That is
+  precisely why it survived. The cost lands later: the next person to run `prisma migrate dev` for a
+  one-line change receives all nineteen statements folded into their migration, and either ships
+  them unread or unpicks them under pressure.
+
+  Migration `0019` applies them deliberately, and a new check replays every migration into a real
+  PostgreSQL and fails if anything is left over — so this is now caught by CI rather than by
+  whoever happens to touch the schema next. `npm run db:drift` runs the same check by hand.
+
+- **The demo answered nothing for the database section**, so a visitor could not tell that moving
+  between engines is a supported step.
+
 - **"Back up now" can no longer be offered and then refuse.** It was withdrawn until a folder had
   been configured, which on a host with no persistent disk meant it could never be pressed at all.
+
+- **Taking two backups in the same second no longer wastes one and hides the wreckage.** A backup's
+  name is its timestamp to the second, and it is unique — so pressing **Back up now** twice quickly,
+  or pressing it in the second a scheduled run lands, asked for a name that was already taken. The
+  collision surfaced at the very last step, *after* the entire database had been exported,
+  compressed and written: all of that work discarded, reported as a raw database constraint error,
+  and the half-written record left behind holding every one of those chunks — invisible in the list
+  and counting against the gateway's storage permanently. It now refuses immediately, and says so in
+  a sentence that names the fix.
+
+### Internal
+
+- **The paths that move your data are now covered end to end.** Moving to PostgreSQL, the stored
+  backups, the off-machine copy and the unattended schedule each shipped without a test that ran
+  them for real. They now have one, and the checks run on every change: a populated gateway is
+  genuinely migrated into a real PostgreSQL and counted on both sides; a real timer is waited on
+  until it produces a backup nobody asked for; that unattended file is handed back and opened with
+  no passphrase, which is the operation it exists to make possible. Writing them turned up the
+  same-second backup collision fixed above, and each check was then verified by deliberately
+  breaking the code it guards — a test that has never been seen to fail is not evidence of anything.
+
+- **Two long-standing intermittent test failures were diagnosed and removed.** The older one had
+  been recorded for months as a slow-machine problem. It was the reverse: a restore carrying six
+  rows finished inside the one-millisecond budget its test imposed, so the expiry it was checking
+  for never happened, and it failed when the machine was *fast*. A green suite that is occasionally
+  red for reasons nobody trusts is worse than a slow one.
 
 ## [1.5.3] - 2026-08-01
 
