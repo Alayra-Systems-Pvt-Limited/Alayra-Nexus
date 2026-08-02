@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { Gateway } from '../../helpers/api';
-import { stack, ADMIN_PASSWORD } from '../../setup/stacks';
+import { stack, ADMIN_PASSWORD, BACKUP_RECOVERY_PASSPHRASE } from '../../setup/stacks';
 import { API_OWNER as OWNER } from '../../helpers/personas';
 
 // The life of a gateway, from first boot to claimed — one story, in order. Each step's
@@ -46,8 +46,16 @@ test('claiming with a weak account password is refused with a reason', async () 
 test('claiming creates the owner, signs them in, and shows the recovery key once', async () => {
   const res = await gw.post<{
     token: string; role: string; recoveryKey: string; twoFactorCarriedOver: boolean;
+    backupRecoveryKeySet: boolean;
     user: { email: string; role: string };
-  }>('/admin/setup/claim', { body: { masterPassword: ADMIN_PASSWORD, ...OWNER } });
+  }>('/admin/setup/claim', {
+    // Claimed WITH a backup passphrase, the way an operator who intends to switch on unattended
+    // backups has to claim. It is the only moment a gateway can be given one, and without it the
+    // schedule cannot be enabled at all — a scheduled backup carries no passphrase, so the recovery
+    // key is the only thing that could ever open it once the machine is gone. 08-stored-backups
+    // depends on this line existing.
+    body: { masterPassword: ADMIN_PASSWORD, ...OWNER, backupPassphrase: BACKUP_RECOVERY_PASSPHRASE },
+  });
 
   expect(res.status).toBe(200);
   expect(res.body.role).toBe('owner');
@@ -57,6 +65,12 @@ test('claiming creates the owner, signs them in, and shows the recovery key once
   expect(res.body.recoveryKey).toMatch(/^[0-9a-f]{4}(-[0-9a-f]{4}){7}$/);
   // No authenticator existed on this fresh install, so nothing carried over.
   expect(res.body.twoFactorCarriedOver).toBe(false);
+
+  // Asserted rather than assumed. `claimGateway` swallows a failure here on purpose — being unable
+  // to create the key must not block somebody from finishing setup — so a gateway can come back
+  // 200, look completely claimed, and have no recovery key at all. This flag is the only signal
+  // that says which of the two happened, and nothing checked it until now.
+  expect(res.body.backupRecoveryKeySet).toBe(true);
 });
 
 test('the gateway now reports itself claimed, and a second claim is refused', async () => {

@@ -172,6 +172,26 @@ describe('a half-written backup is never mistaken for a real one', () => {
     expect(db.backups).toHaveLength(1);
     expect(db.chunks.every((c) => c.backupId === id)).toBe(true);
   });
+
+  it('refuses a name a COMPLETED backup already holds, before writing anything', async () => {
+    // A backup's name is its timestamp to the second, and two runs that finish inside the same
+    // second ask for the same one — reachable by pressing "Back up now" twice, and hit by the e2e
+    // suite doing exactly that.
+    //
+    // The refusal has to happen HERE. It used to surface at `commit`, after the whole database had
+    // been exported and written into chunk rows: all of that work discarded, reported as a raw
+    // "Unique constraint failed on the fields: (`filename`)", and the partial row left behind
+    // holding every chunk — invisible to the archive and counting against storage forever.
+    await store(randomBytes(64));
+    expect(db.backups).toHaveLength(1);
+
+    await expect(beginStoredBackup(NAME)).rejects.toThrow(/already exists/i);
+
+    // Nothing was created for the attempt: no second parent, and no chunks belonging to one.
+    expect(db.backups).toHaveLength(1);
+    expect(db.backups[0].filename).toBe(NAME);
+    expect(db.chunks.every((c) => c.backupId === db.backups[0].id)).toBe(true);
+  });
 });
 
 describe('what the dashboard reads', () => {

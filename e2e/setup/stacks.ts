@@ -39,6 +39,16 @@ export const ADMIN_PASSWORD = 'e2e-install-secret-2026';
 /** 64 hex chars, as encryption.ts requires. A fixed test value — nothing real is encrypted with it. */
 export const MASTER_ENCRYPTION_KEY = 'e2e0'.repeat(16);
 
+/**
+ * The passphrase sealing this gateway's BACKUP recovery key — distinct from every other secret here.
+ *
+ * A scheduled backup has nobody present to type a passphrase, so it is wrapped for the gateway and
+ * for this key, and only this key can open it once the gateway itself is gone. It can be created at
+ * exactly one moment — the claim — so 01-first-run supplies it and 08-stored-backups relies on it.
+ * Twelve characters minimum, which the claim route enforces.
+ */
+export const BACKUP_RECOVERY_PASSPHRASE = 'e2e-backup-recovery-2026';
+
 export const MOCK_PROVIDER_PORT = 3110;
 export const MOCK_PROVIDER_URL  = `http://127.0.0.1:${MOCK_PROVIDER_PORT}`;
 
