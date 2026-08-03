@@ -67,6 +67,27 @@ interface Overview {
 /** The runner wakes once a minute, so a due schedule lands inside two ticks with room to spare. */
 const TICK_BUDGET_MS = 150_000;
 
+/**
+ * Wait until the wall clock's second turns over.
+ *
+ * A backup's name IS its timestamp to the second, and it is unique — so two runs finishing inside
+ * one second ask for the same name, and the gateway refuses the later one (`beginStoredBackup`).
+ * That refusal is correct and deliberate; this spec simply must not trip over it. Crossing a second
+ * boundary guarantees a name distinct from every backup taken up to now, which a fixed sleep only
+ * approximates.
+ *
+ * Found the hard way, twice. The second time was on main: the scheduled run below is detected by
+ * POLLING, and the poll can return inside the very second the timer wrote its file — so "the
+ * scheduled backup happened much earlier" was an assumption rather than a fact, and CI failed on it
+ * with the two filenames identical.
+ */
+async function nextSecond(): Promise<void> {
+  const started = Math.floor(Date.now() / 1000);
+  while (Math.floor(Date.now() / 1000) === started) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 let ownerToken = '';
 
 /** The unattended backup, held across the spec — every later test reads the one the gateway took. */
@@ -214,6 +235,8 @@ test('the gateway can read back its own unattended backup with no passphrase at 
 test('“Back up now” stores one too, and it is distinguishable from the one the timer took', async () => {
   test.setTimeout(120_000);
 
+  await nextSecond();
+
   const res = await gw.post<{ ran: boolean; filename: string; rows: number; error?: string }>(
     '/admin/backup/schedule/run', { token: ownerToken },
   );
@@ -235,12 +258,7 @@ test('“Back up now” stores one too, and it is distinguishable from the one t
 test('a third backup pushes the oldest out, because keep is two', async () => {
   test.setTimeout(120_000);
 
-  // A backup's name IS its timestamp, to the second, and it is unique. Two runs that finish inside
-  // the same second therefore ask for the same name — which this spec hit on its first run, back to
-  // back with the manual backup above. The gateway now refuses that clearly and immediately instead
-  // of discovering it after exporting the whole database (see beginStoredBackup); waiting here asks
-  // for the second backup this test is actually about rather than re-testing the refusal.
-  await new Promise((resolve) => setTimeout(resolve, 1_100));
+  await nextSecond();
 
   const before = (await archive()).map((b) => b.filename).sort();
 

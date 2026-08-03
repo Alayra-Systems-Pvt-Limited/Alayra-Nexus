@@ -112,6 +112,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   invites somebody to run it a second time into a database that is now full. The move itself was
   already proven against two live engines; this is the part a person actually touches.
 
+- **A third intermittent failure, this one self-inflicted, is gone.** Refusing two backups taken in
+  the same second — the fix above — made the end-to-end suite's own timing an issue: it presses
+  "Back up now" moments after detecting the scheduled run, and the poll that detects it can return
+  inside the very second the timer wrote its file. The spec now crosses a second boundary before
+  asking for a backup, which is what the gateway's own refusal message tells an operator to do.
+
 - **Two long-standing intermittent test failures were diagnosed and removed.** The older one had
   been recorded for months as a slow-machine problem. It was the reverse: a restore carrying six
   rows finished inside the one-millisecond budget its test imposed, so the expiry it was checking
