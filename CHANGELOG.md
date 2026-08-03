@@ -54,6 +54,21 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   backups exist in one place only, softened once a second copy is genuinely being written, and gone
   when that copy is off the machine entirely.
 
+### Changed
+
+- **Prisma 5 → 6.** The ORM this gateway runs on had been on 5.x, which is no longer the supported
+  line. Nothing about the gateway behaves differently — the upgrade needed no code change at all, and
+  the full suite, the browser end-to-end run and the standalone smoke test all pass unmodified. Every
+  documented breaking change in that release was checked against this codebase and none applied: no
+  preview features were in use, every relation is explicit, and the one type change (`Bytes` becoming
+  `Uint8Array`) was already handled where backups are read back.
+
+  Worth knowing if you develop with an AI coding agent: from Prisma 6 onward, commands that would
+  destroy a database refuse to run when they detect one, until a human explicitly approves. Nothing a
+  user or a deployment runs is affected — `prisma migrate deploy`, which is what the move to
+  PostgreSQL uses, is not gated — but running this repository's engine-parity suites through an agent
+  now asks first.
+
 ### Fixed
 
 - **The migrations and `schema.prisma` had drifted apart, and now cannot again.** Nineteen
