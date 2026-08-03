@@ -19,6 +19,7 @@
 // at all.
 
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -68,7 +69,8 @@ function createDatabase(name: string): void {
     'node',
     ['-e', `
       const { PrismaClient } = require('@prisma/client');
-      const p = new PrismaClient({ datasources: { db: { url: process.env.URL } }, log: [] });
+      const { PrismaPg } = require('@prisma/adapter-pg');
+      const p = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.URL }), log: [] });
       p.$executeRawUnsafe('CREATE DATABASE "' + process.env.NAME.replace(/"/g, '""') + '"')
         .catch((e) => { if (!String(e.message).includes('already exists')) { console.error(e.message); process.exit(1); } })
         .finally(() => p.$disconnect());
@@ -135,7 +137,8 @@ function dropDatabase(name: string): void {
     'node',
     ['-e', `
       const { PrismaClient } = require('@prisma/client');
-      const p = new PrismaClient({ datasources: { db: { url: process.env.URL } }, log: [] });
+      const { PrismaPg } = require('@prisma/adapter-pg');
+      const p = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.URL }), log: [] });
       p.$executeRawUnsafe('DROP DATABASE IF EXISTS "' + process.env.NAME.replace(/"/g, '""') + '" WITH (FORCE)')
         .catch((e) => { console.error(e.message); process.exit(1); })
         .finally(() => p.$disconnect());
@@ -153,7 +156,11 @@ function dropDatabase(name: string): void {
 function openSqlite(url: string): PrismaClient {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const SqliteClient = (require('.prisma/client-sqlite') as { PrismaClient: new (o?: unknown) => PrismaClient }).PrismaClient;
-  return new SqliteClient({ datasources: { db: { url } }, log: ['error'] }) as PrismaClient;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3') as {
+    PrismaBetterSqlite3: new (opts: { url: string }) => unknown;
+  };
+  return new SqliteClient({ adapter: new PrismaBetterSqlite3({ url }), log: ['error'] }) as PrismaClient;
 }
 
 /** A SQLite gateway on its own throwaway file. Caller must dispose. */
@@ -209,7 +216,7 @@ export function startEngines(namespace: string): Engines {
   createDatabase(databaseFor(namespace));
   push('schema.prisma', pgUrl);
 
-  const pg     = new PrismaClient({ datasources: { db: { url: pgUrl } }, log: ['error'] });
+  const pg     = new PrismaClient({ adapter: new PrismaPg({ connectionString: pgUrl }), log: ['error'] });
   const sqlite = openSqlite(fileUrl);
 
   return {

@@ -47,7 +47,11 @@ interface Result { mode: string; total: number; slowestRead: number; slowestWrit
 function openAt(file: string): PrismaClient {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('.prisma/client-sqlite') as { PrismaClient: new (o?: unknown) => PrismaClient };
-  return new mod.PrismaClient({ datasources: { db: { url: `file:${file}` } }, log: [] });
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3') as {
+    PrismaBetterSqlite3: new (opts: { url: string }) => unknown;
+  };
+  return new mod.PrismaClient({ adapter: new PrismaBetterSqlite3({ url: `file:${file}` }), log: [] });
 }
 
 async function bench(want: 'delete' | 'wal'): Promise<Result> {
