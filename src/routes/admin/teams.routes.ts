@@ -21,7 +21,6 @@ import { getCurrentSpend, type BudgetPeriod } from '../../services/budget.servic
 import { getTeamStats, type TeamStatsPeriod } from '../../services/teamStats.service';
 import { prisma }              from '../../lib/prisma';
 import { randomUUID, createHash, randomBytes } from 'crypto';
-import { redis }               from '../../lib/redis';
 import { z }                   from 'zod';
 import { adminGuard, adminWriteGuard } from './guard';
 import { ADMIN_WRITE_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
@@ -154,8 +153,13 @@ export default async function adminTeamsRoutes(fastify: FastifyInstance) {
 
   fastify.delete('/admin/team-keys/:id', withRateLimit(adminWriteGuard, ADMIN_WRITE_RATE_LIMIT), async (request, reply) => {
     const { id } = request.params as { id: string };
+    // No cache to clear. A team key is verified by an indexed lookup on `keyHash` straight against
+    // the database (auth.middleware), so deleting the row IS the revocation and it takes effect on
+    // the next request. This used to be followed by `redis.del('nexus:teamkey:' + id)`, against a
+    // key nothing has ever written — and because it ran unguarded AFTER the row was already gone, a
+    // Redis outage would have answered 500 to an operator whose key had in fact been revoked. They
+    // would then have gone looking for a key that no longer existed.
     await prisma.nexusTeamKey.delete({ where: { id } });
-    await redis.del(`nexus:teamkey:${id}`);
     return reply.send({ success: true });
   });
 }

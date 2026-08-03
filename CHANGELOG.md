@@ -77,6 +77,13 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 - **"Back up now" can no longer be offered and then refuse.** It was withdrawn until a folder had
   been configured, which on a host with no persistent disk meant it could never be pressed at all.
 
+- **Deleting a team key no longer depends on Redis being up.** The delete cleared a cache entry that
+  nothing has ever written, and it did so *after* the row was already gone and without guarding the
+  call — so with Redis unavailable the request answered with an error about a key that had in fact
+  been revoked, sending the operator to look for something that no longer existed. A team key is
+  verified by an indexed lookup straight against the database, so deleting the row is the
+  revocation, and it takes effect on the very next request.
+
 - **Taking two backups in the same second no longer wastes one and hides the wreckage.** A backup's
   name is its timestamp to the second, and it is unique — so pressing **Back up now** twice quickly,
   or pressing it in the second a scheduled run lands, asked for a name that was already taken. The
