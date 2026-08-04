@@ -23,6 +23,7 @@ import { costOrder, effectivePrice } from '../lib/routing';
 import { getCostWeight }     from './routing.service';
 import { getModelRegistry, activeProviderSlugs }  from './model.service';
 import { getActiveProviders }  from './providerCache.service';
+import { shouldWriteLastUsed, forgetLastUsed } from '../lib/lastUsed';
 import { selectModels, type SelectableModel, type Capability } from '../lib/modelSelect';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
 import { safeFetch }        from '../lib/safeFetch';
@@ -153,7 +154,12 @@ async function tryPickKey(
     const admitted = await admitKey(key.id, key.rpmLimit, key.tpmLimit, reserveTokens);
     if (!admitted) continue;
 
-    await prisma.nexusKey.update({ where: { id: key.id }, data: { lastUsedAt: now } });
+    // Written at most once per window, not once per request. `updateMany` rather than `update`
+    // because Prisma's `update` compiles to a RETURNING of every column, and nothing here reads
+    // the row back. See lib/lastUsed.ts for what the window costs.
+    if (shouldWriteLastUsed(key.id, now.getTime())) {
+      await prisma.nexusKey.updateMany({ where: { id: key.id }, data: { lastUsedAt: now } });
+    }
     return buildRoute(key, providerRow, gate, model);
   }
   return null;
@@ -177,10 +183,22 @@ async function tryStickyKey(
   pickModel: (provider: ProviderRow) => RouteModel | null,
   userId: string | null,
 ): Promise<NexusRoute | null> {
-  const key = await prisma.nexusKey.findUnique({ where: { id: keyId }, include: { provider: true } });
-  if (!key || key.status === 'banned' || !key.provider.isActive) return null;
+  const key = await prisma.nexusKey.findUnique({ where: { id: keyId } });
+  if (!key || key.status === 'banned') return null;
 
-  const model = pickModel(key.provider);
+  // The pool comes from the provider cache rather than an `include`. Prisma issues an include as a
+  // SECOND query — and one that reads every column, where routing needs eight — so on the sticky
+  // path, which is the common path once a conversation is going, it was a per-request round trip
+  // for a row that changes when an operator edits a pool.
+  //
+  // The cache holds only ACTIVE pools, which is what makes this a faithful swap rather than a
+  // near-enough one: a pool that is missing here is inactive or deleted, and both used to fail the
+  // `!key.provider.isActive` check. A linear scan is deliberate — deployments have a handful of
+  // pools, and a Map would be rebuilt on every call anyway since the cache decodes fresh JSON.
+  const provider = (await getActiveProviders()).find((p) => p.id === key.providerId);
+  if (!provider) return null;
+
+  const model = pickModel(provider);
   if (!model) return null;
 
   // A sticky pin is a Redis session→key mapping that outlives any single request,
@@ -202,8 +220,11 @@ async function tryStickyKey(
   const admitted = await admitKey(key.id, key.rpmLimit, key.tpmLimit, reserveTokens);
   if (!admitted) return null;
 
-  await prisma.nexusKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } });
-  return { ...buildRoute(key, key.provider, gate, model), wasDowngrade: false, sticky: true };
+  const now = Date.now();
+  if (shouldWriteLastUsed(key.id, now)) {
+    await prisma.nexusKey.updateMany({ where: { id: key.id }, data: { lastUsedAt: new Date(now) } });
+  }
+  return { ...buildRoute(key, provider, gate, model), wasDowngrade: false, sticky: true };
 }
 
 /**
@@ -404,6 +425,10 @@ export async function getNextCooldownSeconds(): Promise<number> {
 
 export async function banKey(keyId: string): Promise<void> {
   await prisma.nexusKey.update({ where: { id: keyId }, data: { status: 'banned' } });
+  // A banned key is never routed to again, so its debounce entry is dead weight. Dropping it here
+  // is what keeps that map bounded by the keys actually in service rather than by every key this
+  // process has ever seen.
+  forgetLastUsed(keyId);
 }
 
 /**

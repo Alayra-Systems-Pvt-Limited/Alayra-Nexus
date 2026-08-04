@@ -11,6 +11,23 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **Sticky routing stopped joining to the provider table, and `lastUsedAt` stopped being written on
+  every request.** Two more per-request queries gone. Sticky session routing — the common path once
+  a conversation is under way — reached its pool through an `include`, which Prisma issues as a
+  second query reading every column where routing needs eight. It now resolves the pool from the
+  cache above. A pool missing from that cache is inactive or deleted, which is exactly what the old
+  `isActive` check on the joined row meant.
+
+  `lastUsedAt` is written at most once per key per five seconds instead of once per request, with
+  `updateMany` rather than `update` so Prisma stops compiling it to a `RETURNING` of every column
+  that nothing reads. This is a real trade and worth stating: the column orders candidate keys so
+  load spreads across a pool, so suppressing writes lets a busy key sort earlier than it deserves.
+  The error is bounded by the window, and RPM/TPM admission — not this ordering — is what actually
+  stops a key being overused. `LAST_USED_WRITE_WINDOW_MS=0` restores a write per request.
+
+  Together with the provider cache: **4.2 queries per chat completion down to 1.2**, median overhead
+  from 3.02 ms to 1.83 ms, and throughput from 237/329/336 to 374/491/490 RPS at 1/8/32 workers.
+
 - **The active provider pools are cached, removing a query from every routed request.** Routing
   asked the database which pools exist on every single request, and the answer changes only when an
   operator adds, edits or removes one. It is now read once and served from the shared KV, with every
