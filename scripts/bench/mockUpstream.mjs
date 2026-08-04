@@ -62,6 +62,40 @@ const behaviour = {
   rate429: 0,
 };
 
+/** Nothing may ask for a longer delay than this. See `sanitise`. */
+const MAX_LATENCY_MS = 30_000;
+
+/**
+ * Clamp an incoming behaviour to values this server can actually honour.
+ *
+ * CodeQL flagged the unclamped version as `js/resource-exhaustion` (high): `latencyMs` arrives in a
+ * POST body and went straight into setTimeout, so anything reaching this port could park every
+ * request for as long as it liked.
+ *
+ * The exploit is theoretical — this binds to loopback, lives under scripts/, and is not in the
+ * published package — but the alert is still correct, and the fix is worth having on its own terms:
+ * a scenario that means to write `latencyMs: 200` and writes `200000` would otherwise hang a
+ * benchmark for three minutes with no output and no explanation. Clamping turns that into a run
+ * that is merely slow.
+ *
+ * Everything is clamped rather than rejected, and clamped ON ASSIGNMENT, so the stored behaviour is
+ * always a set of values the rest of this file can use without re-checking. `status` is bounded to
+ * the range writeHead accepts, because an out-of-range one throws inside the request handler and
+ * takes the process down mid-run.
+ */
+function sanitise(input) {
+  const num = (v, lo, hi, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
+  };
+  const out = {};
+  if ('latencyMs' in input) out.latencyMs = num(input.latencyMs, 0, MAX_LATENCY_MS, 0);
+  if ('status'    in input) out.status    = num(input.status, 100, 599, 200);
+  if ('failRate'  in input) out.failRate  = num(input.failRate, 0, 1, 0);
+  if ('rate429'   in input) out.rate429   = num(input.rate429, 0, 1, 0);
+  return out;
+}
+
 const stats = { requests: 0, inFlight: 0, byStatus: Object.create(null) };
 
 /**
@@ -117,7 +151,7 @@ const server = http.createServer((req, res) => {
       return res.end(JSON.stringify(stats));
     }
     if (url === '/__behaviour' && req.method === 'POST') {
-      try { Object.assign(behaviour, JSON.parse(body || '{}')); } catch { /* keep the current one */ }
+      try { Object.assign(behaviour, sanitise(JSON.parse(body || '{}'))); } catch { /* keep the current one */ }
       res.writeHead(200, { 'content-type': 'application/json' });
       return res.end(JSON.stringify(behaviour));
     }
@@ -144,7 +178,10 @@ const server = http.createServer((req, res) => {
       return respond(res, 404, `{"error":"no route for ${req.method} ${url}"}`);
     };
 
-    if (behaviour.latencyMs > 0) setTimeout(send, behaviour.latencyMs);
+    // Bounded again at the point of use. `sanitise` already clamped it on the way in; this is the
+    // one a reader (and a static analyser) can verify without following the assignment.
+    const delay = Math.min(MAX_LATENCY_MS, Math.max(0, behaviour.latencyMs));
+    if (delay > 0) setTimeout(send, delay);
     else send();
   });
 });
