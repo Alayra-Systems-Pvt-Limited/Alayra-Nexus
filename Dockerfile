@@ -79,6 +79,19 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY prisma ./prisma
+# The connection string for `migrate deploy`, which this image runs at startup against a real
+# database (see CMD). Prisma 7 removed `url` from the datasource block in schema.prisma — which IS
+# copied, one line up — and moved it here. Leaving this behind produced a container that built
+# cleanly, passed every check, started, and then died in a restart loop on:
+#
+#   Error: The datasource.url property is required in your Prisma config file
+#          when using prisma migrate deploy.
+#
+# It reached a deployment because nothing exercised this path: the image is built only by
+# release.yml, and a container started WITHOUT a DATABASE_URL skips the migration entirely, so the
+# SQLite path can be verified end to end while the Postgres one is never touched. The compose smoke
+# test added to CI alongside this now runs the migration against a real Postgres.
+COPY prisma.config.ts ./
 # The dashboard's static build. The gateway serves it from web/dist (see the static root in
 # src/server.ts); only the built assets ship, not web/'s source or toolchain. @fastify/static only
 # logs a warning for a missing root, so keep this COPY in step with that static root — if they drift,
