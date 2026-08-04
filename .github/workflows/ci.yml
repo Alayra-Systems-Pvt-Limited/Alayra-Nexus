@@ -302,7 +302,7 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       # load, not push: the image has to exist locally for the run below. The GitHub Actions cache
       # keeps this from rebuilding the whole toolchain on every pull request.
       - name: Build the image
