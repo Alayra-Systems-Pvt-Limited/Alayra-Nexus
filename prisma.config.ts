@@ -18,7 +18,7 @@
 //
 // Prisma 7 removed `url` from the datasource block, so `migrate`, `db push` and `db execute` have
 // nowhere to read it from unless it is here. `generate` does not need it — which matters, because
-// CI and `postinstall` generate a client long before any database exists.
+// CI, the Docker build and `postinstall` all generate a client long before any database exists.
 //
 // ── Why it reads the environment rather than naming a database ────────────────────────────────
 //
@@ -30,13 +30,26 @@
 //
 // `schema` is deliberately not pinned for the same reason: `--schema` has to keep choosing.
 
-import 'dotenv/config';
-import { defineConfig, env } from 'prisma/config';
+// ── Why the datasource is conditional ─────────────────────────────────────────────────────────
+//
+// `env('DATABASE_URL')` reads better and does not work. It resolves when the config FILE loads, not
+// when a command needs a database, so it throws for every Prisma invocation without one:
+//
+//   Failed to load config file as a TypeScript/JavaScript module.
+//   Error: PrismaConfigEnvError: Cannot resolve environment variable: DATABASE_URL.
+//
+// `generate` is exactly that case, and it is the one that matters most here. It runs in the
+// Dockerfile's builder stage, where `COPY prisma/` has only just happened and no database exists;
+// it runs from `postinstall` on a user's machine at `npx` time; and it runs in CI before any
+// service container is up. All three broke, and the Docker build is where it was caught.
+//
+// Omitting the key entirely when there is nothing to put in it leaves `generate` working and still
+// gives `migrate`, `db push` and `db execute` the URL whenever one is set — which is always, for the
+// commands that need it.
 
-export default defineConfig({
-  datasource: {
-    // Absent during `generate`, which does not need it. The CLI raises a clear error naming this
-    // file if a command that DOES need it is run without one.
-    url: env('DATABASE_URL'),
-  },
-});
+import 'dotenv/config';
+import { defineConfig } from 'prisma/config';
+
+const url = process.env.DATABASE_URL?.trim();
+
+export default defineConfig(url ? { datasource: { url } } : {});
