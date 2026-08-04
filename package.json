@@ -69,7 +69,9 @@
     "db:column-facts": "tsx scripts/db/columnFacts.ts",
     "bench:overhead": "tsx scripts/bench/overhead.ts",
     "bench:profile": "tsx scripts/bench/profile.ts",
-    "bench:queries": "tsx scripts/bench/queryCount.ts"
+    "bench:queries": "tsx scripts/bench/queryCount.ts",
+    "bench:scaling": "tsx scripts/bench/scaling.ts",
+    "bench:store-ops": "tsx scripts/bench/storeOps.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",

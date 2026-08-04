@@ -11,6 +11,34 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **The gateway can run as several processes, and refuses to when that would be wrong.**
+  `NEXUS_CLUSTER_WORKERS=4` (or `auto`) forks that many workers over one listening socket. One
+  process costs about 1.5 ms of CPU per request and tops out near 670 a second, and no amount of
+  concurrency adds a second core; more processes is Node's answer.
+
+  It refuses to fork without a shared `REDIS_URL`, and that refusal is the point. In standalone
+  mode the KV is an in-process map, so four workers would keep four independent sets of RPM/TPM
+  counters and enforce each key's limit once *per worker* — a key capped at 60 requests a minute
+  would serve up to 240. That is the kind of mistake a provider answers with a suspension, so it is
+  fatal at boot rather than a warning nobody reads twice.
+
+  One-time work — building the SQLite schema, seeding the registry, generating the API key — now
+  happens in the primary before any worker exists, instead of racing four ways. Retention, the
+  health sampler and the backup scheduler run on the first worker only.
+
+- **`npm run bench:scaling` and `npm run bench:store-ops`.** The first walks worker counts one at a
+  time so a scaling curve can be seen bending, against Postgres and Redis in Docker because that is
+  the only topology where forking is allowed. It measures the load driver's own ceiling in every
+  run, so "the gateway stopped scaling" can be told apart from "the machine ran out of cores".
+
+  The second counts Redis round trips per request, and exists because the first produced a number
+  less than half the standalone one and the reason had to be found rather than guessed at. It found
+  **31 Redis round trips per request**, eighteen of them individual `nexus:setting:*` reads for
+  values that change when an operator edits them and never between two requests. Against an
+  in-process map those are free, which is why nothing had noticed. Against a real Redis they are the
+  dominant cost of a request, and they are why the production topology measures 281 RPS where
+  standalone measures 671.
+
 - **The pinned key's row is cached for one second, taking the last query off the request path.**
   This one was held back from the previous change on purpose, because it is not the same kind of
   cache: key rows change underneath us at runtime. The breaker cools a key on a 429, bans it after

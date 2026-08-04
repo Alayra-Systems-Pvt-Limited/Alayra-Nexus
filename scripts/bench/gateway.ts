@@ -56,6 +56,18 @@ export interface Harness {
 
 export interface HarnessOptions {
   /**
+   * Run the gateway as this many processes sharing the listening socket.
+   *
+   * Above 1 the gateway refuses to start without a real Redis, on purpose — each worker would
+   * otherwise keep its own RPM/TPM counters. So this is only meaningful together with `redisUrl`.
+   */
+  workers?: number;
+  /** Postgres, instead of the standalone SQLite file. */
+  databaseUrl?: string;
+  /** A real Redis, instead of the in-process map. Required for `workers` > 1. */
+  redisUrl?: string;
+
+  /**
    * Run the gateway under a V8 sampling profiler that can be started and stopped mid-run.
    *
    * The gateway is then the SAME code on the same port, but hosted by profileServer.cjs rather
@@ -131,8 +143,11 @@ export async function startHarness(
       // benchmark. Its cost is then part of what these numbers report, which is honest.
       SSRF_ALLOWLIST: `127.0.0.1:${mockPort}`,
     } as NodeJS.ProcessEnv;
-    delete env.DATABASE_URL;
-    delete env.REDIS_URL;
+    // Deleted unless the caller pins them. A developer's .env would otherwise make a run that
+    // reports "standalone" quietly measure their PostgreSQL.
+    if (opts.databaseUrl) env.DATABASE_URL = opts.databaseUrl; else delete env.DATABASE_URL;
+    if (opts.redisUrl)    env.REDIS_URL    = opts.redisUrl;    else delete env.REDIS_URL;
+    if (opts.workers && opts.workers > 1) env.NEXUS_CLUSTER_WORKERS = String(opts.workers);
 
     // Either the compiled server directly, or the same server hosted inside the profiler wrapper.
     // The wrapper `require`s dist/server.js in its own isolate, so the gateway being measured is
