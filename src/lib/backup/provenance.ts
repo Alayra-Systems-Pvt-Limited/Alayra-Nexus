@@ -32,13 +32,36 @@
 //
 // ── Where it comes from ───────────────────────────────────────────────────────────────────────
 //
-// Prisma's DMMF: the datamodel the generated client itself was built from. No database round trip,
-// no SQL dialect, and it describes precisely what a restore will try to write — since the restore
-// writes THROUGH this client. Both generated clients were measured to produce byte-identical
-// output, and a parity test keeps it that way; if they ever diverge, that test is what says so.
+// Two sources, deliberately, and the split is load-bearing.
+//
+// WHICH columns exist, and their TYPE, come from Prisma's DMMF: the datamodel the generated client
+// itself was built from. No database round trip, no SQL dialect, and it describes precisely what a
+// restore will try to write — since the restore writes THROUGH this client. Both generated clients
+// were measured to produce byte-identical output, and a parity test keeps it that way.
+//
+// Whether a column is REQUIRED, and whether the database can produce a value for it, come from
+// COLUMN_FACTS — generated from prisma/schema.prisma at build time by scripts/db/columnFacts.ts.
+//
+// That second half used to come from the DMMF too. Prisma 7 reduces its field records to
+// `{name, kind, type}` and drops `isRequired`, `hasDefaultValue` and `isUpdatedAt`. Read through the
+// old code on v7 every column looked optional and defaultless, and the damage was not that a check
+// went quiet: `missing-required` is blocking and says "this backup cannot be restored", while the
+// value it degraded to, `missing-fillable`, says "it will take its default". A restore that could
+// not succeed would have been described to the operator as safe.
+//
+// The DMMF was never the SOURCE of those two facts, only a relay that stopped relaying. The schema
+// still states them plainly, so they are read from there instead.
+//
+// The two sources are cross-checked rather than trusted: a DMMF field with no entry in COLUMN_FACTS
+// THROWS. It would be easy to fall back to a default and keep going, and that is exactly the shape
+// of the bug above — a fingerprint that is quietly wrong is worse than one that is missing, because
+// it is believed. If this throws, the artifact is stale; `npm run db:column-facts` regenerates it,
+// and CI fails before that can reach anybody.
 
 import { Prisma } from '@prisma/client';
 import { EXCLUDED_MODELS, delegateName } from './modelOrder';
+import { COLUMN_FACTS } from './columnFacts.generated';
+import type { ColumnFact } from './columnFactsTypes';
 
 /**
  * One model's columns, as `name:type:required:defaultable`.
@@ -51,10 +74,10 @@ export type ModelShape = string[];
 /** Every model's columns. Roughly 1.9 KB for this schema. */
 export type SchemaShape = Record<string, ModelShape>;
 
-interface DmmfField {
-  name: string; kind: string; type: string;
-  isRequired: boolean; hasDefaultValue: boolean; isUpdatedAt: boolean; isId: boolean;
-}
+// Only what Prisma 7 still guarantees. `isRequired` and `hasDefaultValue` were removed there, and
+// declaring them optional-but-present would let this file read them again by accident on a version
+// that does not have them — which is the whole failure being fixed. They are not declared at all.
+interface DmmfField { name: string; kind: string; type: string }
 interface DmmfModel { name: string; fields: readonly DmmfField[]; primaryKey: unknown }
 
 /** The models this client was generated from. Exported so tests can compare two clients. */
@@ -62,11 +85,31 @@ export function dmmfModels(): readonly DmmfModel[] {
   return (Prisma.dmmf?.datamodel?.models ?? []) as unknown as readonly DmmfModel[];
 }
 
-/** One column, rendered so that two schemas can be compared by string equality. */
-export function describeField(f: DmmfField): string {
-  const required = f.isRequired ? 'req' : 'opt';
-  const defaultable = f.hasDefaultValue || f.isUpdatedAt ? 'def' : 'nodef';
-  return `${f.name}:${f.type}:${required}:${defaultable}`;
+/**
+ * Raised when the DMMF has a column the generated artifact does not.
+ *
+ * Its own class because the fix is specific and mechanical — regenerate and commit — and because a
+ * bare Error here would be indistinguishable from the backup failures around it, which are about
+ * the file rather than about this build.
+ */
+export class StaleColumnFactsError extends Error {
+  constructor(model: string, column: string) {
+    super(
+      `${model}.${column} exists in the Prisma client but not in columnFacts.generated.ts. ` +
+      'That artifact is out of date with prisma/schema.prisma — run `npm run db:column-facts` ' +
+      'and commit the result. Refusing to fingerprint a schema this gateway cannot describe ' +
+      'accurately, because a wrong fingerprint is trusted and a missing one is not.');
+    this.name = 'StaleColumnFactsError';
+  }
+}
+
+/**
+ * One column, rendered so that two schemas can be compared by string equality.
+ *
+ * `fact` carries the required/defaultable half; see the header for why it does not come from `f`.
+ */
+export function describeField(f: DmmfField, fact: ColumnFact): string {
+  return `${f.name}:${f.type}:${fact}`;
 }
 
 /**
@@ -87,7 +130,16 @@ export function schemaShape(models: readonly DmmfModel[] = dmmfModels()): Schema
     // that cannot affect the data being restored, in the one place an operator most needs to trust
     // what they are told. Excluded on both sides, so old and new files compare identically.
     if (EXCLUDED_MODELS.includes(delegateName(model.name))) continue;
-    out[model.name] = model.fields.filter((f) => f.kind === 'scalar').map(describeField).sort();
+
+    const facts = COLUMN_FACTS[model.name] ?? {};
+    out[model.name] = model.fields
+      .filter((f) => f.kind === 'scalar')
+      .map((f) => {
+        const fact = facts[f.name];
+        if (!fact) throw new StaleColumnFactsError(model.name, f.name);
+        return describeField(f, fact);
+      })
+      .sort();
   }
   return out;
 }

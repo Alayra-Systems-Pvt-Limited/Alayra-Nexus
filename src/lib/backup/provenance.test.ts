@@ -13,8 +13,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   dmmfModels, schemaShape, describeField, configuredEnvNames, missingEnvNames, TRACKED_ENV_PREFIXES,
+  StaleColumnFactsError,
 } from './provenance';
 import { MODEL_ORDER } from './modelOrder';
+import { COLUMN_FACTS } from './columnFacts.generated';
 
 describe('the schema shape', () => {
   it('covers every model that gets backed up', () => {
@@ -57,14 +59,61 @@ describe('the schema shape', () => {
   });
 
   it('describes a field as name:type:required:defaultable', () => {
-    expect(describeField({
-      name: 'slug', kind: 'scalar', type: 'String',
-      isRequired: true, hasDefaultValue: false, isUpdatedAt: false, isId: false,
-    })).toBe('slug:String:req:nodef');
+    expect(describeField({ name: 'slug', kind: 'scalar', type: 'String' }, 'req:nodef'))
+      .toBe('slug:String:req:nodef');
   });
 
   it('reads a believable model list, so an empty DMMF cannot pass silently', () => {
     expect(dmmfModels().length).toBeGreaterThan(10);
+  });
+});
+
+describe('the required/defaultable half, which no longer comes from Prisma', () => {
+  // Prisma 7 reduces a DMMF field to {name, kind, type}. Everything below is what stands between
+  // that and a drift check that calls an impossible restore safe. See provenance.ts's header.
+
+  it('supplies both facts for every scalar column the client has', () => {
+    // The real assertion is that schemaShape() does not throw — but stating the count makes a
+    // silently-empty artifact fail here rather than pass by describing nothing.
+    let columns = 0;
+    for (const model of dmmfModels()) {
+      const facts = COLUMN_FACTS[model.name];
+      expect(facts, `no entry for model ${model.name}`).toBeDefined();
+      for (const f of model.fields) {
+        if (f.kind !== 'scalar') continue;
+        expect(facts[f.name], `no entry for ${model.name}.${f.name}`).toMatch(/^(req|opt):(def|nodef)$/);
+        columns++;
+      }
+    }
+    expect(columns).toBeGreaterThan(100);
+  });
+
+  it('THROWS on a column it has no facts for, rather than guessing', () => {
+    // The whole point, and the reason this is a throw and not a fallback. A guessed `opt:nodef`
+    // turns `missing-required` (blocking, "cannot be restored") into `missing-fillable` ("it will
+    // take its default") — the check does not go quiet, it starts lying, and the operator is told a
+    // restore that cannot succeed is safe. Verified by breaking it on purpose: a model whose column
+    // the artifact does not describe.
+    const invented = [{
+      name: 'NexusProvider',
+      fields: [{ name: 'columnAddedWithoutRegenerating', kind: 'scalar', type: 'String' }],
+      primaryKey: null,
+    }];
+    expect(() => schemaShape(invented)).toThrow(StaleColumnFactsError);
+    expect(() => schemaShape(invented)).toThrow(/npm run db:column-facts/);
+  });
+
+  it('names the model and column, so the fix does not need a debugger', () => {
+    const invented = [{
+      name: 'NexusProvider', fields: [{ name: 'ghost', kind: 'scalar', type: 'String' }], primaryKey: null,
+    }];
+    expect(() => schemaShape(invented)).toThrow(/NexusProvider\.ghost/);
+  });
+
+  it('does not throw for a model missing entirely — that is new-model drift, not staleness', () => {
+    // A model absent from the artifact AND from the schema is a different situation from a column
+    // the artifact forgot: there is nothing to describe, and compareSchemas already handles it.
+    expect(() => schemaShape([{ name: 'ModelWithNoColumns', fields: [], primaryKey: null }])).not.toThrow();
   });
 });
 

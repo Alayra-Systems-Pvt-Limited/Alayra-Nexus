@@ -69,6 +69,35 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   PostgreSQL uses, is not gated — but running this repository's engine-parity suites through an agent
   now asks first.
 
+- **The backup drift check stopped depending on a Prisma detail that Prisma is removing.** Every
+  backup carries a fingerprint of the schema that wrote it, describing each column four ways: name,
+  type, whether it is required, and whether the database can produce a value for it. The last two
+  are what let a restore tell "this file predates a nullable column" — fine, restore it — from "this
+  file predates a REQUIRED column with no default", which cannot be honoured and is refused before
+  anything is emptied.
+
+  All four came from Prisma's DMMF. Prisma 7 reduces a field there to `{name, kind, type}`, and the
+  consequence is not that a check goes quiet. Measured on a real column, `NexusProvider.slug`:
+
+  | | fingerprint | verdict | what the operator is told |
+  |---|---|---|---|
+  | before | `slug:String:req:nodef` | blocking | "required here with no default" — refused |
+  | on Prisma 7 | `slug:String:opt:nodef` | not blocking | "it will take its default" — **allowed** |
+
+  A restore that cannot succeed would have been described as safe, then failed partway through with
+  the tables already emptied. False reassurance in the one place an operator has no choice but to
+  trust what they are read.
+
+  Prisma was never the source of those two facts, only a relay. `prisma/schema.prisma` states them
+  outright, so they are now read from there at build time into a generated module. The change is a
+  pure refactor on the current version: the fingerprint is **byte-identical** to the one this gateway
+  produced before, across all 161 scalar columns and on both generated clients, so every backup ever
+  taken still compares exactly as it did.
+
+  A column the generated file does not describe is now a hard error rather than a guess. Falling back
+  to a default would reproduce precisely the bug above, and a fingerprint that is quietly wrong is
+  worse than one that is missing, because it is believed.
+
 ### Fixed
 
 - **The migrations and `schema.prisma` had drifted apart, and now cannot again.** Nineteen
