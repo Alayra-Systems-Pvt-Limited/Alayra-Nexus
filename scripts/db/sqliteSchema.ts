@@ -108,13 +108,37 @@ const DDL_BANNER =
 
 `;
 
+/**
+ * A connection string for a command that never opens a connection.
+ *
+ * `migrate diff --from-empty --to-schema` is a pure schema-to-SQL transform: there is no database at
+ * either end of it. Prisma 7 nevertheless wants a datasource URL in the config, and when there is
+ * none it prints nothing and **exits 0** — no error, no diagnostic, an empty diff that looks exactly
+ * like "there is nothing to create".
+ *
+ * That is why this is here rather than a real URL in prisma.config.ts: that file deliberately omits
+ * the datasource when the environment has none, so `generate` works before any database exists. A
+ * placeholder there would instead be inherited by `migrate deploy` and `db push`, which DO connect —
+ * and a fake default for those is how a migration ends up applied to the wrong database. Scoped to
+ * this one child process, it can only ever be read by the one command that provably ignores it.
+ *
+ * Measured, not assumed: with any URL set this produces 18 CREATE TABLE statements, with none it
+ * produces zero bytes, and no file at the placeholder path is ever created.
+ */
+const UNUSED_BY_MIGRATE_DIFF = 'file:./.migrate-diff-never-connects.db';
+
 /** The whole DDL, from Prisma rather than hand-written, so it cannot disagree with the schema. */
 function generateDdl(): string {
   const sql = execFileSync(
     'npx',
     // `--to-schema`, not `--to-schema-datamodel`: Prisma 7 removed the longer spelling outright.
     ['prisma', 'migrate', 'diff', '--from-empty', '--to-schema', TARGET, '--script'],
-    { cwd: ROOT, encoding: 'utf8', shell: true },
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      shell: true,
+      env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL || UNUSED_BY_MIGRATE_DIFF },
+    },
   );
   if (!/CREATE TABLE/i.test(sql)) {
     // An empty or error-shaped result would otherwise be committed as a "schema" that creates
