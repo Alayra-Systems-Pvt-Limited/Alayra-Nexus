@@ -86,7 +86,7 @@
     "dotenv": "^16.4.5",
     "fastify": "^5.8.5",
     "ioredis": "^5.3.2",
-    "jose": "^5.10.0",
+    "jose": "^6.2.7",
     "js-tiktoken": "^1.0.21",
     "prisma": "^7.9.1",
     "prom-client": "^15.1.3",
