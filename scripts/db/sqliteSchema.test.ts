@@ -27,9 +27,10 @@ describe('toSqliteSchema', () => {
     const out = toSqliteSchema(read('schema.prisma'));
     expect(out).toMatch(/datasource\s+db\s*\{[^}]*provider\s*=\s*"sqlite"/);
     expect(out).not.toMatch(/provider\s*=\s*"postgresql"/);
-    // The URL must still come from the environment: the runtime hands Prisma an explicit
-    // datasource override, and hardcoding a path here would make every CLI command write to it.
-    expect(out).toMatch(/url\s*=\s*env\("DATABASE_URL"\)/);
+    // No `url` in either schema since Prisma 7 removed it from the datasource block. The CLI reads
+    // it from prisma.config.ts and the runtime hands it to a driver adapter; a hardcoded path here
+    // would make every CLI command write to it regardless.
+    expect(out).not.toMatch(/\burl\s*=/);
   });
 
   it('sends the client somewhere other than the default, so it cannot clobber the Postgres one', () => {
@@ -63,6 +64,17 @@ describe('toSqliteSchema', () => {
       `output   = "${SQLITE_CLIENT_OUTPUT}"`,
       'provider = "sqlite"',
     ]);
+  });
+
+  it('leaves exactly one output line, and only on the SQLite side', () => {
+    // schema.prisma must NOT carry an `output`: Prisma writes the default client into whichever
+    // `@prisma/client` node resolution finds, and that is the only rule that survives npm hoisting.
+    // A second output line here would also make Prisma take the last one — the Postgres path —
+    // generating the SQLite client straight over the Postgres one.
+    expect(read('schema.prisma')).not.toMatch(/^\s*output\s*=/m);
+    const out = toSqliteSchema(read('schema.prisma'));
+    expect([...out.matchAll(/^\s*output\s*=/gm)]).toHaveLength(1);
+    expect(out).toContain(`output   = "${SQLITE_CLIENT_OUTPUT}"`);
   });
 
   it('refuses rather than silently producing a Postgres schema if the datasource moves', () => {

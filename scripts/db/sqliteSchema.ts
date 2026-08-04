@@ -74,6 +74,16 @@ export function toSqliteSchema(postgresSchema: string): string {
   // 2. The generator output, so the two clients land in different directories instead of the second
   //    silently overwriting the first — which would leave the Postgres deployment running a SQLite
   //    client and failing at the first query.
+  //
+  //    INSERTED, because schema.prisma deliberately has no `output` of its own. Prisma writes the
+  //    default client into whichever `@prisma/client` node resolution finds, which is the only rule
+  //    that survives npm hoisting: inside an installed package the resolved copy is the hoisted one
+  //    at the top level, and a path written here would instead land in the package's own
+  //    node_modules where `@prisma/client` will not look. That was measured, not assumed — it is
+  //    what made `npx alayra-nexus` fail with "Cannot find module '.prisma/client/default'".
+  //
+  //    The SQLite client cannot use that default, since it would overwrite the first, so it is the
+  //    one that gets an explicit path.
   const genBefore = out;
   out = out.replace(
     /(generator\s+client\s*\{\s*\n)/,
@@ -98,12 +108,37 @@ const DDL_BANNER =
 
 `;
 
+/**
+ * A connection string for a command that never opens a connection.
+ *
+ * `migrate diff --from-empty --to-schema` is a pure schema-to-SQL transform: there is no database at
+ * either end of it. Prisma 7 nevertheless wants a datasource URL in the config, and when there is
+ * none it prints nothing and **exits 0** — no error, no diagnostic, an empty diff that looks exactly
+ * like "there is nothing to create".
+ *
+ * That is why this is here rather than a real URL in prisma.config.ts: that file deliberately omits
+ * the datasource when the environment has none, so `generate` works before any database exists. A
+ * placeholder there would instead be inherited by `migrate deploy` and `db push`, which DO connect —
+ * and a fake default for those is how a migration ends up applied to the wrong database. Scoped to
+ * this one child process, it can only ever be read by the one command that provably ignores it.
+ *
+ * Measured, not assumed: with any URL set this produces 18 CREATE TABLE statements, with none it
+ * produces zero bytes, and no file at the placeholder path is ever created.
+ */
+const UNUSED_BY_MIGRATE_DIFF = 'file:./.migrate-diff-never-connects.db';
+
 /** The whole DDL, from Prisma rather than hand-written, so it cannot disagree with the schema. */
 function generateDdl(): string {
   const sql = execFileSync(
     'npx',
-    ['prisma', 'migrate', 'diff', '--from-empty', '--to-schema-datamodel', TARGET, '--script'],
-    { cwd: ROOT, encoding: 'utf8', shell: true },
+    // `--to-schema`, not `--to-schema-datamodel`: Prisma 7 removed the longer spelling outright.
+    ['prisma', 'migrate', 'diff', '--from-empty', '--to-schema', TARGET, '--script'],
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      shell: true,
+      env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL || UNUSED_BY_MIGRATE_DIFF },
+    },
   );
   if (!/CREATE TABLE/i.test(sql)) {
     // An empty or error-shaped result would otherwise be committed as a "schema" that creates

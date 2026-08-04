@@ -22,7 +22,7 @@
 //
 // Why these two facts are not read from Prisma: scripts/db/columnFacts.ts explains it in full.
 
-import type { ColumnFacts } from './columnFactsTypes';
+import type { ColumnFacts, ModelKeys } from './columnFactsTypes';
 
 export const COLUMN_FACTS: ColumnFacts = {
   AdminApiToken: {
@@ -222,4 +222,31 @@ export const COLUMN_FACTS: ColumnFacts = {
     totalTokens: 'req:def',
     unit: 'req:def',
   },
+};
+
+/**
+ * Each model's primary key, by column name.
+ *
+ * `export.ts` pages every backup on a single `id` column. A composite key appears here as both
+ * names, so it cannot be mistaken for the single-column case.
+ */
+export const MODEL_KEYS: ModelKeys = {
+  AdminApiToken: ['id'],
+  AdminAuth: ['id'],
+  AdminInvite: ['id'],
+  AdminRecoveryCode: ['id'],
+  AdminUser: ['id'],
+  AiModelRegistry: ['id'],
+  AppSettings: ['id'],
+  AuditLog: ['id'],
+  Backup: ['id'],
+  BackupChunk: ['id'],
+  DomainAlias: ['id'],
+  NexusKey: ['id'],
+  NexusProvider: ['id'],
+  NexusTeamKey: ['id'],
+  Notification: ['id'],
+  SsoProvider: ['id'],
+  Team: ['id'],
+  TokenUsage: ['id'],
 };

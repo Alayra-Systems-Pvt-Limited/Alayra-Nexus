@@ -53,7 +53,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { ColumnFacts } from '../../src/lib/backup/columnFactsTypes';
+import type { ColumnFacts, ModelKeys } from '../../src/lib/backup/columnFactsTypes';
 
 const ROOT   = resolve(__dirname, '..', '..');
 const SOURCE = resolve(ROOT, 'prisma', 'schema.prisma');
@@ -170,6 +170,50 @@ export function parseColumnFacts(schema: string): ColumnFacts {
   return out;
 }
 
+/**
+ * Which column or columns are each model's primary key.
+ *
+ * Prisma 7 removed `isId` from the DMMF field and `primaryKey` from the model, the same way it
+ * removed `isRequired`, so modelOrder.test.ts could no longer ask. What that test guards is real and
+ * specific: `export.ts` pages every backup with `orderBy: { id: 'asc' }` and `cursor: { id }`, so a
+ * model keyed on anything else — a differently-named column, or a composite `@@id([a, b])` — would
+ * pass every other check, ship, and then fail at the first backup an operator took.
+ *
+ * A composite key yields both names, so it cannot be mistaken for the single-column case: `[]`,
+ * `['id']` and `['teamId', 'day']` are three visibly different answers.
+ */
+export function parseModelKeys(schema: string): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  let model: string | null = null;
+
+  for (const raw of logicalLines(stripComments(schema))) {
+    const line = raw.trim();
+    if (line === '') continue;
+
+    if (model === null) {
+      const head = /^model\s+([A-Za-z0-9_]+)\s*\{/.exec(line);
+      if (head) { model = head[1]; out[model] = []; }
+      continue;
+    }
+
+    if (line.startsWith('}')) { model = null; continue; }
+
+    // `@@id([teamId, day])` — a block attribute, and the case a field-line reader cannot see at all.
+    const composite = /^@@id\s*\(\s*\[([^\]]*)\]/.exec(line);
+    if (composite) {
+      out[model] = composite[1].split(',').map((s) => s.trim()).filter(Boolean);
+      continue;
+    }
+    if (line.startsWith('@@')) continue;
+
+    // `@id` on a field. Anchored to a word boundary so `@@id` above and `@ids` below both miss.
+    const field = /^([A-Za-z0-9_]+)\s+[A-Za-z0-9_]+(?:\[\])?\??(.*)$/.exec(line);
+    if (field && /@id\b/.test(field[2])) out[model].push(field[1]);
+  }
+
+  return out;
+}
+
 const BANNER = `/*
  * Copyright (c) 2026 Alayra Systems Pvt. Limited (Pakistan)
  * & Alayra Systems LLC (USA).
@@ -194,12 +238,21 @@ const BANNER = `/*
 //
 // Why these two facts are not read from Prisma: scripts/db/columnFacts.ts explains it in full.
 
-import type { ColumnFacts } from './columnFactsTypes';
+import type { ColumnFacts, ModelKeys } from './columnFactsTypes';
 
 export const COLUMN_FACTS: ColumnFacts = `;
 
+const KEYS_BANNER = `
+/**
+ * Each model's primary key, by column name.
+ *
+ * \`export.ts\` pages every backup on a single \`id\` column. A composite key appears here as both
+ * names, so it cannot be mistaken for the single-column case.
+ */
+export const MODEL_KEYS: ModelKeys = `;
+
 /** The artifact, as source text. LF throughout — see the note in main(). */
-export function renderModule(facts: ColumnFacts): string {
+export function renderModule(facts: ColumnFacts, keys: ModelKeys): string {
   const models = Object.keys(facts).sort();
   const body = models.map((model) => {
     const columns = Object.keys(facts[model]).sort();
@@ -207,7 +260,11 @@ export function renderModule(facts: ColumnFacts): string {
     return `  ${model}: {\n${entries}\n  },`;
   }).join('\n');
 
-  return `${BANNER}{\n${body}\n};\n`;
+  const keyBody = Object.keys(keys).sort()
+    .map((m) => `  ${m}: [${keys[m].map((k) => `'${k}'`).join(', ')}],`)
+    .join('\n');
+
+  return `${BANNER}{\n${body}\n};\n${KEYS_BANNER}{\n${keyBody}\n};\n`;
 }
 
 /**
@@ -222,7 +279,8 @@ const normalize = (s: string): string => s.replace(/\r\n/g, '\n');
 
 function main(): void {
   const check    = process.argv.includes('--check');
-  const expected = renderModule(parseColumnFacts(readFileSync(SOURCE, 'utf8')));
+  const schema   = readFileSync(SOURCE, 'utf8');
+  const expected = renderModule(parseColumnFacts(schema), parseModelKeys(schema));
 
   if (check) {
     let actual = '';

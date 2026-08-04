@@ -81,7 +81,11 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   // 2. Fresh state per stack: empty database, all migrations applied, empty Redis DB.
   for (const s of STACKS) {
     run(
-      'npx prisma migrate reset --force --skip-generate --skip-seed',
+      // Neither `--skip-generate` nor `--skip-seed` survives Prisma 7: both behaviours were removed
+      // from `migrate reset`, so the flags that suppressed them are now hard errors. What they
+      // guaranteed still holds — this resets and migrates, and does not regenerate a client or run
+      // a seed over the empty database the next assertions depend on.
+      'npx prisma migrate reset --force',
       { ...process.env, DATABASE_URL: s.databaseUrl },
       `resetting ${s.name} database (${s.databaseUrl.split('/').pop()})`,
     );

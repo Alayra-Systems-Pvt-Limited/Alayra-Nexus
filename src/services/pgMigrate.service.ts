@@ -47,6 +47,7 @@
 // the old gateway is still there and still works — which is what makes this safe to attempt.
 
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { prisma, dbEngine } from '../lib/prisma';
 import { beginMaintenance, reportProgress, endMaintenance } from './maintenance.service';
 import { migrateDeploy, scrubUrls } from '../lib/prismaCli';
@@ -110,9 +111,16 @@ export interface TargetReport {
   problem: string | null;
 }
 
-/** Open a client against a database that is not this gateway's own. Caller must disconnect. */
+/**
+ * Open a client against a database that is not this gateway's own. Caller must disconnect.
+ *
+ * The URL arrives from the operator at request time, which is the whole point of this module and
+ * the reason Prisma 7's driver adapters matter here: `url` is no longer a datasource property, so a
+ * connection string that is not known until someone types it has to be handed to an adapter. The
+ * pg adapter is pure JavaScript, so nothing about this path is platform-dependent.
+ */
 function openTarget(url: string): PrismaClient {
-  return new PrismaClient({ datasources: { db: { url } }, log: ['error'] });
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString: url }), log: ['error'] });
 }
 
 /**

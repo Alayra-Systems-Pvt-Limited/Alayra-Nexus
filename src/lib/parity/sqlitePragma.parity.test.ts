@@ -28,6 +28,7 @@ import { mkdtempSync, rmSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { configureSqlite } from '../sqlitePragma';
+import { openSqlite } from './harness';
 
 const dirs: string[] = [];
 
@@ -38,9 +39,7 @@ function newDir(): string {
 }
 
 function openAt(file: string): PrismaClient {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require('.prisma/client-sqlite') as { PrismaClient: new (o?: unknown) => PrismaClient };
-  return new mod.PrismaClient({ datasources: { db: { url: `file:${file}` } }, log: ['error'] });
+  return openSqlite(`file:${file}`);
 }
 
 /** A database with one table, so there is something to write and something to read. */

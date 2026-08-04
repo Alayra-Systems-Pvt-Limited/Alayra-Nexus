@@ -56,6 +56,63 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Changed
 
+- **Prisma 6 → 7.** The gateway now runs on the current major. Nothing about how it behaves changes,
+  and no configuration a user or a deployment holds needs editing — `DATABASE_URL` is still the only
+  thing that decides which database is used, and it is still read from the environment.
+
+  What moved is internal. Prisma 7 takes its connection through a **driver adapter** rather than a
+  `datasources` option, so the Postgres client is opened with `@prisma/adapter-pg` and the SQLite one
+  with `@prisma/adapter-better-sqlite3`. The SQLite adapter is a native addon and is loaded lazily,
+  for the same reason its client always was: a Postgres deployment must not fail to start because a
+  binary it will never call was built for another platform. `url` also left the datasource block, so
+  the CLI reads it from a new `prisma.config.ts` — which reads the environment, because this
+  repository has two schemas and a URL written into a file would be right for one and wrong for the
+  other.
+
+  Three things Prisma 7 removed had load-bearing uses here, and each is worth naming because two of
+  them fail QUIETLY:
+
+  - **The DMMF no longer reports `isRequired`, `hasDefaultValue`, `isId`, `isUnique` or
+    `relationOnDelete`.** The backup fingerprint that depended on the first two is dealt with above.
+    The engine-parity suite depended on the rest, and did not fail — both clients lost the same
+    properties, so five assertions kept comparing and matching while checking nothing at all. They
+    now read the schemas directly, and a new test asserts that every DMMF property the file still
+    reads is actually present, so the next removal fails one obvious test instead of hollowing the
+    suite out again.
+
+  - **The generated client has no default location.** Adding an explicit one is the obvious fix and
+    is wrong: an explicit path is resolved against the schema file, which inside an installed package
+    means the client lands in that package's own `node_modules` while `@prisma/client` — hoisted to
+    the top level by npm — looks somewhere else entirely. That shipped as
+    `Cannot find module '.prisma/client/default'` on `npx @alayrasystems/nexus`, and was caught by
+    the packaging smoke test rather than by a user. Leaving the output unset is what is correct:
+    Prisma then writes into whichever `@prisma/client` node resolution finds, which is the only rule
+    that survives hoisting.
+
+  - **`prisma migrate diff --to-schema-datamodel` is now `--to-schema`.** This one fails loudly, as
+    do `db push --skip-generate` and `migrate reset --skip-generate --skip-seed`, whose behaviours
+    were removed along with the flags.
+
+  Two more differences were found by running the engine-parity suites against a real PostgreSQL and
+  a real SQLite, and neither would have been visible any other way:
+
+  - **SQLite timestamps keep their existing storage format.** Prisma 7's SQLite adapter writes a
+    `DateTime` as ISO text by default; every gateway that has ever run standalone holds integer epoch
+    milliseconds. Nothing converts on upgrade, so the default would have started appending rows in
+    the second format to columns full of the first — and SQLite permits that. The damage is silent:
+    the dashboard's day buckets divide the stored value by 1000, so every row written after the
+    upgrade would have landed in **1970**, and "last 7 days" filters would have been wrong in a
+    different way again, because SQLite orders by storage class before value. The old format is
+    pinned, so existing files stay correct and an upgrade stays a binary swap.
+
+  - **The restore timeout is now enforced by this gateway rather than by Prisma.** A restore runs in
+    one transaction with a time budget, and exceeding it is reported as "this needs longer" rather
+    than as a damaged file. Prisma 7's PostgreSQL adapter still honours that budget; its SQLite
+    adapter does not — measured, a transaction running 411 ms completed under a 1 ms budget, with no
+    warning. That is the whole guarantee gone on standalone, which is the mode with no operator
+    watching. The deadline is now checked on the wall clock inside the restore loop, so it holds the
+    same way on both engines. Rollback is unchanged.
+
 - **Prisma 5 → 6.** The ORM this gateway runs on had been on 5.x, which is no longer the supported
   line. Nothing about the gateway behaves differently — the upgrade needed no code change at all, and
   the full suite, the browser end-to-end run and the standalone smoke test all pass unmodified. Every

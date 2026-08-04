@@ -25,3 +25,11 @@ export type ColumnFact = `${'req' | 'opt'}:${'def' | 'nodef'}`;
 
 /** Every model's columns, keyed by the model name the DMMF uses. */
 export type ColumnFacts = Record<string, Record<string, ColumnFact>>;
+
+/**
+ * Each model's primary-key columns.
+ *
+ * A list rather than a single name so that a composite `@@id([a, b])` is representable. Prisma 7
+ * removed both `isId` and `primaryKey` from the DMMF, so this is the only place left that knows.
+ */
+export type ModelKeys = Record<string, string[]>;

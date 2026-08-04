@@ -18,11 +18,12 @@
 // Needs no PostgreSQL, so unlike the other parity files it always runs.
 
 import { describe, it, expect, afterAll } from 'vitest';
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureSqliteSchema } from '../sqliteBootstrap';
+import { openSqlite } from './harness';
 
 const DDL_PATH = resolve(__dirname, '..', '..', '..', 'prisma', 'sqlite-schema.sql');
 const dirs: string[] = [];
@@ -31,9 +32,7 @@ const dirs: string[] = [];
 function emptyDatabase(): PrismaClient {
   const dir = mkdtempSync(join(tmpdir(), 'nexus-boot-'));
   dirs.push(dir);
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Client = (require('.prisma/client-sqlite') as { PrismaClient: new (o?: unknown) => PrismaClient }).PrismaClient;
-  return new Client({ datasources: { db: { url: `file:${join(dir, 'nexus.db')}` } }, log: ['error'] });
+  return openSqlite(`file:${join(dir, 'nexus.db')}`);
 }
 
 afterAll(() => {

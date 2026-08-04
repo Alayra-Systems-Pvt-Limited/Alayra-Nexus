@@ -35,9 +35,11 @@
 // gateway end to end is what actually proves this, and that is S2.4.
 
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { resolveMode, resolveDatabaseUrl, type DbEngine } from './mode';
+import { SQLITE_TIMESTAMP_FORMAT, type SqliteAdapterOptions } from './sqliteTimestamp';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -68,14 +70,35 @@ function constructSqlite(): PrismaClient {
   //
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require(SQLITE_CLIENT_SPECIFIER) as { PrismaClient: new (opts?: unknown) => unknown };
-  return new mod.PrismaClient({ log, datasources: { db: { url } } }) as PrismaClient;
+
+  // The adapter is required lazily for the SAME reason, and it matters more here than for the
+  // client: this one is a native addon. A Postgres deployment must never load it, so that a machine
+  // where the binary is missing or built for another ABI still starts and serves — it is not on
+  // that gateway's path at all.
+  //
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3') as {
+    PrismaBetterSqlite3: new (opts: { url: string }, options?: SqliteAdapterOptions) => unknown;
+  };
+
+  return new mod.PrismaClient({
+    log,
+    adapter: new PrismaBetterSqlite3({ url }, { timestampFormat: SQLITE_TIMESTAMP_FORMAT }),
+  }) as PrismaClient;
 }
 
 function construct(): { client: PrismaClient; engine: DbEngine } {
   const engine = resolveMode().db;
-  return engine === 'sqlite'
-    ? { client: constructSqlite(), engine }
-    : { client: new PrismaClient({ log }), engine };
+  if (engine === 'sqlite') return { client: constructSqlite(), engine };
+
+  // Prisma 7 removed `url` from the datasource block, so the connection string is no longer picked
+  // up implicitly — it has to be handed to an adapter. `resolveDatabaseUrl()` returns DATABASE_URL
+  // whenever it is set, which is exactly what this branch read before, so a gateway already running
+  // on Postgres cannot tell the difference.
+  return {
+    client: new PrismaClient({ log, adapter: new PrismaPg({ connectionString: resolveDatabaseUrl() }) }),
+    engine,
+  };
 }
 
 const built = construct();
