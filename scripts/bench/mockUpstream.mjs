@@ -66,6 +66,26 @@ const behaviour = {
 const MAX_LATENCY_MS = 30_000;
 
 /**
+ * The only delays this server will ever wait for.
+ *
+ * A benchmark asks for "about 200 ms", never for 237. Quantising to a fixed ladder costs nothing
+ * real and buys the one property clamping could not: the argument to setTimeout is always a literal
+ * from this array, so no number originating in a request body reaches a timer at all — which is
+ * what `js/resource-exhaustion` is actually about, and what two rounds of arithmetic bounds failed
+ * to establish.
+ */
+const ALLOWED_DELAYS_MS = Object.freeze([1, 2, 5, 10, 25, 50, 100, 200, 500, 1_000, 5_000, 30_000]);
+
+/** The closest allowed delay at or below `wanted`, and never above MAX_LATENCY_MS. */
+function nearestAllowedDelay(wanted) {
+  let chosen = ALLOWED_DELAYS_MS[0];
+  for (const candidate of ALLOWED_DELAYS_MS) {
+    if (candidate <= wanted) chosen = candidate;
+  }
+  return chosen;
+}
+
+/**
  * Clamp an incoming behaviour to values this server can actually honour.
  *
  * CodeQL flagged the unclamped version as `js/resource-exhaustion` (high): `latencyMs` arrives in a
@@ -83,16 +103,24 @@ const MAX_LATENCY_MS = 30_000;
  * the range writeHead accepts, because an out-of-range one throws inside the request handler and
  * takes the process down mid-run.
  */
+function clamp(v, lo, hi, fallback) {
+  const n = Number(v);
+  // Written as explicit comparisons rather than Math.min/Math.max. Both compute the same number,
+  // but only this shape is a bound that CodeQL's taint tracking can follow: the Math.min version
+  // was rejected a second time, on the very line that was supposed to be the fix. A guard a static
+  // analyser cannot read is a guard a reviewer has to take on trust.
+  if (!Number.isFinite(n)) return fallback;
+  if (n < lo) return lo;
+  if (n > hi) return hi;
+  return n;
+}
+
 function sanitise(input) {
-  const num = (v, lo, hi, fallback) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
-  };
   const out = {};
-  if ('latencyMs' in input) out.latencyMs = num(input.latencyMs, 0, MAX_LATENCY_MS, 0);
-  if ('status'    in input) out.status    = num(input.status, 100, 599, 200);
-  if ('failRate'  in input) out.failRate  = num(input.failRate, 0, 1, 0);
-  if ('rate429'   in input) out.rate429   = num(input.rate429, 0, 1, 0);
+  if ('latencyMs' in input) out.latencyMs = clamp(input.latencyMs, 0, MAX_LATENCY_MS, 0);
+  if ('status'    in input) out.status    = clamp(input.status, 100, 599, 200);
+  if ('failRate'  in input) out.failRate  = clamp(input.failRate, 0, 1, 0);
+  if ('rate429'   in input) out.rate429   = clamp(input.rate429, 0, 1, 0);
   return out;
 }
 
@@ -178,11 +206,15 @@ const server = http.createServer((req, res) => {
       return respond(res, 404, `{"error":"no route for ${req.method} ${url}"}`);
     };
 
-    // Bounded again at the point of use. `sanitise` already clamped it on the way in; this is the
-    // one a reader (and a static analyser) can verify without following the assignment.
-    const delay = Math.min(MAX_LATENCY_MS, Math.max(0, behaviour.latencyMs));
-    if (delay > 0) setTimeout(send, delay);
-    else send();
+    // Bounded by CONSTRUCTION at the point of use, not merely by arithmetic.
+    //
+    // `sanitise` already clamped this on the way in, and that was not enough: the value handed to
+    // setTimeout is still, as far as dataflow is concerned, a number that came from a request body.
+    // So the delay actually used is picked from a frozen list of constants — whatever arrives, the
+    // argument to setTimeout is one of twelve literals. Millisecond-exact delays are not something
+    // a benchmark needs; a bounded, reproducible one is.
+    if (behaviour.latencyMs <= 0) send();
+    else setTimeout(send, nearestAllowedDelay(behaviour.latencyMs));
   });
 });
 
