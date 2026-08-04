@@ -80,6 +80,14 @@ vi.mock('./model.service',   () => ({
   getModelRegistry:    vi.fn(async () => state.registry),
   activeProviderSlugs: vi.fn(async () => new Set(state.providers.map(p => p.provider as string))),
 }));
+// Routing reads its pools through the provider cache rather than querying per request. Mocked here
+// for the same reason model.service is: this suite is about SELECTION, and a real cache would carry
+// one test's providers into the next (which is exactly what it did, and how these four tests caught
+// the change). providerCache.service.test.ts covers the caching itself.
+vi.mock('./providerCache.service', () => ({
+  getActiveProviders:      vi.fn(async () => state.providers),
+  invalidateProviderCache: vi.fn(async () => {}),
+}));
 vi.mock('./ssrf.service',    () => ({ getSsrfPolicy: vi.fn(async () => ({})) }));
 vi.mock('./notifications.service', () => ({ notify: vi.fn(async () => {}) }));
 

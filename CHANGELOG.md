@@ -11,6 +11,21 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **The active provider pools are cached, removing a query from every routed request.** Routing
+  asked the database which pools exist on every single request, and the answer changes only when an
+  operator adds, edits or removes one. It is now read once and served from the shared KV, with every
+  mutation path invalidating explicitly — and because invalidation is a `del` against that shared
+  KV, a scaled deployment invalidates every instance rather than only the one that took the write.
+
+  Only the scalar columns routing reads are cached. That keeps the payload small, but the reason is
+  correctness: the value round-trips through JSON, and `JSON.parse` turns a `DateTime` into a string
+  while TypeScript goes on calling it a `Date` — code that then called `.getTime()` would compile
+  and throw. Not selecting `createdAt` makes that impossible rather than merely unlikely.
+
+  Queries per chat completion fall from 4.2 to 3.2. The remaining provider read turned out to belong
+  to a different caller than expected — sticky session routing, which reaches its pool through an
+  `include` and short-circuits before the cached path is used.
+
 - **A CPU profiler and a query counter for the gateway, and the answer they gave.** The first
   benchmark established that a request costs about 3 ms of CPU and that throughput barely moves
   between 1 and 32 concurrent workers — one saturated thread. It could not say which code was
