@@ -266,3 +266,78 @@ jobs:
           name: playwright-report
           path: e2e/playwright-report/
           retention-days: 7
+
+  # ── The container, built and actually started (2026-08-04) ────────────────────────────────────
+  #
+  # The image is published by release.yml, which until now was also the ONLY thing that built it. A
+  # Dockerfile mistake therefore passed every check here, merged, and was discovered at release time
+  # — or, once, after a deployment had already restart-looped on it.
+  #
+  # That failure is the shape of this job. Prisma 7 moved the connection string out of
+  # prisma/schema.prisma (copied into the image) and into prisma.config.ts (not copied), so
+  # `prisma migrate deploy` had nowhere to read a URL from. It was missed twice over: no PR built the
+  # image, and the by-hand check that WAS done started the container without a DATABASE_URL — which
+  # skips the migration entirely (see CMD), exercising SQLite end to end while never touching the
+  # Postgres path that was broken.
+  #
+  # So building is not enough, and this STARTS it against a real database. `migrate deploy` running
+  # for real is the assertion; /ready answering is the proof it survived it.
+  #
+  # Nothing is pushed. Publishing stays in release.yml, which alone holds the registry credentials.
+  docker:
+    name: Container (build + run on Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus
+          POSTGRES_DB: nexus
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nexus"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+      # load, not push: the image has to exist locally for the run below. The GitHub Actions cache
+      # keeps this from rebuilding the whole toolchain on every pull request.
+      - name: Build the image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: nexus:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # The real thing: the migration this image runs at startup, against a real PostgreSQL.
+      # `--network host` so the container reaches the service container on localhost.
+      - name: Start it on PostgreSQL and wait for /ready
+        run: |
+          docker run -d --name nexus --network host \
+            -e DATABASE_URL="postgresql://nexus:nexus@127.0.0.1:5432/nexus" \
+            -e MASTER_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
+            nexus:ci
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3000/ready; then
+              echo "ready after ${i}s"; exit 0
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' nexus)" != "true" ]; then
+              echo "::error::the container exited before answering"; docker logs nexus; exit 1
+            fi
+            sleep 1
+          done
+          echo "::error::the container never answered /ready"; docker logs nexus; exit 1
+      # Proves the migration RAN, rather than the gateway having started despite skipping it — which
+      # is exactly what an empty DATABASE_URL would have done, silently.
+      - name: Prove the migration actually ran
+        run: |
+          docker logs nexus 2>&1 | grep -q "migrations have been successfully applied" || {
+            echo "::error::migrate deploy did not report success"; docker logs nexus; exit 1; }
+      - name: Show the logs when something failed
+        if: failure()
+        run: docker logs nexus || true
