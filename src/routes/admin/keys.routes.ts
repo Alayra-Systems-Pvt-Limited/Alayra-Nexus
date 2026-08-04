@@ -23,6 +23,7 @@ import { randomUUID } from 'crypto';
 import { redis }               from '../../lib/redis';
 import { testKey, banKey, coolKey } from '../../services/nexus.service';
 import { forgetLastUsed }     from '../../lib/lastUsed';
+import { forgetKeyRow }       from '../../lib/keyRowCache';
 import { z }                   from 'zod';
 import { adminGuard, adminWriteGuard } from './guard';
 import { ADMIN_READ_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
@@ -115,12 +116,16 @@ export default async function adminKeysRoutes(fastify: FastifyInstance) {
       data.maskedKey    = maskKey(body.apiKey);
     }
     const key = await prisma.nexusKey.update({ where: { id }, data });
+    // Limits, ownership and the credential itself all live on this row and are all read by
+    // routing, so an edit has to drop the cached copy rather than wait out its second.
+    forgetKeyRow(id);
     return reply.send({ key: { ...key, encryptedKey: undefined } });
   });
 
   fastify.delete('/admin/keys/:id', adminWriteGuard, async (request, reply) => {
     const { id } = request.params as { id: string };
     await prisma.nexusKey.delete({ where: { id } });
+    forgetKeyRow(id);
     forgetLastUsed(id);
     return reply.send({ success: true });
   });
@@ -136,6 +141,7 @@ export default async function adminKeysRoutes(fastify: FastifyInstance) {
     // Clear the Redis breaker state too, or the key would stay gated after unban.
     await breakerReset(id);
     await prisma.nexusKey.update({ where: { id }, data: { status: 'active', coolingUntil: null } });
+    forgetKeyRow(id);
     return reply.send({ success: true });
   });
 

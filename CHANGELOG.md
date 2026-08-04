@@ -11,6 +11,30 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **The pinned key's row is cached for one second, taking the last query off the request path.**
+  This one was held back from the previous change on purpose, because it is not the same kind of
+  cache: key rows change underneath us at runtime. The breaker cools a key on a 429, bans it after
+  repeated auth failure, and an admin can rotate its credential or hand it to a team. Three fields
+  are ones we would rather not be wrong about even briefly — `status`, `ownerTeamId` (BYOK
+  isolation) and `encryptedKey`.
+
+  What makes it safe is that the benefit does not need a long TTL. A key serving 400 requests a
+  second is read once instead of four hundred times at a one-second TTL — about 99.75% of the
+  queries gone — and a longer window buys almost nothing while costing exactly how wrong we can be.
+  One second is also the *worst* case: every write path invalidates explicitly, so within a process
+  a ban or a rotation takes effect immediately. The TTL covers only what invalidation cannot reach —
+  another instance's write, a change made directly in the database, a restore.
+
+  Two live checks are untouched and bound the risk further: the breaker gate is read from the KV,
+  not from this row, and RPM/TPM admission is atomic in the KV. A stale row cannot pass either.
+  `KEY_ROW_CACHE_TTL_MS=0` disables the cache entirely.
+
+  The row is also read with a projection now instead of every column.
+
+  **Across the three changes: 4.2 queries per chat completion down to 0.3, median overhead from
+  3.02 ms to 1.60 ms, and throughput from 237/329/336 to 390/599/671 RPS at 1/8/32 workers** — a
+  doubling under concurrency.
+
 - **Sticky routing stopped joining to the provider table, and `lastUsedAt` stopped being written on
   every request.** Two more per-request queries gone. Sticky session routing — the common path once
   a conversation is under way — reached its pool through an `include`, which Prisma issues as a

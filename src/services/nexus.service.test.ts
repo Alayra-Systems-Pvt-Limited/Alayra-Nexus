@@ -98,11 +98,12 @@ vi.mock('./providerCache.service', () => ({
 vi.mock('./ssrf.service',    () => ({ getSsrfPolicy: vi.fn(async () => ({})) }));
 vi.mock('./notifications.service', () => ({ notify: vi.fn(async () => {}) }));
 
-import { discoverBestPool, SHARED_SCOPE, reportTierExhausted } from './nexus.service';
+import { discoverBestPool, SHARED_SCOPE, reportTierExhausted, banKey } from './nexus.service';
 import { notify } from './notifications.service';
 import { getStickyKeyId } from '../lib/sticky';
 import { admitKey, admitUser } from '../lib/admission';
 import { forgetLastUsed } from '../lib/lastUsed';
+import { forgetKeyRow } from '../lib/keyRowCache';
 import type { RoutingScope } from '../lib/scope';
 
 const scopeFor = (teamId: string, fallback: boolean): RoutingScope =>
@@ -113,6 +114,7 @@ beforeEach(() => {
   // The debounce keeps module-level state, so without this a key written in one test would stay
   // suppressed in the next and the suite would depend on execution order.
   forgetLastUsed();
+  forgetKeyRow();
   vi.mocked(admitKey).mockResolvedValue(true);
   vi.mocked(admitUser).mockResolvedValue(true);
   vi.mocked(getStickyKeyId).mockResolvedValue(null);
@@ -302,6 +304,24 @@ describe('discoverBestPool — sticky pins are re-authorized against scope', () 
     vi.mocked(getStickyKeyId).mockResolvedValue('shared-1');
     for (let i = 0; i < 5; i++) await discoverBestPool(10, 'sess', SHARED_SCOPE);
     expect(prismaMock.nexusKey.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the pinned key from the database once for a burst, not once per request', async () => {
+    vi.mocked(getStickyKeyId).mockResolvedValue('shared-1');
+    for (let i = 0; i < 5; i++) await discoverBestPool(10, 'sess', SHARED_SCOPE);
+    expect(prismaMock.nexusKey.findUnique).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-reads the key immediately after it is banned, without waiting out the TTL', async () => {
+    // The property the whole cache stands on. A banned key's credential may already be revoked
+    // upstream, so "it will refresh in a second" is not good enough -- banKey has to drop it.
+    vi.mocked(getStickyKeyId).mockResolvedValue('shared-1');
+    await discoverBestPool(10, 'sess', SHARED_SCOPE);
+    expect(prismaMock.nexusKey.findUnique).toHaveBeenCalledTimes(1);
+
+    await banKey('shared-1');
+    await discoverBestPool(10, 'sess', SHARED_SCOPE);
+    expect(prismaMock.nexusKey.findUnique).toHaveBeenCalledTimes(2);
   });
 
   it('refuses a pin to a key whose pool was deactivated, and falls through', async () => {

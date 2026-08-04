@@ -24,6 +24,7 @@ import { getCostWeight }     from './routing.service';
 import { getModelRegistry, activeProviderSlugs }  from './model.service';
 import { getActiveProviders }  from './providerCache.service';
 import { shouldWriteLastUsed, forgetLastUsed } from '../lib/lastUsed';
+import { getKeyRow, setKeyRow, forgetKeyRow, type CachedKeyRow } from '../lib/keyRowCache';
 import { selectModels, type SelectableModel, type Capability } from '../lib/modelSelect';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
 import { safeFetch }        from '../lib/safeFetch';
@@ -82,6 +83,15 @@ type ProviderRow = {
 // The model a route will serve. On the model-first path it comes from the registry; on
 // the legacy fallback it is synthesised from the pool's own tier + preferredModel.
 type RouteModel = { modelString: string; modelId: string | null; tier: string };
+
+/**
+ * The columns sticky routing reads from a key. Kept in step with CachedKeyRow by the
+ * `satisfies` below, so adding a field to one without the other fails to compile.
+ */
+const KEY_ROW_SELECT = {
+  id: true, providerId: true, status: true, ownerTeamId: true,
+  maxUsers: true, rpmLimit: true, tpmLimit: true, encryptedKey: true,
+} satisfies Record<keyof CachedKeyRow, true>;
 
 function buildRoute(
   key: { id: string; encryptedKey: string; ownerTeamId: string | null },
@@ -183,7 +193,15 @@ async function tryStickyKey(
   pickModel: (provider: ProviderRow) => RouteModel | null,
   userId: string | null,
 ): Promise<NexusRoute | null> {
-  const key = await prisma.nexusKey.findUnique({ where: { id: keyId } });
+  // Read through a one-second cache. `findUnique` returned every column of the row -- label,
+  // maskedKey, both timestamps -- where routing reads eight fields, so the projection is
+  // narrowed here too: less to decode on a miss, less to hold on a hit. See lib/keyRowCache.ts
+  // for why one second is both enough and the worst case.
+  let key = getKeyRow(keyId);
+  if (key === undefined) {
+    key = await prisma.nexusKey.findUnique({ where: { id: keyId }, select: KEY_ROW_SELECT });
+    setKeyRow(keyId, key);
+  }
   if (!key || key.status === 'banned') return null;
 
   // The pool comes from the provider cache rather than an `include`. Prisma issues an include as a
@@ -425,6 +443,7 @@ export async function getNextCooldownSeconds(): Promise<number> {
 
 export async function banKey(keyId: string): Promise<void> {
   await prisma.nexusKey.update({ where: { id: keyId }, data: { status: 'banned' } });
+  forgetKeyRow(keyId);
   // A banned key is never routed to again, so its debounce entry is dead weight. Dropping it here
   // is what keeps that map bounded by the keys actually in service rather than by every key this
   // process has ever seen.
@@ -440,6 +459,7 @@ export async function coolKey(keyId: string, seconds = 60): Promise<void> {
   const until = new Date(Date.now() + seconds * 1000);
   await breaker.onRateLimit(keyId, seconds);
   await prisma.nexusKey.update({ where: { id: keyId }, data: { status: 'cooling', coolingUntil: until } });
+  forgetKeyRow(keyId);
 }
 
 // ── Breaker outcome reporters ─────────────────────────────────────────────────
@@ -458,6 +478,7 @@ export async function reportSuccess(keyId: string, wasProbe: boolean): Promise<v
       where: { id: keyId, status: 'cooling' },
       data:  { status: 'active', coolingUntil: null },
     });
+    forgetKeyRow(keyId);
   }
 }
 
@@ -472,6 +493,7 @@ export async function reportServerFailure(keyId: string, wasProbe: boolean): Pro
   if (opened) {
     const until = new Date(Date.now() + cooldownSeconds * 1000);
     await prisma.nexusKey.update({ where: { id: keyId }, data: { status: 'cooling', coolingUntil: until } });
+  forgetKeyRow(keyId);
     void alertKeyEvent(keyId, 'opened', cooldownSeconds).catch(() => {});
   }
 }
