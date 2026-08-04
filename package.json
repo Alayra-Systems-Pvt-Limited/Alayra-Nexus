@@ -65,7 +65,8 @@
     "backup:fixture": "tsx scripts/backup/makeFixture.ts",
     "smoke:npx": "tsx scripts/smoke/npx.ts",
     "postinstall": "node scripts/npm/postinstall.js",
-    "prepack": "node scripts/npm/prepack.js"
+    "prepack": "node scripts/npm/prepack.js",
+    "db:column-facts": "tsx scripts/db/columnFacts.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",
