@@ -35,6 +35,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PrismaClient } from '@prisma/client';
+import { SQLITE_TIMESTAMP_FORMAT, type SqliteAdapterOptions } from '../../src/lib/sqliteTimestamp';
 
 const ROWS = 120_000;
 const READERS = 6;
@@ -49,9 +50,14 @@ function openAt(file: string): PrismaClient {
   const mod = require('.prisma/client-sqlite') as { PrismaClient: new (o?: unknown) => PrismaClient };
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3') as {
-    PrismaBetterSqlite3: new (opts: { url: string }) => unknown;
+    PrismaBetterSqlite3: new (opts: { url: string }, options?: SqliteAdapterOptions) => unknown;
   };
-  return new mod.PrismaClient({ adapter: new PrismaBetterSqlite3({ url: `file:${file}` }), log: [] });
+  // The gateway's storage format, not the adapter default: a benchmark that wrote timestamps in a
+  // shape the product never writes would be measuring a different table. See src/lib/prisma.ts.
+  return new mod.PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: `file:${file}` }, { timestampFormat: SQLITE_TIMESTAMP_FORMAT }),
+    log: [],
+  });
 }
 
 async function bench(want: 'delete' | 'wal'): Promise<Result> {

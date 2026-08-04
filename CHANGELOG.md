@@ -89,7 +89,29 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
     Prisma then writes into whichever `@prisma/client` node resolution finds, which is the only rule
     that survives hoisting.
 
-  - **`prisma migrate diff --to-schema-datamodel` is now `--to-schema`.** This one fails loudly.
+  - **`prisma migrate diff --to-schema-datamodel` is now `--to-schema`.** This one fails loudly, as
+    do `db push --skip-generate` and `migrate reset --skip-generate --skip-seed`, whose behaviours
+    were removed along with the flags.
+
+  Two more differences were found by running the engine-parity suites against a real PostgreSQL and
+  a real SQLite, and neither would have been visible any other way:
+
+  - **SQLite timestamps keep their existing storage format.** Prisma 7's SQLite adapter writes a
+    `DateTime` as ISO text by default; every gateway that has ever run standalone holds integer epoch
+    milliseconds. Nothing converts on upgrade, so the default would have started appending rows in
+    the second format to columns full of the first — and SQLite permits that. The damage is silent:
+    the dashboard's day buckets divide the stored value by 1000, so every row written after the
+    upgrade would have landed in **1970**, and "last 7 days" filters would have been wrong in a
+    different way again, because SQLite orders by storage class before value. The old format is
+    pinned, so existing files stay correct and an upgrade stays a binary swap.
+
+  - **The restore timeout is now enforced by this gateway rather than by Prisma.** A restore runs in
+    one transaction with a time budget, and exceeding it is reported as "this needs longer" rather
+    than as a damaged file. Prisma 7's PostgreSQL adapter still honours that budget; its SQLite
+    adapter does not — measured, a transaction running 411 ms completed under a 1 ms budget, with no
+    warning. That is the whole guarantee gone on standalone, which is the mode with no operator
+    watching. The deadline is now checked on the wall clock inside the restore loop, so it holds the
+    same way on both engines. Rollback is unchanged.
 
 - **Prisma 5 → 6.** The ORM this gateway runs on had been on 5.x, which is no longer the supported
   line. Nothing about the gateway behaves differently — the upgrade needed no code change at all, and

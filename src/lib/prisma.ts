@@ -39,6 +39,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { resolveMode, resolveDatabaseUrl, type DbEngine } from './mode';
+import { SQLITE_TIMESTAMP_FORMAT, type SqliteAdapterOptions } from './sqliteTimestamp';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -77,10 +78,13 @@ function constructSqlite(): PrismaClient {
   //
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3') as {
-    PrismaBetterSqlite3: new (opts: { url: string }) => unknown;
+    PrismaBetterSqlite3: new (opts: { url: string }, options?: SqliteAdapterOptions) => unknown;
   };
 
-  return new mod.PrismaClient({ log, adapter: new PrismaBetterSqlite3({ url }) }) as PrismaClient;
+  return new mod.PrismaClient({
+    log,
+    adapter: new PrismaBetterSqlite3({ url }, { timestampFormat: SQLITE_TIMESTAMP_FORMAT }),
+  }) as PrismaClient;
 }
 
 function construct(): { client: PrismaClient; engine: DbEngine } {

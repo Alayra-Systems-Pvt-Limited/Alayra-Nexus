@@ -366,6 +366,23 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
   // ── The real thing, entirely inside one transaction ────────────────────────────────────────
   const timeoutMs = opts.timeoutMs ?? DEFAULT_RESTORE_TIMEOUT_MS;
 
+  // The deadline this code enforces itself, because Prisma's is no longer dependable on both
+  // engines.
+  //
+  // `$transaction(..., { timeout })` is still honoured by the PostgreSQL driver adapter — it raises
+  // P2028, caught below. The SQLite adapter does NOT honour it: measured on Prisma 7.9.1, a
+  // transaction running 411ms resolved successfully under `timeout: 1`. Nothing warns; the option is
+  // simply not applied.
+  //
+  // That is the entire restore-timeout guarantee gone on standalone, the mode where it matters most,
+  // because a standalone gateway is the one with no operator watching a dashboard. Leaving it to
+  // Prisma would mean the feature works on one engine and silently does not on the other.
+  //
+  // Checked here instead, on the wall clock, in the loop that does the work. Throwing from inside
+  // the transaction rolls it back exactly as an expired transaction would, so "changes nothing"
+  // still holds — and it now holds for the same reason on both engines rather than by delegation.
+  const deadline = Date.now() + timeoutMs;
+
   try {
     await opts.client.$transaction(async (tx) => {
     if (opts.mode === 'replace') {
@@ -394,6 +411,10 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
       const row = decodeRow(line);
       if (row.kind === 'manifest') { manifest = row as unknown as Manifest; continue; }
       if (row.kind === 'trailer') { trailer = row as unknown as Trailer; continue; }
+
+      // Per row rather than per batch: a batch holds up to a thousand rows, and a budget that can
+      // only be noticed a thousand rows late is not a budget on a restore that is already too slow.
+      if (Date.now() > deadline) throw new RestoreTimeoutError(timeoutMs);
 
       const model = String(row.model);
       if (!(model in rowsInFile)) throw new Error(`This backup contains a table this gateway does not know: "${model}".`);
@@ -434,6 +455,11 @@ export async function readBackup(opts: RestoreOptions): Promise<RestoreResult> {
   } catch (e) {
     // A restore that ran out of budget is not a damaged file, and must not be reported as one. The
     // caller needs to be able to tell "this needs longer" from "this cannot be restored at all".
+    //
+    // Two ways to arrive here now: our own deadline threw from inside the transaction, or Postgres
+    // expired it first. The first is already the right error and must pass through unchanged —
+    // wrapping it again would lose the budget it was told.
+    if (e instanceof RestoreTimeoutError) throw e;
     if (isTransactionExpired(e)) throw new RestoreTimeoutError(timeoutMs);
     throw e;
   }

@@ -47,9 +47,22 @@
 // gives `migrate`, `db push` and `db execute` the URL whenever one is set — which is always, for the
 // commands that need it.
 
+// ── The shadow database ───────────────────────────────────────────────────────────────────────
+//
+// `migrate diff --shadow-database-url` was removed in Prisma 7; the value belongs here now. It is
+// needed only by `--from-migrations`, which replays every migration into a throwaway database to
+// compare the RESULT against the schema — the check that catches migrations and schema.prisma
+// drifting apart. Read from the environment for the same reason as the URL above: only the parity
+// suite and `npm run db:drift` supply one, and neither wants it hard-coded.
+
 import 'dotenv/config';
 import { defineConfig } from 'prisma/config';
 
-const url = process.env.DATABASE_URL?.trim();
+const url         = process.env.DATABASE_URL?.trim();
+const shadowUrl   = process.env.SHADOW_DATABASE_URL?.trim();
+const datasource  = {
+  ...(url ? { url } : {}),
+  ...(shadowUrl ? { shadowDatabaseUrl: shadowUrl } : {}),
+};
 
-export default defineConfig(url ? { datasource: { url } } : {});
+export default defineConfig(Object.keys(datasource).length > 0 ? { datasource } : {});

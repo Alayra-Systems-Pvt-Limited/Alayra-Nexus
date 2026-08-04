@@ -51,10 +51,15 @@ describe.skipIf(!enabled)('the migrations and the schema agree', { timeout: PARI
         '--from-migrations', resolve(ROOT, 'prisma', 'migrations'),
         // `--to-schema`, not `--to-schema-datamodel`: Prisma 7 removed the longer spelling.
         '--to-schema', resolve(ROOT, 'prisma', 'schema.prisma'),
-        '--shadow-database-url', shadow,
         '--script',
       ],
-      { cwd: ROOT, encoding: 'utf8', shell: true, stdio: ['ignore', 'pipe', 'pipe'] },
+      // The shadow database travels in the environment now. Prisma 7 removed
+      // `--shadow-database-url` from this command; prisma.config.ts reads SHADOW_DATABASE_URL and
+      // puts it on the datasource, which is where the CLI looks for it.
+      {
+        cwd: ROOT, encoding: 'utf8', shell: true, stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, SHADOW_DATABASE_URL: shadow },
+      },
     );
 
     // Prisma writes "-- This is an empty migration." when there is nothing to do. Anything else is

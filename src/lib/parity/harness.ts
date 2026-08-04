@@ -25,6 +25,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { dayKey, toDate, type DualSql } from '../dialect';
+import { SQLITE_TIMESTAMP_FORMAT, type SqliteAdapterOptions } from '../sqliteTimestamp';
 
 const ROOT = resolve(__dirname, '..', '..', '..');
 
@@ -82,7 +83,14 @@ function createDatabase(name: string): void {
 function push(schema: string, url: string): void {
   execFileSync(
     'npx',
-    ['prisma', 'db', 'push', '--schema', join(ROOT, 'prisma', schema), '--skip-generate', '--accept-data-loss', '--force-reset'],
+    // No `--skip-generate`: Prisma 7 removed the flag because `db push` no longer generates a
+    // client at all. Passing it is a hard error rather than a no-op, so it cannot be left in "just
+    // in case".
+    //
+    // The URL still travels in the environment rather than through v7's new `--url`, deliberately.
+    // It holds a database password, and a command-line argument is readable by every other process
+    // on the machine — the same reason `--migrate` takes its destination from NEXUS_MIGRATE_TO.
+    ['prisma', 'db', 'push', '--schema', join(ROOT, 'prisma', schema), '--accept-data-loss', '--force-reset'],
     { env: { ...process.env, DATABASE_URL: url }, stdio: 'pipe', shell: true, cwd: ROOT },
   );
 }
@@ -162,9 +170,15 @@ export function openSqlite(url: string): PrismaClient {
   const SqliteClient = (require('.prisma/client-sqlite') as { PrismaClient: new (o?: unknown) => PrismaClient }).PrismaClient;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3') as {
-    PrismaBetterSqlite3: new (opts: { url: string }) => unknown;
+    PrismaBetterSqlite3: new (opts: { url: string }, options?: SqliteAdapterOptions) => unknown;
   };
-  return new SqliteClient({ adapter: new PrismaBetterSqlite3({ url }), log: ['error'] }) as PrismaClient;
+  // SQLITE_TIMESTAMP_FORMAT, not the adapter default: these suites exist to prove the two engines
+  // agree, and a harness that wrote timestamps differently from the gateway would be comparing
+  // something the product never does. See the note on that constant.
+  return new SqliteClient({
+    adapter: new PrismaBetterSqlite3({ url }, { timestampFormat: SQLITE_TIMESTAMP_FORMAT }),
+    log: ['error'],
+  }) as PrismaClient;
 }
 
 /**
