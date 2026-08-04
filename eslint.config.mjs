@@ -47,13 +47,15 @@ export default tseslint.config(
     },
   },
   {
-    // The two plain-CommonJS entry points: the published `bin` shim and the npm lifecycle script.
-    // Both are deliberately untyped JavaScript, because both run in situations where the compiled
-    // output may not exist yet — the shim reports a missing build, and the postinstall runs before
-    // anything has been built at all. `require` is not a style choice here, it is the only thing
-    // available; and `no-undef` needs Node's globals declared, which the TypeScript blocks get for
-    // free from typescript-eslint turning that rule off entirely.
-    files: ['bin/**/*.js', 'scripts/**/*.js'],
+    // The plain-CommonJS entry points: the published `bin` shim, the npm lifecycle script, and the
+    // benchmark profiler wrapper. All are deliberately untyped JavaScript, because each runs in a
+    // situation where `require` is not a style choice but the only thing available — the shim
+    // reports a missing build, the postinstall runs before anything has been built at all, and
+    // profileServer.cjs must `require` the compiled server into its OWN isolate so the inspector
+    // session it opened is attached to the code being measured. `no-undef` needs Node's globals
+    // declared, which the TypeScript blocks get for free from typescript-eslint turning that rule
+    // off entirely.
+    files: ['bin/**/*.js', 'scripts/**/*.js', 'scripts/**/*.cjs'],
     languageOptions: {
       globals: { ...globals.node },
       sourceType: 'commonjs',

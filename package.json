@@ -67,7 +67,9 @@
     "postinstall": "node scripts/npm/postinstall.js",
     "prepack": "node scripts/npm/prepack.js",
     "db:column-facts": "tsx scripts/db/columnFacts.ts",
-    "bench:overhead": "tsx scripts/bench/overhead.ts"
+    "bench:overhead": "tsx scripts/bench/overhead.ts",
+    "bench:profile": "tsx scripts/bench/profile.ts",
+    "bench:queries": "tsx scripts/bench/queryCount.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",

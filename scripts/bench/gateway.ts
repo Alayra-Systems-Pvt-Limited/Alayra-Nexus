@@ -47,7 +47,23 @@ export interface Harness {
   apiKey: string;
   /** An owner session token, for /admin reads. */
   adminToken: string;
+  /** Set only when `profile` was requested — see scripts/bench/profileServer.cjs. */
+  profileControlUrl?: string;
+  /** Everything the gateway has written to stdout/stderr so far. See scripts/bench/queryCount.ts. */
+  log: () => string;
   dispose: () => void;
+}
+
+export interface HarnessOptions {
+  /**
+   * Run the gateway under a V8 sampling profiler that can be started and stopped mid-run.
+   *
+   * The gateway is then the SAME code on the same port, but hosted by profileServer.cjs rather
+   * than launched directly. Sampling is off until asked for, so nothing here changes a normal run
+   * — but it is not free even when idle, so a profiled run's absolute numbers should never be
+   * published as the gateway's latency. Profile to find WHERE the time goes; measure separately.
+   */
+  profile?: { controlPort: number; out: string };
 }
 
 const MASTER   = 'bench-master-password';
@@ -78,7 +94,9 @@ async function waitFor(url: string, label: string, seconds = 60): Promise<void> 
  * @param mockPort    the upstream's port
  * @param gatewayPort the gateway's port
  */
-export async function startHarness(mockPort = 3210, gatewayPort = 3401): Promise<Harness> {
+export async function startHarness(
+  mockPort = 3210, gatewayPort = 3401, opts: HarnessOptions = {},
+): Promise<Harness> {
   const children: ChildProcess[] = [];
   const dir = mkdtempSync(join(tmpdir(), 'nexus-bench-'));
 
@@ -116,8 +134,18 @@ export async function startHarness(mockPort = 3210, gatewayPort = 3401): Promise
     delete env.DATABASE_URL;
     delete env.REDIS_URL;
 
+    // Either the compiled server directly, or the same server hosted inside the profiler wrapper.
+    // The wrapper `require`s dist/server.js in its own isolate, so the gateway being measured is
+    // byte-identical either way — only the process that owns it differs.
+    let entry = join(ROOT, 'dist', 'server.js');
+    if (opts.profile) {
+      entry = join(ROOT, 'scripts', 'bench', 'profileServer.cjs');
+      env.PROFILE_CONTROL_PORT = String(opts.profile.controlPort);
+      env.PROFILE_OUT = opts.profile.out;
+    }
+
     let out = '';
-    const gw = spawn(process.execPath, [join(ROOT, 'dist', 'server.js')], {
+    const gw = spawn(process.execPath, [entry], {
       cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'],
     });
     children.push(gw);
@@ -125,7 +153,9 @@ export async function startHarness(mockPort = 3210, gatewayPort = 3401): Promise
     gw.stderr?.on('data', (d) => { out += d; });
 
     const gatewayUrl = `http://127.0.0.1:${gatewayPort}`;
+    const profileControlUrl = opts.profile ? `http://127.0.0.1:${opts.profile.controlPort}` : undefined;
     await waitFor(`${gatewayUrl}/health`, 'gateway');
+    if (profileControlUrl) await waitFor(`${profileControlUrl}/health`, 'profiler control');
 
     // Printed once, on the first run, and never recoverable afterwards — so it is read from the log
     // rather than requested.
@@ -180,7 +210,7 @@ export async function startHarness(mockPort = 3210, gatewayPort = 3401): Promise
       }),
     });
 
-    return { gatewayUrl, mockUrl, apiKey, adminToken, dispose };
+    return { gatewayUrl, mockUrl, apiKey, adminToken, profileControlUrl, log: () => out, dispose };
   } catch (e) {
     dispose();
     throw e;
