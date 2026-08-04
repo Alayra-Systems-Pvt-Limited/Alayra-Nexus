@@ -34,6 +34,19 @@ export default tseslint.config(
     },
   },
   {
+    // ESM helper scripts. Same situation as the CommonJS block below — untyped JavaScript run
+    // standalone by Node, so `no-undef` needs Node's globals declared explicitly, which the
+    // TypeScript blocks get for free from typescript-eslint disabling that rule. Separate from it
+    // only because sourceType has to be 'module': a .mjs file is one whether or not eslint is told,
+    // and declaring it 'commonjs' makes every import a parse error.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { ...globals.node },
+      sourceType: 'module',
+      parserOptions: { ecmaVersion: 2022 },
+    },
+  },
+  {
     // The two plain-CommonJS entry points: the published `bin` shim and the npm lifecycle script.
     // Both are deliberately untyped JavaScript, because both run in situations where the compiled
     // output may not exist yet — the shim reports a missing build, and the postinstall runs before
