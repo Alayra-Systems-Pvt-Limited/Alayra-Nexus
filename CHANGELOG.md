@@ -168,6 +168,28 @@ protection on unauthenticated endpoints — sign-in among them — ineffective a
   Anyone who upgraded the dependency themselves — or whose scanner told them to — would have seen a
   patched version number and remained exactly as exposed.
 
+- **Two high-severity advisories cleared, and one stale pin that caused the second one.**
+  `fast-uri` goes to 3.1.5 / 4.1.2
+  ([GHSA-7p8r-x3mc-p8w7](https://github.com/advisories/GHSA-7p8r-x3mc-p8w7)) and `brace-expansion`
+  to 5.0.9 ([GHSA-rgw5-rvv9-x895](https://github.com/advisories/GHSA-rgw5-rvv9-x895)). Both arrive
+  through dependencies rather than this codebase, and both resolve at the patch level, so no
+  package here changed its declared range.
+
+  The `fast-uri` advisory is worth being precise about, because the honest answer is not the
+  alarming one. It describes a parser desync: `fast-uri` reads `\\evil.com` as a path, Node's own
+  `URL` reads it as a host, so a check written with one and enforced with the other can be walked
+  past. That only bites an application that uses `fast-uri` to decide *where a request is allowed to
+  go*. **Nexus does not.** The SSRF guard parses with `new URL()` — the same parser `fetch` and
+  undici use — so the two halves cannot disagree, and `fast-uri` is reached only through ajv's
+  schema validation of request bodies. Patched because it should be, not because this gateway was
+  reachable through it.
+
+  `brace-expansion` is the more instructive one. It was already pinned — to `>=5.0.8`, past its
+  previous advisory — and the new advisory covers 5.0.8 itself, so the pin that had fixed the last
+  problem was, verbatim, the thing carrying the next one. A floor written to clear one CVE keeps
+  looking deliberate long after it has stopped protecting anything, which is the failure mode worth
+  naming: it does not break, it just quietly stops being true.
+
 ### Fixed
 
 - **"A gateway is already running" when nothing was.** A pid is not an identity. When a gateway
