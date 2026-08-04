@@ -22,6 +22,7 @@ import { getStickyKeyId }   from '../lib/sticky';
 import { costOrder, effectivePrice } from '../lib/routing';
 import { getCostWeight }     from './routing.service';
 import { getModelRegistry, activeProviderSlugs }  from './model.service';
+import { getActiveProviders }  from './providerCache.service';
 import { selectModels, type SelectableModel, type Capability } from '../lib/modelSelect';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
 import { safeFetch }        from '../lib/safeFetch';
@@ -223,15 +224,15 @@ async function sweepModels(
   let higherTierWasExhausted = false;
   let currentTier = candidates[0]?.tier;
 
-  // Load every candidate provider's pools in one query, then group in memory, rather than a findMany
-  // per candidate (an N+1 on the routing hot path — the same provider recurs across many candidates).
+  // Load every candidate provider's pools once, then group in memory, rather than a findMany per
+  // candidate (an N+1 on the routing hot path — the same provider recurs across many candidates).
   // The global createdAt ordering is preserved within each provider group, so selection is unchanged.
-  const providerSlugs = [...new Set(candidates.map((c) => c.provider))];
-  const allPools = providerSlugs.length
-    ? await prisma.nexusProvider.findMany({
-        where:   { isActive: true, provider: { in: providerSlugs } },
-        orderBy: { createdAt: 'asc' },
-      })
+  //
+  // The pools come from the shared cache rather than a query. Filtering an already-ordered list
+  // cannot reorder it, so this selects the same pools in the same sequence the `where … in` did.
+  const providerSlugs = new Set(candidates.map((c) => c.provider));
+  const allPools = providerSlugs.size
+    ? (await getActiveProviders()).filter((p) => providerSlugs.has(p.provider))
     : [];
   const poolsByProvider = new Map<string, typeof allPools>();
   for (const pool of allPools) {
@@ -273,11 +274,11 @@ async function legacySweepTiers(
 ): Promise<NexusRoute | null> {
   let higherTierWasExhausted = false;
 
+  const active = await getActiveProviders();
+
   for (const tier of TIER_ORDER) {
-    const providers = await prisma.nexusProvider.findMany({
-      where:   { isActive: true, tier },
-      orderBy: { createdAt: 'asc' },
-    });
+    // Same rows, same createdAt order, filtered in memory — see sweepModels.
+    const providers = active.filter((p) => p.tier === tier);
 
     const ordered = costWeight > 0 ? costOrder(providers, priceOf, costWeight) : providers;
 

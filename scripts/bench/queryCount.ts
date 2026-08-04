@@ -99,6 +99,17 @@ async function main(): Promise<void> {
       return;
     }
 
+    // The grouped table says WHAT is being queried; it cannot say which call site issued it, and
+    // two different code paths against the same table look identical in it. QUERY_COUNT_RAW=1
+    // prints the statements themselves, which is how you tell a cache miss from a second caller.
+    if (process.env.QUERY_COUNT_RAW === '1') {
+      console.log('\n── raw statements ──');
+      for (const line of lines) {
+        const sql = QUERY_LINE.exec(line.trim())?.[1];
+        if (sql) console.log(`  ${sql.replace(/\s+/g, ' ').slice(0, 200)}`);
+      }
+    }
+
     console.log(`\n${total} queries over ${REQUESTS} requests — ${(total / REQUESTS).toFixed(1)} per request\n`);
     console.log('  per req   total   statement');
     for (const [key, n] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
