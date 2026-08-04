@@ -11,6 +11,27 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **A CPU profiler and a query counter for the gateway, and the answer they gave.** The first
+  benchmark established that a request costs about 3 ms of CPU and that throughput barely moves
+  between 1 and 32 concurrent workers — one saturated thread. It could not say which code was
+  spending the time, and every optimisation proposed from reading the source was a guess.
+
+  `npm run bench:profile` runs the compiled gateway under a V8 sampling profiler that can be started
+  and stopped mid-run, so the profile covers the measurement window rather than boot and warmup.
+  `npm run bench:queries` counts the database queries one request issues. Neither needs Chrome
+  DevTools: `scripts/bench/analyzeProfile.ts` prints the rankings a flame graph is normally read
+  for, which also means a profile can be evidence in a pull request.
+
+  What they found contradicted the plan they were built to test. Application code — routing,
+  guardrails, cache lookups, our own JavaScript — is about 4% of the CPU a request costs. The
+  database layer is the majority of it, and the reason is that a single chat completion issues
+  **4.2 queries**: the provider list twice, the key sweep once, and one `UPDATE` whose only purpose
+  is to stamp `lastUsedAt` on the key that was used. Three of those four ask for something that did
+  not change since the previous request.
+
+  The tokenizer, which had been the leading suspect, measured 1.0–1.2%. Replacing it with a
+  Rust-backed one would have bought about a percent.
+
 - **Move to PostgreSQL, from the dashboard.** A gateway started with `npx` runs on a single file,
   which is why it starts in seconds and needs nothing set up. Growing out of that — a team, real
   traffic, a server — meant knowing to point `DATABASE_URL` at Postgres, restart, and restore a
