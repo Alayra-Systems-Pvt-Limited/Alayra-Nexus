@@ -148,6 +148,33 @@ function generateDdl(): string {
   return DDL_BANNER + sql.replace(/\r\n/g, '\n');
 }
 
+/**
+ * Compare on content, not on line endings.
+ *
+ * These two files are GENERATED and then committed, so the check is "regenerate and compare". On
+ * Windows that comparison could never pass, and the reason is in neither file: TypeScript
+ * normalises the newlines inside a template literal to LF (a rule of the language, not a setting),
+ * so the banner this script prepends is always LF — while git hands over a checked-out
+ * schema.prisma with CRLF, because `core.autocrlf=true` is the default for Git for Windows. The
+ * generated text and the file on disk then differ on every line while saying exactly the same thing.
+ *
+ * That is not a near-miss. It made `npm test` report one permanent failure on every Windows clone,
+ * telling the reader to "run npm run db:sqlite-schema and commit the result" — advice that cannot
+ * work, since regenerating produces the same mismatch. A test that is always red and always lying
+ * is worse than no test: it teaches whoever runs it to skim past failures.
+ *
+ * Line endings are the ONLY thing given up here. Prisma parses either, SQLite executes either, and
+ * git normalises on commit anyway — so nothing downstream can tell the difference. Every real form
+ * of staleness (a model, a column, a default, a provider) still fails, which the tests alongside
+ * this check by mutation.
+ *
+ * The permanent fix is a `.gitattributes` pinning these files to LF so the working tree matches CI.
+ * It is deliberately not done here: it renormalises files across the repository, and that belongs in
+ * a commit whose entire diff is line endings rather than buried in one about schemas.
+ */
+const sameIgnoringLineEndings = (a: string, b: string): boolean =>
+  a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n');
+
 function main(): void {
   const check    = process.argv.includes('--check');
   const expected = toSqliteSchema(readFileSync(SOURCE, 'utf8'));
@@ -155,7 +182,7 @@ function main(): void {
   if (check) {
     let actual = '';
     try { actual = readFileSync(TARGET, 'utf8'); } catch { /* missing counts as out of date */ }
-    if (actual !== expected) {
+    if (!sameIgnoringLineEndings(actual, expected)) {
       console.error('prisma/schema.sqlite.prisma is out of date with prisma/schema.prisma.');
       console.error('Run `npm run db:sqlite-schema` and commit the result.');
       process.exit(1);
@@ -166,7 +193,7 @@ function main(): void {
     // and its failure mode is a first-time user whose brand-new database is missing a column.
     let actualDdl = '';
     try { actualDdl = readFileSync(DDL, 'utf8'); } catch { /* missing counts as out of date */ }
-    if (actualDdl !== generateDdl()) {
+    if (!sameIgnoringLineEndings(actualDdl, generateDdl())) {
       console.error('prisma/sqlite-schema.sql is out of date with prisma/schema.prisma.');
       console.error('Run `npm run db:sqlite-schema` and commit the result.');
       process.exit(1);

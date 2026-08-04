@@ -88,9 +88,24 @@ describe('toSqliteSchema', () => {
   });
 });
 
+/**
+ * Line endings are normalised before comparing — see the note on `sameIgnoringLineEndings`.
+ *
+ * Without this, every Windows clone of this repository fails the next test permanently, and the
+ * message it prints ("run npm run db:sqlite-schema") cannot fix it.
+ */
+const lf = (s: string): string => s.replace(/\r\n/g, '\n');
+
 describe('the committed prisma/schema.sqlite.prisma', () => {
   it('is current — run `npm run db:sqlite-schema` if this fails', () => {
-    expect(read('schema.sqlite.prisma')).toBe(toSqliteSchema(read('schema.prisma')));
+    expect(lf(read('schema.sqlite.prisma'))).toBe(lf(toSqliteSchema(read('schema.prisma'))));
+  });
+
+  it('still notices a real change, and is not merely ignoring everything', () => {
+    // The risk in comparing loosely is comparing nothing. A schema that genuinely differs — one
+    // added column — must still fail, or the check above is decoration.
+    const changed = read('schema.prisma').replace('model NexusProvider {', 'model NexusProvider {\n  addedColumn String?');
+    expect(lf(read('schema.sqlite.prisma'))).not.toBe(lf(toSqliteSchema(changed)));
   });
 
   it('warns a reader not to edit it', () => {
