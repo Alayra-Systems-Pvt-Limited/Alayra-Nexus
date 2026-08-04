@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MODEL_ORDER, DELETE_ORDER, EXCLUDED_MODELS, delegateName, modelName } from './modelOrder';
 import { dmmfModels } from './provenance';
+import { MODEL_KEYS } from './columnFacts.generated';
 
 const schema = readFileSync(resolve(__dirname, '..', '..', '..', 'prisma', 'schema.prisma'), 'utf8');
 
@@ -122,8 +123,10 @@ describe('every backed-up model can actually be paged (C3)', () => {
   // any operator took — with a Prisma error about an unknown argument rather than anything that
   // points at this decision.
   //
-  // Checked against the DMMF rather than by parsing the schema text, because `@@id([a, b])` is a
-  // block attribute that a field-line regex does not see at all.
+  // Read from MODEL_KEYS rather than the DMMF, which stopped reporting `isId` and `primaryKey` in
+  // Prisma 7. That artifact is generated from prisma/schema.prisma and its freshness is a required
+  // check, so this still asks the schema — through one more hop, and through a reader that DOES
+  // understand `@@id([a, b])`, which was the original reason for preferring the DMMF.
   const models = dmmfModels();
 
   it('found the models it claims to be checking', () => {
@@ -134,15 +137,17 @@ describe('every backed-up model can actually be paged (C3)', () => {
 
   it('gives every model exactly one id field, named id', () => {
     for (const model of models) {
-      const ids = model.fields.filter((f) => f.isId);
-      expect(ids.map((f) => f.name), `${model.name} must be keyed by a single scalar "id"`).toEqual(['id']);
+      expect(
+        MODEL_KEYS[model.name],
+        `${model.name} must be keyed by a single scalar "id"`,
+      ).toEqual(['id']);
     }
   });
 
   it('gives no model a composite primary key', () => {
-    // `@@id([teamId, day])` leaves `primaryKey` non-null and no field marked isId, so a composite
-    // would slip past the check above on its own.
-    const composite = models.filter((m) => m.primaryKey !== null).map((m) => m.name);
+    // `@@id([teamId, day])` is a block attribute, so a composite key names two columns here rather
+    // than none — it cannot slip past the check above by looking like an absent key.
+    const composite = Object.entries(MODEL_KEYS).filter(([, k]) => k.length > 1).map(([m]) => m);
     expect(
       composite,
       `${composite.join(', ')} use a composite key. export.ts pages on a single "id" column — ` +
@@ -151,10 +156,23 @@ describe('every backed-up model can actually be paged (C3)', () => {
   });
 
   it('keys every model on a scalar, not a relation', () => {
+    // A relation field cannot carry `@id`, but it can share a name with a column that does. The
+    // fingerprint's own scalar list is what settles it.
     for (const model of models) {
-      const id = model.fields.find((f) => f.isId);
-      expect(id?.kind, `${model.name}.id must be a scalar`).toBe('scalar');
+      const scalars = model.fields.filter((f) => f.kind === 'scalar').map((f) => f.name);
+      for (const key of MODEL_KEYS[model.name]) {
+        expect(scalars, `${model.name}.${key} must be a scalar`).toContain(key);
+      }
     }
+  });
+
+  it('describes every model the client has, so a stale artifact cannot pass this silently', () => {
+    // Without this, a model missing from MODEL_KEYS would make the three assertions above compare
+    // `undefined` and either throw somewhere unhelpful or quietly check nothing.
+    for (const model of models) {
+      expect(MODEL_KEYS[model.name], `${model.name} is absent from MODEL_KEYS`).toBeDefined();
+    }
+    expect(Object.keys(MODEL_KEYS).length).toBe(models.length);
   });
 });
 

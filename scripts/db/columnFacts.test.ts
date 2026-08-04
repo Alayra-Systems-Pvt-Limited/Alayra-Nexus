@@ -14,8 +14,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Prisma } from '@prisma/client';
-import { parseColumnFacts, renderModule } from './columnFacts';
-import { COLUMN_FACTS } from '../../src/lib/backup/columnFacts.generated';
+import { parseColumnFacts, parseModelKeys, renderModule } from './columnFacts';
+import { COLUMN_FACTS, MODEL_KEYS } from '../../src/lib/backup/columnFacts.generated';
 
 const ROOT = resolve(__dirname, '..', '..');
 const read = (p: string): string => readFileSync(resolve(ROOT, p), 'utf8');
@@ -140,10 +140,56 @@ describe('reading the two facts from a schema', () => {
   });
 });
 
+describe('reading each model’s primary key', () => {
+  it('finds a single @id column', () => {
+    expect(parseModelKeys('model A {\n  id String @id\n  name String\n}')).toEqual({ A: ['id'] });
+  });
+
+  it('finds a composite @@id, which a field-line reader cannot see at all', () => {
+    // The case the original DMMF check existed for. A composite must surface as two names, not as
+    // an absent key, or it looks identical to a model with no primary key.
+    expect(parseModelKeys(`
+      model A {
+        teamId String
+        day    String
+        @@id([teamId, day])
+      }
+    `)).toEqual({ A: ['teamId', 'day'] });
+  });
+
+  it('reports an empty key rather than guessing, when a model has none', () => {
+    expect(parseModelKeys('model A {\n  name String\n}')).toEqual({ A: [] });
+  });
+
+  it('does not mistake @@index or @@unique for a key', () => {
+    expect(parseModelKeys(`
+      model A {
+        id   String @id
+        name String
+        @@index([name])
+        @@unique([name])
+      }
+    `)).toEqual({ A: ['id'] });
+  });
+
+  it('does not read @id out of a comment', () => {
+    expect(parseModelKeys('model A {\n  name String // was @id once\n}')).toEqual({ A: [] });
+  });
+
+  it('agrees with the schema this gateway actually runs', () => {
+    // Every model keyed on a single "id". If this ever fails, export.ts's `orderBy: { id: "asc" }`
+    // is the thing that breaks, not this test.
+    for (const [model, key] of Object.entries(parseModelKeys(read('prisma/schema.prisma')))) {
+      expect(key, `${model}`).toEqual(['id']);
+    }
+  });
+});
+
 describe('the committed artifact', () => {
   it('is current — run `npm run db:column-facts` if this fails', () => {
+    const schema = read('prisma/schema.prisma');
     expect(normalize(read('src/lib/backup/columnFacts.generated.ts')))
-      .toBe(normalize(renderModule(parseColumnFacts(read('prisma/schema.prisma')))));
+      .toBe(normalize(renderModule(parseColumnFacts(schema), parseModelKeys(schema))));
   });
 
   it('says it is generated, so nobody edits it by hand', () => {
@@ -153,8 +199,23 @@ describe('the committed artifact', () => {
   it('sorts models and columns, so a schema reorder is not a diff', () => {
     const models = Object.keys(COLUMN_FACTS);
     expect(models).toEqual([...models].sort());
+    expect(Object.keys(MODEL_KEYS)).toEqual([...Object.keys(MODEL_KEYS)].sort());
     for (const columns of Object.values(COLUMN_FACTS)) {
       expect(Object.keys(columns)).toEqual([...Object.keys(columns)].sort());
+    }
+  });
+
+  it('describes the same models in both halves', () => {
+    // One half falling behind the other would leave a model with columns but no key, or the reverse
+    // — and each is checked by a different test file, so neither would notice on its own.
+    expect(Object.keys(MODEL_KEYS)).toEqual(Object.keys(COLUMN_FACTS));
+  });
+
+  it('names a key column that the same model actually has', () => {
+    for (const [model, key] of Object.entries(MODEL_KEYS)) {
+      for (const column of key) {
+        expect(COLUMN_FACTS[model], `${model}.${column}`).toHaveProperty(column);
+      }
     }
   });
 });

@@ -43,7 +43,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import { PARITY_DATABASE_URL, PARITY_TIMEOUT, freshDatabase, startSqlite, type SqliteGateway } from './harness';
+import { PARITY_DATABASE_URL, PARITY_TIMEOUT, freshDatabase, startSqlite, openPostgres, type SqliteGateway } from './harness';
 import { MODEL_ORDER } from '../backup/modelOrder';
 import { seedGateway, SEEDED, SECRETS, REAL_SETTINGS, STORED_BACKUPS, USAGE_ROWS } from './migrateSeed';
 
@@ -101,7 +101,7 @@ describe.skipIf(!enabled)('moving a gateway onto PostgreSQL, both engines real',
     url = freshDatabase('migratecopy');
     outcome = await migrateToPostgres(url);
 
-    target = new PrismaClient({ datasources: { db: { url } }, log: ['error'] });
+    target = openPostgres(url);
   }, PARITY_TIMEOUT * 6);
 
   afterAll(async () => {

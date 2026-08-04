@@ -41,15 +41,16 @@ describe.skipIf(!enabled)('the migrations and the schema agree', { timeout: PARI
     const shadow = freshDatabase('drift');
 
     // `--from-migrations` is what makes this meaningful: it applies every file in prisma/migrations
-    // in order to the shadow database and compares THAT against the schema. `--from-schema-datamodel`
-    // would compare the schema with itself and pass while the migrations said something else
-    // entirely — the exact way a drift check stops checking.
+    // in order to the shadow database and compares THAT against the schema. `--from-schema` would
+    // compare the schema with itself and pass while the migrations said something else entirely —
+    // the exact way a drift check stops checking.
     const diff = execFileSync(
       'npx',
       [
         'prisma', 'migrate', 'diff',
         '--from-migrations', resolve(ROOT, 'prisma', 'migrations'),
-        '--to-schema-datamodel', resolve(ROOT, 'prisma', 'schema.prisma'),
+        // `--to-schema`, not `--to-schema-datamodel`: Prisma 7 removed the longer spelling.
+        '--to-schema', resolve(ROOT, 'prisma', 'schema.prisma'),
         '--shadow-database-url', shadow,
         '--script',
       ],

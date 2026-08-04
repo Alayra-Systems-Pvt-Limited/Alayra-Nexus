@@ -56,6 +56,41 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Changed
 
+- **Prisma 6 → 7.** The gateway now runs on the current major. Nothing about how it behaves changes,
+  and no configuration a user or a deployment holds needs editing — `DATABASE_URL` is still the only
+  thing that decides which database is used, and it is still read from the environment.
+
+  What moved is internal. Prisma 7 takes its connection through a **driver adapter** rather than a
+  `datasources` option, so the Postgres client is opened with `@prisma/adapter-pg` and the SQLite one
+  with `@prisma/adapter-better-sqlite3`. The SQLite adapter is a native addon and is loaded lazily,
+  for the same reason its client always was: a Postgres deployment must not fail to start because a
+  binary it will never call was built for another platform. `url` also left the datasource block, so
+  the CLI reads it from a new `prisma.config.ts` — which reads the environment, because this
+  repository has two schemas and a URL written into a file would be right for one and wrong for the
+  other.
+
+  Three things Prisma 7 removed had load-bearing uses here, and each is worth naming because two of
+  them fail QUIETLY:
+
+  - **The DMMF no longer reports `isRequired`, `hasDefaultValue`, `isId`, `isUnique` or
+    `relationOnDelete`.** The backup fingerprint that depended on the first two is dealt with above.
+    The engine-parity suite depended on the rest, and did not fail — both clients lost the same
+    properties, so five assertions kept comparing and matching while checking nothing at all. They
+    now read the schemas directly, and a new test asserts that every DMMF property the file still
+    reads is actually present, so the next removal fails one obvious test instead of hollowing the
+    suite out again.
+
+  - **The generated client has no default location.** Adding an explicit one is the obvious fix and
+    is wrong: an explicit path is resolved against the schema file, which inside an installed package
+    means the client lands in that package's own `node_modules` while `@prisma/client` — hoisted to
+    the top level by npm — looks somewhere else entirely. That shipped as
+    `Cannot find module '.prisma/client/default'` on `npx @alayrasystems/nexus`, and was caught by
+    the packaging smoke test rather than by a user. Leaving the output unset is what is correct:
+    Prisma then writes into whichever `@prisma/client` node resolution finds, which is the only rule
+    that survives hoisting.
+
+  - **`prisma migrate diff --to-schema-datamodel` is now `--to-schema`.** This one fails loudly.
+
 - **Prisma 5 → 6.** The ORM this gateway runs on had been on 5.x, which is no longer the supported
   line. Nothing about the gateway behaves differently — the upgrade needed no code change at all, and
   the full suite, the browser end-to-end run and the standalone smoke test all pass unmodified. Every

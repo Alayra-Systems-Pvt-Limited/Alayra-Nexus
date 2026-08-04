@@ -74,6 +74,16 @@ export function toSqliteSchema(postgresSchema: string): string {
   // 2. The generator output, so the two clients land in different directories instead of the second
   //    silently overwriting the first — which would leave the Postgres deployment running a SQLite
   //    client and failing at the first query.
+  //
+  //    INSERTED, because schema.prisma deliberately has no `output` of its own. Prisma writes the
+  //    default client into whichever `@prisma/client` node resolution finds, which is the only rule
+  //    that survives npm hoisting: inside an installed package the resolved copy is the hoisted one
+  //    at the top level, and a path written here would instead land in the package's own
+  //    node_modules where `@prisma/client` will not look. That was measured, not assumed — it is
+  //    what made `npx alayra-nexus` fail with "Cannot find module '.prisma/client/default'".
+  //
+  //    The SQLite client cannot use that default, since it would overwrite the first, so it is the
+  //    one that gets an explicit path.
   const genBefore = out;
   out = out.replace(
     /(generator\s+client\s*\{\s*\n)/,
@@ -102,7 +112,8 @@ const DDL_BANNER =
 function generateDdl(): string {
   const sql = execFileSync(
     'npx',
-    ['prisma', 'migrate', 'diff', '--from-empty', '--to-schema-datamodel', TARGET, '--script'],
+    // `--to-schema`, not `--to-schema-datamodel`: Prisma 7 removed the longer spelling outright.
+    ['prisma', 'migrate', 'diff', '--from-empty', '--to-schema', TARGET, '--script'],
     { cwd: ROOT, encoding: 'utf8', shell: true },
   );
   if (!/CREATE TABLE/i.test(sql)) {

@@ -66,7 +66,18 @@ RUN printf '#!/bin/sh\nexec node /app/node_modules/prisma/build/index.js "$@"\n'
  && chmod +x /usr/local/bin/prisma
 
 COPY --from=builder /app/dist ./dist
+# TWO copies, because Prisma 7 puts the two generated clients in two different places.
+#
+# The SQLite client has an explicit `output` and lands in node_modules/.prisma/client-sqlite, as
+# both did before. The Postgres one has no `output` on purpose — Prisma writes it into whichever
+# `@prisma/client` node resolution finds, which is the only rule that survives npm hoisting when
+# this package is installed as a dependency. Here that means it is generated INTO the
+# `@prisma/client` package directory, overwriting the unbuilt copy `npm ci` laid down above.
+#
+# Copying only .prisma, as this did on Prisma 6, left the runtime stage with an ungenerated
+# `@prisma/client` — which the require.resolve check below now catches at build time.
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY prisma ./prisma
 # The dashboard's static build. The gateway serves it from web/dist (see the static root in
 # src/server.ts); only the built assets ship, not web/'s source or toolchain. @fastify/static only
@@ -84,13 +95,17 @@ COPY --from=builder /app/web/dist ./web/dist
 #
 # `require.resolve` rather than a path test: it asks the same question the gateway asks at runtime,
 # through the same resolution rules, so this cannot pass while the real load fails.
-RUN node -e "for (const s of ['.prisma/client', '.prisma/client-sqlite']) { require.resolve(s); console.log('ok', s); }"
+#
+# `@prisma/client` rather than `.prisma/client` since Prisma 7: resolving the bare `.prisma/client`
+# would now find nothing, because the Postgres client is generated into the @prisma/client package
+# itself. Both entries are the specifier the gateway actually imports.
+RUN node -e "for (const s of ['@prisma/client', '.prisma/client-sqlite']) { require.resolve(s); console.log('ok', s); }"
 
 # Fail the BUILD if the Prisma CLI cannot be launched. `build/index.js` is Prisma's internal layout,
 # not a published contract, so a future version could move it — and the first thing the container
 # does at runtime is a migration, meaning a broken launcher would surface as what looks like a
 # database failure rather than a missing file. Proving the CLI answers here turns that into an
-# obvious, immediate build error instead. The dependency range is pinned to ^5 so a major
+# obvious, immediate build error instead. The dependency range is pinned to ^7 so a major
 # reorganisation cannot arrive unreviewed in the first place.
 RUN prisma --version
 

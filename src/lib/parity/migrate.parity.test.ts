@@ -24,8 +24,7 @@
 // without a Postgres does not, which is why these must never be the ONLY check on anything.
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { PrismaClient } from '@prisma/client';
-import { PARITY_DATABASE_URL, PARITY_TIMEOUT, freshDatabase } from './harness';
+import { PARITY_DATABASE_URL, PARITY_TIMEOUT, freshDatabase, openPostgres } from './harness';
 import { migrateDeploy } from '../prismaCli';
 import { inspectTarget } from '../../services/pgMigrate.service';
 import { MODEL_ORDER } from '../backup/modelOrder';
@@ -84,7 +83,7 @@ describe.skipIf(!enabled)('moving to PostgreSQL, against a real one', { timeout:
     const built = await migrateDeploy(url);
     expect(built.ok, built.output).toBe(true);
 
-    const client = new PrismaClient({ datasources: { db: { url } }, log: ['error'] });
+    const client = openPostgres(url);
     try {
       const tables = await client.$queryRaw<{ table_name: string }[]>`
         SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()
@@ -123,7 +122,7 @@ describe.skipIf(!enabled)('moving to PostgreSQL, against a real one', { timeout:
     //
     // This is what found that. It cannot be reproduced without a real PostgreSQL, because the seed
     // lives in the migration rather than the schema.
-    const client = new PrismaClient({ datasources: { db: { url } }, log: ['error'] });
+    const client = openPostgres(url);
     const seeded = await client.appSettings
       .findMany({ select: { key: true, value: true } })
       .finally(() => client.$disconnect());
@@ -147,7 +146,7 @@ describe.skipIf(!enabled)('moving to PostgreSQL, against a real one', { timeout:
     // The exclusion is by the placeholder MARKER, not by table — so AppSettings still protects a
     // real gateway. Had it been "ignore AppSettings", this would pass while the feature happily
     // overwrote somebody's live configuration.
-    const client = new PrismaClient({ datasources: { db: { url } }, log: ['error'] });
+    const client = openPostgres(url);
     try {
       await client.appSettings.create({ data: { key: 'a-real-setting', value: 'a real value' } });
       const seen = await inspectTarget(url);
@@ -159,7 +158,7 @@ describe.skipIf(!enabled)('moving to PostgreSQL, against a real one', { timeout:
   });
 
   it('refuses a database that already holds a gateway', async () => {
-    const client = new PrismaClient({ datasources: { db: { url } }, log: ['error'] });
+    const client = openPostgres(url);
     try {
       await client.appSettings.create({ data: { key: 'someone-elses-gateway', value: 'yes' } });
     } finally {
