@@ -1,0 +1,18 @@
+{
+  // Typechecking for everything OUTSIDE src/ (Phase: benchmarks, 2026-08-04).
+  //
+  // tsconfig.json includes only `src/**/*`, because it is also what `npm run build` compiles into
+  // dist/ — adding scripts/ there would ship the benchmark harness and the smoke tests inside the
+  // published package. So this is a second, noEmit-only project, run by `npm run typecheck`.
+  //
+  // It closes a real gap rather than a theoretical one. Nothing under scripts/ had ever been
+  // typechecked, including scripts/db/columnFacts.ts — which generates the artifact the backup
+  // drift check depends on — and the omission was found the ordinary way: a benchmark reading a
+  // property that no longer existed on its own return type, with `npm run typecheck` reporting
+  // success.
+  "extends": "./tsconfig.json",
+  // rootDir is unset: the base config pins it to src/, and every file here is outside it.
+  "compilerOptions": { "noEmit": true, "rootDir": "." },
+  "include": ["scripts/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

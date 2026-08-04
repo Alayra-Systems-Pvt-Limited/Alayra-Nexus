@@ -1,0 +1,203 @@
+/*
+ * Copyright (c) 2026 Alayra Systems Pvt. Limited (Pakistan)
+ * & Alayra Systems LLC (USA).
+ *
+ * Alayra Nexus™ is a trademark of Alayra Systems. Use of the name or logo
+ * is not granted by the software license below.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * A copy of the License is in the LICENSE file at the repository root,
+ * or at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
+ * ANY KIND, either express or implied. See the License for details.
+ */
+
+// A real gateway, a real upstream, both on real sockets — set up once for every benchmark.
+//
+// The COMPILED server (dist/), started the way `npx @alayrasystems/nexus` starts it, with a provider
+// pointed at scripts/bench/mockUpstream.mjs. Nothing here is in-process and nothing is stubbed: a
+// benchmark run through a mocked HTTP layer measures the mock.
+//
+// ── Limits are raised on purpose, and it matters ──────────────────────────────────────────────
+//
+// The pool key is created with rpm and tpm limits far above anything these runs generate. That is
+// not cheating; it is the difference between measuring the proxy path and measuring the rate
+// limiter. A benchmark that quietly spends half its requests being refused at 429 reports a
+// wonderful latency figure for work the gateway declined to do. Rate limiting is worth its own
+// scenario, where it is the subject rather than a contaminant.
+//
+// The same reasoning applies to the model prices, which are set to real-ish values here rather than
+// the deliberately absurd ones the e2e suite uses to trip a budget on the first request.
+
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+
+const ROOT = resolve(__dirname, '..', '..');
+
+export interface Harness {
+  /** e.g. http://127.0.0.1:3401 */
+  gatewayUrl: string;
+  /** e.g. http://127.0.0.1:3210 */
+  mockUrl: string;
+  /** A Nexus API key that can call /v1/chat/completions. */
+  apiKey: string;
+  /** An owner session token, for /admin reads. */
+  adminToken: string;
+  dispose: () => void;
+}
+
+const MASTER   = 'bench-master-password';
+const EMAIL    = 'owner@bench.test';
+const PASSWORD = 'a-long-enough-password-1';
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+async function json<T>(url: string, init?: RequestInit): Promise<{ status: number; body: T }> {
+  const r = await fetch(url, init);
+  const text = await r.text();
+  let body: unknown;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  return { status: r.status, body: body as T };
+}
+
+async function waitFor(url: string, label: string, seconds = 60): Promise<void> {
+  for (let i = 0; i < seconds * 4; i++) {
+    try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
+    await sleep(250);
+  }
+  throw new Error(`${label} never answered ${url}`);
+}
+
+/**
+ * Start the mock upstream, a standalone gateway, and wire them together.
+ *
+ * @param mockPort    the upstream's port
+ * @param gatewayPort the gateway's port
+ */
+export async function startHarness(mockPort = 3210, gatewayPort = 3401): Promise<Harness> {
+  const children: ChildProcess[] = [];
+  const dir = mkdtempSync(join(tmpdir(), 'nexus-bench-'));
+
+  const dispose = (): void => {
+    for (const c of children) { try { c.kill('SIGKILL'); } catch { /* already gone */ } }
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* windows may hold the file */ }
+  };
+
+  try {
+    const mockUrl = `http://127.0.0.1:${mockPort}`;
+    children.push(spawn(process.execPath, [join(ROOT, 'scripts', 'bench', 'mockUpstream.mjs')], {
+      env: { ...process.env, PORT: String(mockPort) }, stdio: 'ignore',
+    }));
+    await waitFor(`${mockUrl}/health`, 'mock upstream');
+
+    // Deleted rather than blanked, so the gateway has to pin its own storage the way it does under
+    // npx. A developer's .env would otherwise make this benchmark quietly measure PostgreSQL while
+    // reporting standalone — the exact confusion scripts/smoke/standalone.ts documents at length.
+    const env = {
+      ...process.env,
+      NEXUS_MODE: '',
+      PORT: String(gatewayPort),
+      HOST: '127.0.0.1',
+      NODE_ENV: 'production',
+      ADMIN_PASSWORD: MASTER,
+      MASTER_ENCRYPTION_KEY: 'b'.repeat(64),
+      LOG_LEVEL: 'error',
+      // The mock upstream is on loopback, and the SSRF guard blocks private hosts by default —
+      // correctly, since that is the whole point of it. Named exactly, rather than reached for with
+      // SSRF_ALLOW_PRIVATE=true: the guard stays fully armed for every other address, so the check
+      // remains on the measured path instead of being switched off for the convenience of the
+      // benchmark. Its cost is then part of what these numbers report, which is honest.
+      SSRF_ALLOWLIST: `127.0.0.1:${mockPort}`,
+    } as NodeJS.ProcessEnv;
+    delete env.DATABASE_URL;
+    delete env.REDIS_URL;
+
+    let out = '';
+    const gw = spawn(process.execPath, [join(ROOT, 'dist', 'server.js')], {
+      cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    children.push(gw);
+    gw.stdout?.on('data', (d) => { out += d; });
+    gw.stderr?.on('data', (d) => { out += d; });
+
+    const gatewayUrl = `http://127.0.0.1:${gatewayPort}`;
+    await waitFor(`${gatewayUrl}/health`, 'gateway');
+
+    // Printed once, on the first run, and never recoverable afterwards — so it is read from the log
+    // rather than requested.
+    const apiKey = /Generated Nexus API Key[^]*?\b([0-9a-f]{64})\b/.exec(out)?.[1];
+    if (!apiKey) throw new Error(`could not read the generated API key from the gateway log:\n${out.slice(0, 800)}`);
+
+    const post = (path: string, body: unknown, token?: string) => json<Record<string, never>>(
+      `${gatewayUrl}${path}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify(body),
+      },
+    );
+
+    await post('/admin/setup/claim', { masterPassword: MASTER, name: 'Bench Owner', email: EMAIL, password: PASSWORD });
+    const login = await json<{ token: string }>(`${gatewayUrl}/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+    });
+    const adminToken = login.body.token;
+    if (!adminToken) throw new Error(`sign-in failed: ${JSON.stringify(login.body).slice(0, 300)}`);
+
+    const pool = await json<{ provider: { id: string } }>(`${gatewayUrl}/admin/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        name: 'Bench Pool', slug: 'bench', provider: 'custom', tier: 'standard',
+        baseUrl: `${mockUrl}/v1`, authHeader: 'Authorization', authPrefix: 'Bearer ',
+      }),
+    });
+    const poolId = pool.body.provider?.id;
+    if (!poolId) throw new Error(`provider creation failed: ${JSON.stringify(pool.body).slice(0, 300)}`);
+
+    // See the header: high enough that nothing here is ever refused for rate.
+    await post(`/admin/providers/${poolId}/keys`, {
+      apiKey: 'sk-bench-upstream', label: 'bench key', rpmLimit: 100_000_000, tpmLimit: 100_000_000,
+    }, adminToken);
+
+    await json(`${gatewayUrl}/admin/models`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        models: [{
+          id: 'bench-model-1', displayName: 'Bench Model', provider: 'custom', modelString: 'bench-model-1',
+          tier: 'standard', status: 'active', priority: 1, capabilities: ['chat'],
+          // Plausible rather than absurd, so `estimatedUsd` and `savedUsd` mean something when the
+          // cache scenario reads them back.
+          inputCostPer1M: 3, outputCostPer1M: 15,
+        }],
+      }),
+    });
+
+    return { gatewayUrl, mockUrl, apiKey, adminToken, dispose };
+  } catch (e) {
+    dispose();
+    throw e;
+  }
+}
+
+/** Tell the upstream how to behave for the next phase. See mockUpstream.mjs. */
+export async function setUpstream(
+  mockUrl: string, behaviour: { latencyMs?: number; status?: number; failRate?: number; rate429?: number },
+): Promise<void> {
+  await fetch(`${mockUrl}/__behaviour`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(behaviour),
+  });
+}
+
+/** The body every scenario sends, so they are all measuring the same request. */
+export const COMPLETION_BODY = {
+  model: 'alayra-nexus-1',
+  messages: [{ role: 'user', content: 'Benchmark request.' }],
+};

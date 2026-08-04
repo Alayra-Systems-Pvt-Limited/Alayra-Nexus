@@ -52,7 +52,7 @@
     "db:sqlite-schema": "tsx scripts/db/sqliteSchema.ts",
     "db:drift": "prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script",
     "db:generate": "npx prisma generate && npx prisma generate --schema prisma/schema.sqlite.prisma",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
@@ -66,7 +66,8 @@
     "smoke:npx": "tsx scripts/smoke/npx.ts",
     "postinstall": "node scripts/npm/postinstall.js",
     "prepack": "node scripts/npm/prepack.js",
-    "db:column-facts": "tsx scripts/db/columnFacts.ts"
+    "db:column-facts": "tsx scripts/db/columnFacts.ts",
+    "bench:overhead": "tsx scripts/bench/overhead.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",

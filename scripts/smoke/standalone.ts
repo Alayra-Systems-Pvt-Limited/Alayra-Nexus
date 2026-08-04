@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     ADMIN_PASSWORD: MASTER,
     MASTER_ENCRYPTION_KEY: 'a'.repeat(64),
     LOG_LEVEL: 'warn',
-  };
+  } as NodeJS.ProcessEnv;
   // Not `= ''`: a developer's shell often has both, and inheriting one would silently test server
   // mode while reporting a standalone pass.
   delete childEnv.DATABASE_URL;
