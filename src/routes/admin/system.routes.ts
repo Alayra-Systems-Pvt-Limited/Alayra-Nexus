@@ -21,6 +21,7 @@ import { resolvePublicOrigin } from '../../lib/baseUrl';
 import { getApiKeyInfo, rotateApiKey } from '../../services/apiKey.service';
 import { prisma }              from '../../lib/prisma';
 import { redis }               from '../../lib/redis';
+import { invalidateProviderCache } from '../../services/providerCache.service';
 import { adminGuard, adminOwnerGuard, adminWriteGuard } from './guard';
 import { ADMIN_WRITE_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
 
@@ -119,6 +120,7 @@ export default async function adminSystemRoutes(fastify: FastifyInstance) {
 
   fastify.post('/admin/cache/flush', withRateLimit(adminWriteGuard, ADMIN_WRITE_RATE_LIMIT), async (_req, reply) => {
     await redis.del(REGISTRY_CACHE_KEY);
+    await invalidateProviderCache();
     return reply.send({ success: true });
   });
 }

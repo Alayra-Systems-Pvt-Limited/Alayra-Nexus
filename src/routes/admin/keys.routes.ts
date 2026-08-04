@@ -22,6 +22,7 @@ import { prisma }              from '../../lib/prisma';
 import { randomUUID } from 'crypto';
 import { redis }               from '../../lib/redis';
 import { testKey, banKey, coolKey } from '../../services/nexus.service';
+import { forgetLastUsed }     from '../../lib/lastUsed';
 import { z }                   from 'zod';
 import { adminGuard, adminWriteGuard } from './guard';
 import { ADMIN_READ_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
@@ -120,6 +121,7 @@ export default async function adminKeysRoutes(fastify: FastifyInstance) {
   fastify.delete('/admin/keys/:id', adminWriteGuard, async (request, reply) => {
     const { id } = request.params as { id: string };
     await prisma.nexusKey.delete({ where: { id } });
+    forgetLastUsed(id);
     return reply.send({ success: true });
   });
 

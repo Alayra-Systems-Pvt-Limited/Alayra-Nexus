@@ -18,6 +18,7 @@ import { redis }                  from '../lib/redis';
 import { prisma }                 from '../lib/prisma';
 import { getSetting, setSetting } from './settings.service';
 import { REGISTRY_CACHE_KEY }    from '../lib/registryCacheKey';
+import { getActiveProviders }    from './providerCache.service';
 import { CAPABILITIES, type Capability } from '../lib/modelSelect';
 
 // The registry lives as a JSON blob in AppSettings, not a table, so its shape is not
@@ -123,10 +124,14 @@ export async function getModelRegistry(): Promise<AiModel[]> {
   return models;
 }
 
-/** Provider slugs that currently have at least one active pool. */
+/**
+ * Provider slugs that currently have at least one active pool.
+ *
+ * Served from the shared provider cache rather than its own query: this runs on every routed
+ * request, and the answer changes only when an operator edits a pool. See providerCache.service.
+ */
 export async function activeProviderSlugs(): Promise<Set<string>> {
-  const rows = await prisma.nexusProvider.findMany({ where: { isActive: true }, select: { provider: true } });
-  return new Set(rows.map((r) => r.provider));
+  return new Set((await getActiveProviders()).map((p) => p.provider));
 }
 
 /**
