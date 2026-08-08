@@ -80,7 +80,27 @@ export const options = {
   },
 };
 
-const BODY = JSON.stringify({
+// ── SESSIONS, and why an identical body is a trap ─────────────────────────────────────────────
+//
+// The gateway pins a conversation to the key that last served it, so the provider's prompt cache is
+// reused. The pin is keyed by a hash of the MESSAGE CONTENT (see src/lib/sticky.ts).
+//
+// Every benchmark in this repository sent a byte-identical body on every request. So every request
+// hashed to the same session, hit the same pin, and took `tryStickyKey` — a single indexed lookup.
+// The actual routing sweep (candidate models → pools → keys, with a breaker gate and an atomic
+// RPM/TPM admission per key) was never executed once, in any measurement, on any rig.
+//
+// Real traffic does not do that. Different users send different prompts, sticky misses are the norm
+// rather than the exception, and the sweep is the common path. Measuring only the pinned path
+// reports the easiest route through the router as though it were the typical one.
+//
+//   SESSIONS=sticky   every request identical — the pinned fast path (the old, flattering default)
+//   SESSIONS=unique   every request its own conversation — forces the full sweep every time
+//
+// Neither is "the" right setting. The pair is the point: the gap between them is what routing costs.
+const SESSIONS = __ENV.SESSIONS || 'sticky';
+
+const STICKY_BODY = JSON.stringify({
   model: 'alayra-nexus-1',
   messages: [{ role: 'user', content: 'Benchmark request.' }],
 });
@@ -89,8 +109,22 @@ const PARAMS = {
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
 };
 
+/**
+ * A body whose content — and therefore whose session — is unique to this iteration.
+ *
+ * Built from the VU and iteration counters rather than a random value, so a re-run sends the same
+ * sequence: a failure-mode scenario that fails different requests each time cannot be compared
+ * against the run before it.
+ */
+function uniqueBody() {
+  return JSON.stringify({
+    model: 'alayra-nexus-1',
+    messages: [{ role: 'user', content: `Benchmark request. vu=${__VU} iter=${__ITER}` }],
+  });
+}
+
 export default function () {
-  const res = http.post(TARGET, BODY, PARAMS);
+  const res = http.post(TARGET, SESSIONS === 'unique' ? uniqueBody() : STICKY_BODY, PARAMS);
   check(res, { 'status is 200': (r) => r.status === 200 });
 }
 
