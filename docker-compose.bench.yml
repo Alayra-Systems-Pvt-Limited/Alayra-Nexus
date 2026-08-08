@@ -1,0 +1,107 @@
+# Copyright (c) 2026 Alayra Systems Pvt. Limited (Pakistan) & Alayra Systems LLC (USA).
+# Licensed under the Apache License, Version 2.0. See LICENSE at the repository root.
+#
+# The benchmark rig: everything that gets MEASURED, on one host.
+#
+#   docker compose -f docker-compose.bench.yml up -d --build
+#   npm run bench:provision          # claim the gateway and give it a pool, a key and a model
+#   # …then drive load FROM ANOTHER MACHINE (see docs and scripts/bench/k6/openLoop.js)
+#   docker compose -f docker-compose.bench.yml down -v
+#
+# ── Why the load generator is not in this file ────────────────────────────────────────────────
+#
+# Because it must not share a CPU with the thing it is measuring, and that lesson was learned the
+# expensive way twice in this project:
+#
+#   * a scaling run where the driver and the gateway workers shared four cores — the driver's own
+#     ceiling fell from 8,705 to 3,954 rps as workers were added, so the "scaling" curve was really
+#     the machine running out
+#   * a k6 run where everything, generator included, sat inside one Docker VM — the gateway measured
+#     476 rps where the same build measured 1,094 as a host process
+#
+# Neither number was wrong about what it measured. Both were wrong about what they claimed to
+# measure. So the generator lives on a second machine, and `scripts/bench/k6.ts` measures its own
+# ceiling on every run so that this can never be assumed again.
+#
+# ── Ports are published on all interfaces, deliberately ───────────────────────────────────────
+#
+# The load generator is on another host, so loopback is not enough. This is a benchmark rig with a
+# per-run generated API key and a mock upstream — but it is still a service on your network for as
+# long as it is up. Bring it down when you are finished, and do not run it on an untrusted network.
+
+name: nexus-bench
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: benchpass
+      POSTGRES_DB: nexus
+    # tmpfs, not a volume: the rig writes little and none of it should outlive the run, so the host
+    # disk stays out of the measurement entirely.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # The stand-in provider. Counters only, never a ledger — see scripts/bench/mockUpstream.mjs for
+  # why an array that grows per request would make the p99 a measurement of the mock.
+  mock:
+    # Named explicitly rather than left to compose's `<project>-<service>` default, so an image can
+    # be built once and reused — including on a second machine that has no repository checkout.
+    image: nexus-bench-mock:local
+    build:
+      context: .
+      dockerfile: scripts/bench/mock.Dockerfile
+    environment:
+      # 0.0.0.0, not the loopback default: a container that binds 127.0.0.1 is reachable from
+      # nothing but itself, and fails as `other side closed`, which reads like a crash.
+      HOST: 0.0.0.0
+      PORT: '3210'
+    ports:
+      - '3210:3210'
+
+  gateway:
+    image: nexus-bench:local
+    build:
+      context: .
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://postgres:benchpass@postgres:5432/nexus
+      REDIS_URL: redis://redis:6379
+      ADMIN_PASSWORD: bench-master-password
+      MASTER_ENCRYPTION_KEY: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      NODE_ENV: production
+      LOG_LEVEL: error
+      # The upstream is a private address on this network, and the SSRF guard blocks those by
+      # default — correctly. Named exactly rather than switched off with SSRF_ALLOW_PRIVATE, so the
+      # guard stays armed for every other address and its cost stays inside the numbers.
+      SSRF_ALLOWLIST: mock:3210
+      # The SERVER-level abuse guard, which is a different limiter from the pool key's RPM/TPM and
+      # was missed the first time. Its default of 12,000/minute is 200 requests a second, and a
+      # sweep past that measured the limiter: 100% failures at a 1 ms p50, which is what a 429 looks
+      # like. Rate limiting keeps its own scenario, where it is the subject rather than a contaminant.
+      ABUSE_RATE_LIMIT_MAX: '100000000'
+      # One worker by default. Override to measure scaling:
+      #   NEXUS_CLUSTER_WORKERS=4 docker compose -f docker-compose.bench.yml up -d
+      NEXUS_CLUSTER_WORKERS: ${NEXUS_CLUSTER_WORKERS:-1}
+    ports:
+      - '3401:3000'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 60

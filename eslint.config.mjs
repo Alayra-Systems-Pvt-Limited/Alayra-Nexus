@@ -66,6 +66,19 @@ export default tseslint.config(
     },
   },
   {
+    // k6 load scripts. These do not run in Node at all — k6 executes them in its own JavaScript
+    // runtime, which supplies `__ENV` (and `__VU`, `__ITER`) and resolves `k6/*` imports itself.
+    // So Node's globals would be wrong here and k6's have to be declared; there is no config in
+    // which this file both runs and typechecks as ordinary source, which is why it is plain JS
+    // outside the TypeScript projects.
+    files: ['scripts/bench/k6/**/*.js'],
+    languageOptions: {
+      globals: { __ENV: 'readonly', __VU: 'readonly', __ITER: 'readonly', console: 'readonly' },
+      sourceType: 'module',
+      parserOptions: { ecmaVersion: 2022 },
+    },
+  },
+  {
     // Test files: allow the usual test-time loosenings.
     files: ['src/**/*.test.ts', 'test/**/*.ts'],
     languageOptions: {

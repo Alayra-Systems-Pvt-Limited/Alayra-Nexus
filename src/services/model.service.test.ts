@@ -31,9 +31,15 @@ vi.mock('./settings.service', () => ({
   setSetting: vi.fn(async (_k: string, v: string) => { store.value = v; }),
 }));
 
-import { normalizeModel, removeModelById, removeModelsForProvider, getModelRegistry } from './model.service';
+import { normalizeModel, removeModelById, removeModelsForProvider, getModelRegistry, clearRegistryMemo } from './model.service';
 
-const seed = (models: Record<string, unknown>[]) => { store.value = JSON.stringify(models); };
+// Writing the store directly is how this suite arranges a registry, and that now bypasses TWO
+// caches rather than one: the shared copy in the KV, and an in-process memo in front of it. The
+// memo is dropped here so a seeded registry is actually the one that gets read.
+const seed = (models: Record<string, unknown>[]) => {
+  store.value = JSON.stringify(models);
+  clearRegistryMemo();
+};
 const model = (id: string, provider: string) => ({ id, modelString: id, provider, displayName: id });
 
 describe('normalizeModel — registry migration (Phase 6.1)', () => {
@@ -87,7 +93,7 @@ describe('normalizeModel — registry migration (Phase 6.1)', () => {
 });
 
 describe('removeModelById (Phase 7.17b)', () => {
-  beforeEach(() => { store.value = '[]'; });
+  beforeEach(() => { store.value = '[]'; clearRegistryMemo(); });
 
   it('removes exactly the named model and reports it', async () => {
     seed([model('a', 'openai'), model('b', 'openrouter')]);
@@ -103,7 +109,7 @@ describe('removeModelById (Phase 7.17b)', () => {
 });
 
 describe('removeModelsForProvider (Phase 7.17b)', () => {
-  beforeEach(() => { store.value = '[]'; });
+  beforeEach(() => { store.value = '[]'; clearRegistryMemo(); });
 
   it('drops only the models of the named provider, and counts them', async () => {
     // The bug this exists for: deleting a pool used to leave its models behind, so they reappeared

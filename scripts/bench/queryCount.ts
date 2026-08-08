@@ -30,7 +30,7 @@
 // log and there is no request id to separate them by, so the per-request attribution would be a
 // guess. Throughput is irrelevant here; only the count is.
 
-import { setUpstream, startHarness, COMPLETION_BODY } from './gateway';
+import { setUpstream, startHarness, COMPLETION_BODY, completionBody } from './gateway';
 
 const REQUESTS = parseInt(process.env.QUERY_COUNT_REQUESTS ?? '10', 10);
 
@@ -63,10 +63,15 @@ async function main(): Promise<void> {
   try {
     await setUpstream(h.mockUrl, { latencyMs: 0 });
 
+    // BENCH_SESSIONS=unique gives every request its own conversation, which forces a sticky MISS
+    // and therefore the full routing sweep. The default keeps the old identical body, so the two can
+    // be compared directly — the gap between them is what routing actually costs.
+    const unique = process.env.BENCH_SESSIONS === 'unique';
+    let n = 0;
     const send = (): Promise<Response> => fetch(`${h.gatewayUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${h.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify(COMPLETION_BODY),
+      body: JSON.stringify(unique ? completionBody(n++) : COMPLETION_BODY),
     });
 
     // Warm up first. The very first request pays one-time work — lazy config reads, a cold key
