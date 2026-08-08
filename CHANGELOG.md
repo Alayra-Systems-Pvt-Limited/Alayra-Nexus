@@ -9,6 +9,48 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Changed
+
+- **The routing sweep no longer queries the database once per pool it tries, so a deep walk costs
+  what a shallow one does.** `bench:routing` measured the defect: exactly one extra `SELECT NexusKey`
+  per exhausted pool walked, arriving when every pool is tight and the walk is deepest — the moment
+  a gateway can least afford to get slower.
+
+  The cause was that `tryPickKey` issued its candidate query per pool, and issued it unprojected —
+  every column, including the label, the masked key and both timestamps, where routing reads eight
+  fields. The candidate list is now read through the same one-second cache that already held the
+  pinned key's row, and the projection is narrowed to match.
+
+  | | before | after |
+  |---|---|---|
+  | `SELECT NexusKey` per request, sweep path | 1.0 | **0.1** |
+  | database queries per extra pool walked | +1.0 | **+0.1** |
+  | queries per request, sweep path | 1.2–1.3 | **0.3** |
+
+  The sweep now costs on the database exactly what the pinned fast path costs. What remains is the
+  TTL expiring mid-run, not a per-request query. Failover is unchanged and still correct: 47 of 50
+  available slots served, clean refusal once every key is out.
+
+  Two things had to be true for this to be safe, and both are tested.
+
+  The cache is keyed by pool **and owner**, because `ownerTeamId` is what enforces BYOK isolation in
+  the query — a shared-pool caller served a list built for a team would be a private credential
+  leaving its team through a cache. And the lists are cleared wholesale on every NexusKey write,
+  including **create**, which previously invalidated nothing because a brand-new key cannot be in a
+  cache keyed by id. Without that, a key added to relieve an exhausted pool would sit idle while the
+  pool went on reporting the headroom it had before.
+
+  Caching the list also freezes its `lastUsedAt: 'asc'` order for a second, which is a real trade and
+  a smaller one than it looks: `lastUsedAt` is already written at most once per five seconds per key,
+  so the stored ordering lags reality by up to five seconds by design. This adds at most a fifth of
+  an error the write window already accepts, and ordering only breaks ties between keys that both
+  have headroom — RPM/TPM admission is what actually stops a key being overused, and it is atomic in
+  the KV where no cache can reach it.
+
+  The Redis half of the walk is untouched and still grows: about two more round trips per pool
+  walked, for a breaker gate and an RPM/TPM reservation paid per key rejected. Flattening that needs
+  select-and-reserve in a single server-side script, which is separate work.
+
 ### Added
 
 - **A benchmark for the routing path, and the discovery that no benchmark had ever taken it.** The
