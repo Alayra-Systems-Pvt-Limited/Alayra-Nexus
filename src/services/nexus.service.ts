@@ -24,7 +24,7 @@ import { getCostWeight }     from './routing.service';
 import { getModelRegistry, activeProviderSlugs }  from './model.service';
 import { getActiveProviders }  from './providerCache.service';
 import { shouldWriteLastUsed, forgetLastUsed } from '../lib/lastUsed';
-import { getKeyRow, setKeyRow, forgetKeyRow, type CachedKeyRow } from '../lib/keyRowCache';
+import { getKeyRow, setKeyRow, getKeyList, setKeyList, forgetKeyRow, type CachedKeyRow } from '../lib/keyRowCache';
 import { selectModels, type SelectableModel, type Capability } from '../lib/modelSelect';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
 import { safeFetch }        from '../lib/safeFetch';
@@ -142,10 +142,24 @@ async function tryPickKey(
   // `ownerTeamId` scopes the candidate set: null selects the shared pool (keys with
   // no owner), a team id selects only that team's private keys. It is an equality
   // filter, never a superset — a shared-pool caller can never see a BYOK key.
-  const keys = await prisma.nexusKey.findMany({
-    where:   { providerId: providerRow.id, status: { in: ['active', 'cooling'] }, ownerTeamId },
-    orderBy: { lastUsedAt: 'asc' },
-  });
+  //
+  // Read through a one-second cache. This query ran once per POOL TRIED, so a request that walked a
+  // deep sweep paid one database round trip per exhausted pool on top of the Redis work — measured
+  // by `bench:routing` as exactly +1.0 query per pool walked, arriving when capacity is tight.
+  //
+  // The projection is narrowed at the same time: this read every column, including the label, the
+  // masked key and both timestamps, where routing uses eight fields. See lib/keyRowCache.ts for what
+  // the second costs, and why caching the LRU ordering is safe when `lastUsedAt` is already written
+  // at most once per five seconds.
+  let keys = getKeyList(providerRow.id, ownerTeamId);
+  if (keys === undefined) {
+    keys = await prisma.nexusKey.findMany({
+      where:   { providerId: providerRow.id, status: { in: ['active', 'cooling'] }, ownerTeamId },
+      orderBy: { lastUsedAt: 'asc' },
+      select:  KEY_ROW_SELECT,
+    });
+    setKeyList(providerRow.id, ownerTeamId, keys);
+  }
 
   for (const key of keys) {
     // Circuit breaker gate first, so an open (cooling) key never burns RPM/TPM.

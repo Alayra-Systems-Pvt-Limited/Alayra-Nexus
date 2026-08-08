@@ -78,6 +78,11 @@ export default async function adminKeysRoutes(fastify: FastifyInstance) {
         ownerTeamId:  body.ownerTeamId ?? null,
       },
     });
+    // A create has no cached ROW to drop — the key did not exist a moment ago — but it must still
+    // reach the cached candidate LISTS, or the new key sits idle for up to a second while its pool
+    // goes on reporting the headroom it had before. Adding a key to relieve a pool that is out of
+    // headroom is the exact moment this matters.
+    forgetKeyRow(key.id);
     return reply.code(201).send({ key: { ...key, encryptedKey: undefined } });
   });
 

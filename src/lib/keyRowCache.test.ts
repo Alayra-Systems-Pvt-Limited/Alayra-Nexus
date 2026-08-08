@@ -15,7 +15,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { forgetKeyRow, getKeyRow, setKeyRow, type CachedKeyRow } from './keyRowCache';
+import { forgetKeyRow, getKeyList, getKeyRow, setKeyList, setKeyRow, type CachedKeyRow } from './keyRowCache';
 
 const TTL = 1_000;
 
@@ -103,5 +103,87 @@ describe('forgetKeyRow', () => {
     forgetKeyRow();
     expect(getKeyRow('k1', 1)).toBeUndefined();
     expect(getKeyRow('k2', 1)).toBeUndefined();
+  });
+});
+
+describe('getKeyList / setKeyList', () => {
+  it('returns undefined for a pool it has never seen', () => {
+    expect(getKeyList('p1', null, 0)).toBeUndefined();
+  });
+
+  it('serves a stored list until the TTL, then stops', () => {
+    setKeyList('p1', null, [row()], 0);
+    expect(getKeyList('p1', null, TTL - 1)).toEqual([row()]);
+    expect(getKeyList('p1', null, TTL)).toBeUndefined();
+  });
+
+  it('caches an EMPTY list, because "this pool has no eligible keys" is an answer', () => {
+    // Not caching it would leave the query this exists to remove running on every request, for
+    // exactly the pools that are cheapest to answer and most likely to be walked past.
+    setKeyList('p1', null, [], 0);
+    expect(getKeyList('p1', null, 1)).toEqual([]);
+  });
+
+  it('keeps a team list and the shared list apart — this is BYOK isolation', () => {
+    // The whole reason ownerTeamId is part of the cache key. If a shared-pool caller could be served
+    // a list built for a team, a private credential would leave its team through the cache. The
+    // query enforces this with an equality filter; the cache must not undo it.
+    const teamKey = row({ id: 'byok', ownerTeamId: 't1', encryptedKey: 'enc-private' });
+    setKeyList('p1', 't1', [teamKey], 0);
+
+    expect(getKeyList('p1', null, 1)).toBeUndefined();
+    expect(getKeyList('p1', 't1', 1)).toEqual([teamKey]);
+  });
+
+  it('keeps two teams apart in the same pool', () => {
+    setKeyList('p1', 't1', [row({ id: 'a', ownerTeamId: 't1' })], 0);
+    setKeyList('p1', 't2', [row({ id: 'b', ownerTeamId: 't2' })], 0);
+    expect(getKeyList('p1', 't1', 1)?.[0]?.id).toBe('a');
+    expect(getKeyList('p1', 't2', 1)?.[0]?.id).toBe('b');
+  });
+
+  it('keeps the same owner apart across two pools', () => {
+    setKeyList('p1', null, [row({ id: 'a' })], 0);
+    setKeyList('p2', null, [row({ id: 'b' })], 0);
+    expect(getKeyList('p1', null, 1)?.[0]?.id).toBe('a');
+    expect(getKeyList('p2', null, 1)?.[0]?.id).toBe('b');
+  });
+
+  it('preserves the order it was given, because that order is the LRU rotation', () => {
+    const ordered = [row({ id: 'oldest' }), row({ id: 'newer' })];
+    setKeyList('p1', null, ordered, 0);
+    expect(getKeyList('p1', null, 1)?.map((k) => k.id)).toEqual(['oldest', 'newer']);
+  });
+
+  it('is disabled by KEY_ROW_CACHE_TTL_MS=0, same as the row cache', () => {
+    process.env.KEY_ROW_CACHE_TTL_MS = '0';
+    setKeyList('p1', null, [row()], 0);
+    expect(getKeyList('p1', null, 0)).toBeUndefined();
+  });
+});
+
+describe('forgetKeyRow and the candidate lists', () => {
+  it('clears the lists too, so a ban cannot survive in one', () => {
+    // The failure this prevents: clearing the row but leaving the list would keep routing to the
+    // banned key through the list, which is worse than having no cache at all.
+    setKeyList('p1', null, [row({ id: 'k1' })], 0);
+    forgetKeyRow('k1');
+    expect(getKeyList('p1', null, 1)).toBeUndefined();
+  });
+
+  it('clears lists for pools the forgotten key was not even in', () => {
+    // Deliberately wholesale. A key id does not identify which lists contain it, and the row that
+    // would say may be the very thing being invalidated.
+    setKeyList('p1', null, [row()], 0);
+    setKeyList('p2', 't1', [row()], 0);
+    forgetKeyRow('k-somewhere-else');
+    expect(getKeyList('p1', null, 1)).toBeUndefined();
+    expect(getKeyList('p2', 't1', 1)).toBeUndefined();
+  });
+
+  it('clears the lists when called with no key at all', () => {
+    setKeyList('p1', null, [row()], 0);
+    forgetKeyRow();
+    expect(getKeyList('p1', null, 1)).toBeUndefined();
   });
 });
