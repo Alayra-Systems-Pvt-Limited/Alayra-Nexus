@@ -37,6 +37,7 @@ import { startBackupScheduler } from './services/backupSchedule.service';
 import { redis, usingMemoryKv } from './lib/redis';
 import { deriveRateLimitKey } from './lib/rateLimitKey';
 import { ensureApiKey }    from './services/apiKey.service';
+import { writeSecretFile } from './lib/secretFile';
 import { reconcilePoolsToRegistry } from './services/model.service';
 import { drainUsage }     from './services/usagePipeline';
 import { drainAudit, runRetention } from './services/audit.service';
@@ -115,13 +116,18 @@ async function initOnce() {
   }
 
   // ── Generate the API key on first run, and hash an existing one ──
-  // Phase 7.13a: the key is stored as a hash now and shown exactly once. `ensureApiKey` also
-  // converts a pre-7.13a plaintext key in place — the key keeps working, and that boot's log is
-  // the last time it can be printed.
+  // Phase 7.13a: the key is stored as a hash now and handed over exactly once. `ensureApiKey` also
+  // converts a pre-7.13a plaintext key in place — the key keeps working, and this boot is the last
+  // chance to retrieve it.
   const newKey = await ensureApiKey();
   if (newKey) {
-    console.log('\n🔑  Generated Nexus API Key — SAVE IT NOW, it cannot be shown again:');
-    console.log(`    ${newKey}`);
+    // To a 0600 file, not to stdout: stdout is collected by Docker, systemd and every hosted log
+    // service, and a credential written there outlives the boot that printed it. The operator still
+    // gets exactly one sight of the key, and one that survives a closed terminal. See lib/secretFile.
+    const keyPath = writeSecretFile('api-key.txt', newKey);
+    console.log('\n🔑  Generated your Nexus API Key. It cannot be shown again, and it is in:');
+    console.log(`    ${keyPath}`);
+    console.log('    Read it with `cat`, save it somewhere safe, then delete that file.');
     // Named no single tool. This line greets everyone who ever starts a gateway, and a Cursor user
     // is not the common case — Cursor cannot even reach a localhost gateway, as the README says a
     // few sections later. Say what the key IS, and let the reader map it to their own client.

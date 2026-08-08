@@ -362,7 +362,13 @@ export class MemoryKv {
     const argv = rest.slice(n).map(String);
 
     const impl = SCRIPTS.get(lua);
-    if (!impl) {
+    // `typeof` rather than a truthiness check, and it is not only defensive style. The registry is
+    // module-private and only `defineScript` ever writes to it, so in this codebase `impl` is always
+    // one of our own function literals — but this is the one place a value fetched by a lookup gets
+    // CALLED, and a lookup that ever returned something else should stop here rather than be invoked.
+    // It also states the invariant for a static analyser, which cannot see that the registry is
+    // closed.
+    if (typeof impl !== 'function') {
       throw new Error(
         'This Lua script has no in-memory twin. Declare it with defineScript(lua, impl) so it also ' +
         `works without Redis. Script begins: ${lua.trim().slice(0, 80)}…`,

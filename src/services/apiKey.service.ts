@@ -17,6 +17,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { getSetting, setSetting } from './settings.service';
+import { writeSecretFile } from '../lib/secretFile';
 
 // ── The master API key (Phase 7.13a) ──────────────────────────────────────────
 //
@@ -90,8 +91,8 @@ export async function rotateApiKey(): Promise<{ key: string; masked: string }> {
  *
  * The operator's CURRENT KEY KEEPS WORKING — every client, script and IDE pointed at this gateway is
  * unaffected. What changes is that they can no longer read it back out of the dashboard. So it is
- * printed one final time here, in the logs of the boot that converts it, which is the last honest
- * chance to save it.
+ * handed over one final time here, written to a file only its owner can read, which is the last
+ * honest chance to save it.
  */
 export async function convertLegacyApiKey(): Promise<boolean> {
   const plaintext = await getSetting(LEGACY_KEY);
@@ -103,10 +104,16 @@ export async function convertLegacyApiKey(): Promise<boolean> {
   // that once held a live credential, and the point is that it is gone.
   await prisma.appSettings.deleteMany({ where: { key: LEGACY_KEY } });
 
+  // Written to a 0600 file rather than printed. The key itself must not reach stdout, because
+  // stdout is collected — see lib/secretFile.ts. The operator still gets exactly one chance at it,
+  // and a file outlives the terminal that would have shown it.
+  const path = writeSecretFile('api-key.txt', plaintext);
+
   console.log('\n🔐  Your Nexus API key is now stored as a hash, not in plain text.');
-  console.log('    The key below is unchanged — every client using it keeps working — but this is');
-  console.log('    the LAST time it can be displayed. Save it now if you have not already.\n');
-  console.log(`    ${plaintext}\n`);
+  console.log('    Your existing key is unchanged — every client using it keeps working — but this');
+  console.log('    is the LAST time it can be retrieved. It has been written to:\n');
+  console.log(`    ${path}\n`);
+  console.log('    Read it with `cat`, save it somewhere safe, then delete that file.');
   console.log('    From now on the dashboard shows only a hint. Lost it? Rotate for a new one.\n');
   return true;
 }
