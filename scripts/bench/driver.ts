@@ -78,7 +78,18 @@ export interface RunOptions {
    * rather than silently averaged in.
    */
   maxSeconds?: number;
-  body?: unknown;
+  /**
+   * The request body, or a function called once per request to build it.
+   *
+   * A fixed body was enough while every scenario measured the same request over and over. It cannot
+   * express a workload SHAPE — "one request in four is a repeat" — which is the only way to measure
+   * a cache, because a cache's whole behaviour is a function of how often traffic repeats itself.
+   *
+   * The function is called once per request, warmup included, and is passed the index within the
+   * current phase. A scenario that needs a counter spanning both phases should close over its own;
+   * `issued` restarts at zero when measurement begins.
+   */
+  body?: unknown | ((index: number) => unknown);
   headers?: Record<string, string>;
   method?: 'GET' | 'POST';
 }
@@ -135,7 +146,12 @@ export const p99 = (s: number[]): number => percentile(s, 99);
 export async function run(opts: RunOptions): Promise<RunResult> {
   const { url, concurrency, requests, warmup = 0, maxSeconds = Infinity, body, headers = {}, method = 'POST' } = opts;
   const target = new URL(url);
-  const payload = body === undefined ? undefined : JSON.stringify(body);
+  // A static body is serialized ONCE, outside the loop. That matters: at these rates JSON.stringify
+  // of the payload on every request is driver CPU competing with the driver's own I/O, and it would
+  // be charged to the target. A per-request body has to pay it — unavoidable, and the reason the
+  // static path is kept rather than folded into the function case.
+  const buildBody = typeof body === 'function' ? body as (i: number) => unknown : null;
+  const staticPayload = body === undefined || buildBody ? undefined : JSON.stringify(body);
   const hdrs: Record<string, string> = { 'content-type': 'application/json', ...headers };
 
   // maxSockets === concurrency so no worker ever queues for a socket. Queueing inside the driver is
@@ -156,7 +172,8 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   const worker = async (total: number): Promise<void> => {
     for (;;) {
       if (issued >= total || performance.now() > deadline) return;
-      issued++;
+      const index = issued++;
+      const payload = buildBody ? JSON.stringify(buildBody(index)) : staticPayload;
       const r = await once(target, method, hdrs, payload, agent);
       if (measuring) {
         latencies.push(r.ms);

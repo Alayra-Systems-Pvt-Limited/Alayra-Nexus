@@ -155,6 +155,73 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **`npm run bench:cache` — the response cache measured, and the doubt about it settled.** The cache
+  is the gateway's headline cost-saving feature and had never been measured once. Worse, it had been
+  DOUBTED: reported from real use as writing and reading but never actually serving. A code audit
+  disagreed, which settles nothing — a cache that works in the source and not in production is
+  exactly the failure that can only be seen from outside.
+
+  So the first thing this benchmark reports is not a latency figure. It is a proof taken from the
+  upstream's own counter: five identical requests, cache off, reached the provider five times; cache
+  on, once. The repeat comes back stamped `X-Nexus-Cache: hit`. **The cache serves.**
+
+  What a hit is worth, at a 200 ms provider and 400 requests per cell:
+
+  | repeat rate | p50 ms | p95 ms | RPS | provider calls | avoided |
+  |---|---|---|---|---|---|
+  | 0% | 261.6 | 280.3 | 31 | 400 | 0 |
+  | 25% | 239.1 | 266.5 | 42 | 300 | 100 |
+  | 50% | 31.1 | 266.0 | 63 | 200 | 200 |
+  | 75% | 6.92 | 254.3 | 112 | 100 | 300 |
+  | 100% | 5.92 | 40.7 | **898** | 0 | 400 |
+
+  **Read the RPS column, not the p50 one.** p50 moves in a step rather than a curve, because below a
+  50% hit rate the median request is a miss and above it the median is a hit — the median is just
+  picking a side of a two-humped distribution, and it reads as "the cache does nothing" at 25% and
+  "the cache does everything" at 75%. Neither is true. p95 barely moves at all until the very top,
+  for a reason worth stating plainly: **the tail is made of misses, and a cache cannot make a miss
+  faster.** What improves smoothly and honestly with the hit rate is throughput and money.
+
+  `avoided` is counted at the provider — requests sent minus requests received — so it is the one
+  figure here that cannot be wrong in our favour unless the mock is wrong too.
+
+  **The money reconciles exactly.** 1,590 hits counted at the provider, 1,590 recorded by the
+  gateway, `savedUsd` agreeing to four decimal places. That is the dashboard's cost-saving figure
+  verified against an independent counter rather than against itself.
+
+  **Three methodology problems had to be fixed before any of the above could be trusted**, and each
+  would have produced a plausible wrong answer:
+
+  - The first version read the cache's cost-on-a-miss off the 200 ms cells and got **−6.0 ms on one
+    run and +5.7 ms on the next** — the two runs disagreeing about whether the cache makes misses
+    slower or faster. A single-digit effect cannot be resolved against a 200 ms constant. It now has
+    its own experiment at 0 ms upstream with interleaved repeats, and prints the spread between
+    repeats of the *same* configuration beside the answer. At 1.53 ms against a 4.48 ms spread it
+    reports "smaller than we can measure here" rather than inventing a number.
+  - Warmup requests reached the provider and were counted there, then subtracted from a measured
+    total that never included them — which at a 0% repeat rate yields a *negative* "calls avoided"
+    and at every other rate a quietly overstated one. Warm and measured phases are now counted
+    separately.
+  - Both phases share ONE workload generator. A fresh generator per phase restarts its unique
+    counter, so the measured run re-sends the warm run's "unique" prompts — every one a cache hit
+    recorded as a miss. That is the single most dangerous mistake available here: it inflates the
+    headline number in our own favour and looks entirely plausible. `scripts/bench/cacheWorkload.ts`
+    is extracted and tested for exactly this, including a test that documents what the mistake costs;
+    the suite was confirmed to fail by making unique prompts collide with the hot set.
+
+  The load driver gained per-request bodies to make this possible — a fixed body cannot express a
+  workload *shape*, and a cache's entire behaviour is a function of how often traffic repeats.
+
+  Not published as a benchmark: these numbers carry the Docker Desktop VM tax like every other
+  figure in this repository so far, and every saving scales with the assumed provider latency
+  (`CACHE_UPSTREAM_MS`, 200 ms by default and printed with every result). The mock's fixed 12-token
+  response also makes the dollar column a floor rather than an estimate.
+
+  One thing recorded now because it stops being true later: this is **exact-match** caching, so a hit
+  is the same answer the model already gave and the saving carries no correctness risk. A semantic
+  cache changes both halves of that — the answer is no longer identical, and the hit costs an
+  embedding call, so the honest figure becomes saved *minus* that.
+
 - **A key from the wrong provider is now refused when you paste it, instead of quietly banning
   itself an hour later.** A pool is bound to one provider: its slug picks the base URL, the auth
   header and the models, and every key inside it inherits that. So an OpenRouter key pasted into an
