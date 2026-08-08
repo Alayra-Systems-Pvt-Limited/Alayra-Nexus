@@ -73,7 +73,8 @@
     "bench:scaling": "tsx scripts/bench/scaling.ts",
     "bench:store-ops": "tsx scripts/bench/storeOps.ts",
     "bench:k6": "tsx scripts/bench/k6.ts",
-    "bench:provision": "tsx scripts/bench/provision.ts"
+    "bench:provision": "tsx scripts/bench/provision.ts",
+    "bench:routing": "tsx scripts/bench/routing.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",

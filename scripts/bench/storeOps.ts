@@ -30,7 +30,7 @@
 // Redis's own `INFO commandstats` does the counting, so nothing here has to instrument the client.
 
 import { execFileSync, spawn } from 'node:child_process';
-import { COMPLETION_BODY, setUpstream, startHarness } from './gateway';
+import { COMPLETION_BODY, completionBody, setUpstream, startHarness } from './gateway';
 
 const REDIS_CONTAINER = process.env.OPS_REDIS_CONTAINER ?? 'nexus-ops-redis';
 const REDIS_PORT = parseInt(process.env.OPS_REDIS_PORT ?? '56379', 10);
@@ -89,10 +89,13 @@ async function main(): Promise<void> {
   try {
     await setUpstream(h.mockUrl, { latencyMs: 0 });
 
+    // See queryCount.ts: unique bodies force a sticky miss and the full routing sweep.
+    const unique = process.env.BENCH_SESSIONS === 'unique';
+    let n = 0;
     const send = (): Promise<Response> => fetch(`${h.gatewayUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${h.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify(COMPLETION_BODY),
+      body: JSON.stringify(unique ? completionBody(n++) : COMPLETION_BODY),
     });
 
     // Warm up first: the caches this is meant to measure are cold on the first request, and a cold

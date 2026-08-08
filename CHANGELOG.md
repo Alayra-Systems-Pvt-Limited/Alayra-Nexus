@@ -11,6 +11,60 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **A benchmark for the routing path, and the discovery that no benchmark had ever taken it.** The
+  gateway pins a conversation to the key that last served it, and the pin is keyed by a hash of the
+  MESSAGE CONTENT (`src/lib/sticky.ts`). Every benchmark in this repository sent a byte-identical
+  body on every request. So every request hashed to the same session, hit the same pin, and took
+  `tryStickyKey` — one indexed lookup. The routing sweep that real traffic runs on almost every
+  request was never executed once, in any measurement, on any rig.
+
+  `SESSIONS=unique` (k6) and `BENCH_SESSIONS=unique` (the Node harnesses) give every request its own
+  conversation and force the miss. The gap between the two settings is what routing costs:
+
+  | | queries per request |
+  |---|---|
+  | identical bodies — the pinned fast path | 0.3 |
+  | unique bodies — the real sweep | 1.2–1.3 |
+
+  The variable part is batched usage writes landing inside or outside the window; the deterministic
+  part is exactly one extra `SELECT NexusKey` per request. Both defaults are unchanged, so every
+  earlier figure still means what it said — it just described a narrower path than we thought.
+
+- **`npm run bench:routing`, which measures what a key running out actually costs.** Several pools,
+  each with one key clamped to 10 rpm, driven past exhaustion in order so the router has to walk
+  deeper on each band. Two questions, and they have different answers.
+
+  *Does failover work?* Yes. 47 of 50 available slots were served, the walk rolled to the next pool
+  each time a key was exhausted, and once every key was out the gateway refused cleanly rather than
+  failing open.
+
+  *What does it cost?* This is the defect:
+
+  | band | pool reached | served | refused | Redis ops / request |
+  |---|---|---|---|---|
+  | 0 | pool 0 | 10 | 0 | 19.7 |
+  | 1 | pool 1 | 10 | 0 | 24.7 |
+  | 2 | pool 2 | 10 | 0 | 29.8 |
+  | 3 | pool 3 | 10 | 0 | 35.4 |
+  | 4 | pool 4 | 7 | 3 | 36.3 |
+
+  **Five extra Redis round trips per exhausted pool walked**, linear, reproduced twice. Each
+  candidate costs a breaker gate, a user-admission check and an atomic RPM/TPM reservation, and the
+  router pays them one by one for every key it ends up rejecting. Extrapolated to a deployment with
+  20 pools of which 19 are busy, a single request pays roughly 95 sequential round trips — and it
+  pays them precisely when capacity is tight, which is the worst moment to get slower.
+
+  This is a real defect in our own code, not a rig artifact. The fix it justifies is select-and-
+  reserve in a single server-side Lua script, so the cost is flat regardless of how deep the walk
+  goes; that work is not in this change.
+
+  One note on how the number was nearly missed. The first version of this script clamped keys via
+  `/admin/keys`, which does not exist — keys live under their provider. The 404 produced `undefined`,
+  the clamp silently did nothing, the harness's own key kept its 100,000,000 rpm and absorbed the
+  entire run, and the script printed a beautifully flat cost curve for a walk that never happened.
+  It now asserts that every key was clamped and fails loudly if not. A setup step that quietly does
+  nothing is worse than one that crashes.
+
 - **A two-machine benchmark rig, and four measurements of the same build that disagree by twelve
   times.** `docker-compose.bench.yml` brings up everything that gets MEASURED — gateway, mock
   upstream, Postgres, Redis — on one host. `npm run bench:provision` claims it and prints the exact
