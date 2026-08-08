@@ -71,13 +71,68 @@ export const PRESET_RULES: Record<string, GuardrailRule> = {
 };
 
 /**
- * Compile rules to RegExp, skipping any that are malformed rather than throwing —
+ * Longest pattern we will compile. Real rules are short; a very long one is either a mistake or an
+ * attempt to build something expensive out of alternation.
+ */
+export const MAX_PATTERN_CHARS = 1_000;
+
+/**
+ * Reject patterns that can backtrack catastrophically, before they ever reach `new RegExp`.
+ *
+ * ── Why a rule's own text is a risk ───────────────────────────────────────────────────────────
+ *
+ * These patterns come from operator configuration, so the regex the request path runs is, in the
+ * end, a string somebody typed. `try/catch` already covers a pattern that will not COMPILE. It does
+ * nothing about one that compiles perfectly and then takes exponential time to match — the classic
+ * `(a+)+$` shape, where every quantified group nested inside another quantifier doubles the ways the
+ * engine can split the same input. On a single-threaded gateway that is not a slow request; it is a
+ * stalled event loop, and every other request in flight stops with it.
+ *
+ * ── What this does and does not promise ───────────────────────────────────────────────────────
+ *
+ * It looks for a quantifier applied to a group that itself contains a quantifier or an alternation
+ * of overlapping branches — which is what every textbook ReDoS shares. That is a heuristic, not a
+ * proof: JavaScript has no way to bound a regex's running time, and the only real fix is a
+ * linear-time engine like RE2, which is a native dependency this package cannot take on and still
+ * install cleanly from `npx`.
+ *
+ * So the honest statement of the guarantee is: the shapes that cause this in practice are refused,
+ * guardrail rules remain admin-only, and `MAX_SCAN_CHARS` bounds how much text any of them sees.
+ */
+export function isSafePattern(pattern: string): boolean {
+  if (pattern.length > MAX_PATTERN_CHARS) return false;
+
+  // A quantifier — *, +, {n,} — applied to a group whose body also contains one. `(\w+)*`, `(a|b+)+`,
+  // `([0-9]{2,}){3,}`. The inner body is matched non-greedily and without nested parens of its own,
+  // so this looks one level deep, which is the level that matters.
+  const NESTED_QUANTIFIER = /\((?![?]:?[=!<])[^()]*[*+]|\{\d+,\d*\}[^()]*\)[*+{]/;
+  if (NESTED_QUANTIFIER.test(pattern) && /[)][*+]|[)]\{\d+,\d*\}/.test(pattern)) return false;
+
+  // An alternation of branches that can match the same text, under a quantifier: `(a|a)*`, `(\d|\w)+`.
+  // Overlap is undecidable in general; identical branches are the case that actually gets written.
+  const alternationGroups = pattern.match(/\([^()]*\|[^()]*\)[*+]/g) ?? [];
+  for (const group of alternationGroups) {
+    const branches = group.slice(1, group.lastIndexOf(')')).split('|');
+    if (new Set(branches).size < branches.length) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Compile rules to RegExp, skipping any that are malformed or unsafe rather than throwing —
  * one bad operator rule must not take the whole filter (or the request path) down.
+ *
+ * Skipping is deliberate over throwing, and the trade is worth naming: a rule that is silently
+ * dropped is a filter the operator believes is running and is not. That is why `compileRules`
+ * returns only what compiled and the caller can compare counts — a rejected rule is visible as a
+ * missing one, where a thrown error would have taken every other rule down with it.
  */
 export function compileRules(rules: GuardrailRule[]): CompiledRule[] {
   const compiled: CompiledRule[] = [];
   for (const rule of rules) {
     if (!rule?.pattern || !rule?.name) continue;
+    if (!isSafePattern(rule.pattern)) continue;
     try {
       const flags = rule.flags ?? 'gi';
       compiled.push({ ...rule, regex: new RegExp(rule.pattern, flags.includes('g') ? flags : `${flags}g`) });

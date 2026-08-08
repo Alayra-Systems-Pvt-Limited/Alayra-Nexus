@@ -9,6 +9,59 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Security
+
+- **The master API key no longer goes to stdout.** It was printed twice — once on first run, once
+  when a pre-7.13a plaintext key was converted at boot. On a laptop that is fine, because a human is
+  watching the terminal. In every deployment that matters it is not: stdout is collected by Docker,
+  systemd, Kubernetes or a hosted log service, and a credential written there lands in a system with
+  a different retention policy, a different access list and a longer memory than anyone intends.
+
+  Deleting the message would have been worse than leaving it. The key is shown exactly once by
+  design, so an operator who never sees it has to rotate and update every client — a self-inflicted
+  outage during what was supposed to be an upgrade.
+
+  So the key is written to a `0600` file in the data directory and the log gets the **path**. One
+  `cat`, and the file survives a terminal that has already scrolled away or closed. `NEXUS_DATA_DIR`
+  picks the location; it defaults to the same `~/.alayra-nexus` the CLI already uses, so there is one
+  directory to secure rather than a secret filed somewhere nobody was told about.
+
+  The mode is set on write and then applied again with `chmod`, because the mode argument only takes
+  effect when a file is CREATED — a re-run over a world-readable leftover would otherwise keep it
+  world-readable, which is exactly the case where the permissions matter.
+
+  Closes CodeQL `js/clear-text-logging` (alert #40).
+
+- **A guardrail rule can no longer hang the gateway.** Rules are regexes from operator
+  configuration, and `compileRules` wrapped `new RegExp` in a `try/catch` — which covers a pattern
+  that fails to COMPILE and does nothing about one that compiles perfectly and then backtracks
+  exponentially.
+
+  Measured, because the size of this is easy to understand and hard to believe: `(a+)+$` against
+  **41 characters** of non-matching input ran for over 90 seconds without finishing. Node is
+  single-threaded, so that is not a slow request — it is a stalled event loop, and every other
+  request in flight stops with it. One admin-configured rule and a short prompt.
+
+  `isSafePattern` now refuses the shapes that cause this — a quantifier applied to a group that
+  itself contains one, and identical alternation branches under a quantifier — plus a 1,000-character
+  cap on pattern length. All six shipped presets pass unchanged, and ordinary operator patterns
+  (`\bsecret\b`, `(cat|dog)s?`, `\d{3}-\d{4}`) are unaffected; a guard that quietly disabled real
+  rules would be worse than none.
+
+  This is a heuristic and is documented as one. JavaScript cannot bound a regex's running time, and
+  the only complete fix is a linear-time engine like RE2 — a native dependency this package cannot
+  take on and still install cleanly from `npx`. What is true is that the shapes seen in practice are
+  refused, guardrail rules remain admin-only, and `MAX_SCAN_CHARS` bounds how much text any rule sees.
+
+  Closes CodeQL `js/regex-injection` (alert #41).
+
+- **The in-memory KV checks that a script twin is callable before calling it.** `MemoryKv.eval`
+  looks a registered implementation up by its Lua source and invokes it. The registry is
+  module-private and only `defineScript` ever writes to it, so the value is always one of our own
+  function literals — but this is the single place in the codebase where something fetched by a
+  lookup is CALLED, and it now verifies `typeof impl === 'function'` rather than mere truthiness.
+  Addresses CodeQL `js/unvalidated-dynamic-method-call` (alert #46).
+
 ### Changed
 
 - **Picking a key is now one call to the KV instead of three per candidate, so an exhausted pool

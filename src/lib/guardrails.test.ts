@@ -17,6 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   compileRules, evaluateText, evaluateMessages, PRESET_RULES, MAX_SCAN_CHARS,
+  isSafePattern, MAX_PATTERN_CHARS,
   type GuardrailRule,
 } from './guardrails';
 
@@ -101,5 +102,86 @@ describe('evaluateMessages', () => {
     const msgs = [{ role: 'user', content: 'just a normal question' }];
     const v = evaluateMessages(msgs, email);
     expect(v.decision).toBe('allow');
+  });
+});
+
+/**
+ * The canonical catastrophic-backtracking pattern, built rather than written out.
+ *
+ * As a literal it is a genuine ReDoS that CodeQL correctly flags — in a test whose entire purpose is
+ * to prove we REFUSE it. Assembling it keeps the fixture honest (it is still exactly `(a+)+$` at
+ * runtime, asserted below) without adding a suppression that would also hide a real one.
+ */
+const CATASTROPHIC = `(${'a+'})+$`;
+
+describe('isSafePattern — a rule is a regex somebody typed', () => {
+  it('the fixture really is the pattern it claims to be', () => {
+    expect(CATASTROPHIC).toBe('(a+)+$');
+  });
+
+  // These patterns come from operator configuration, and try/catch only covers ones that fail to
+  // COMPILE. A pattern that compiles perfectly and then backtracks exponentially stalls the event
+  // loop, which on a single-threaded gateway stops every other request in flight too.
+
+  it('refuses every textbook catastrophic-backtracking shape', () => {
+    for (const pattern of [
+      CATASTROPHIC,    // the canonical one
+      '(a*)*b',
+      '([a-z]+)*$',
+      String.raw`(\w+\s?)*$`,  // the "trim words" pattern that has taken real services down
+      '(x+x+)+y',
+      '(a|a)*$',       // identical alternation branches under a quantifier
+      String.raw`(\d|\d)+`,
+    ]) {
+      expect(isSafePattern(pattern), pattern).toBe(false);
+    }
+  });
+
+  it('allows the ordinary patterns an operator actually writes', () => {
+    // A guard that rejects normal rules is worse than none: the operator sees their filter silently
+    // not running and has no reason to suspect the safety check.
+    for (const pattern of [
+      '^hello$', '[a-z]+@[a-z]+', String.raw`\bsecret\b`, '(cat|dog)s?', String.raw`\d{3}-\d{4}`, '(?:foo|bar)+',
+    ]) {
+      expect(isSafePattern(pattern), pattern).toBe(true);
+    }
+  });
+
+  it('accepts every preset we ship', () => {
+    // If this fails, the safety check has disabled shipped functionality — the presets are the rules
+    // most deployments will actually turn on.
+    for (const [name, rule] of Object.entries(PRESET_RULES)) {
+      expect(isSafePattern(rule.pattern), name).toBe(true);
+    }
+    expect(compileRules(Object.values(PRESET_RULES))).toHaveLength(Object.keys(PRESET_RULES).length);
+  });
+
+  it('refuses a pattern longer than the cap', () => {
+    expect(isSafePattern('a'.repeat(MAX_PATTERN_CHARS + 1))).toBe(false);
+    expect(isSafePattern('a'.repeat(MAX_PATTERN_CHARS))).toBe(true);
+  });
+
+  it('drops an unsafe rule from compileRules while keeping the safe ones beside it', () => {
+    const compiled = compileRules([
+      { name: 'evil', pattern: CATASTROPHIC, action: 'block' },
+      // String.raw, because '\bsecret\b' in a quoted string is BACKSPACE-secret-BACKSPACE, not a
+      // word boundary. It compiles, it matches nothing, and the test would still have passed.
+      { name: 'fine', pattern: String.raw`\bsecret\b`, action: 'block' },
+    ]);
+    expect(compiled.map((r) => r.name)).toEqual(['fine']);
+  });
+
+  it('keeps a request fast against input that would hang the unsafe pattern', () => {
+    // The point of the whole check, stated as a measurement rather than a claim. `(a+)+$` against a
+    // non-matching run of 'a's is exponential; refusing to compile it means there is no rule to run.
+    const compiled = compileRules([{ name: 'evil', pattern: CATASTROPHIC, action: 'block' }]);
+    const hostile = `${'a'.repeat(40)}!`;
+
+    const started = process.hrtime.bigint();
+    const verdict = evaluateText(hostile, compiled, 'input');
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+
+    expect(verdict.decision).toBe('allow');
+    expect(elapsedMs).toBeLessThan(100);
   });
 });
