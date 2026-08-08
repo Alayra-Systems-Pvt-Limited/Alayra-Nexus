@@ -29,26 +29,33 @@
 // will fail at the claim step; bring the rig down with `-v` and up again for a clean one.
 
 import { execFileSync } from 'node:child_process';
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
+import { join } from 'node:path';
 import { provisionGateway, readGeneratedApiKey } from './gateway';
 
 const COMPOSE_FILE = 'docker-compose.bench.yml';
 const GATEWAY_HOST_PORT = 3401;
+const MOCK_HOST_PORT = 3210;
+
+/** Already git-ignored — see .gitignore, added alongside the profiling artifacts. */
+const KEY_DIR = '.bench';
+const KEY_FILE = join(KEY_DIR, 'api-key');
 
 /**
  * This host's address on the local network.
  *
- * The generator is on another machine, so `localhost` is useless to it. Reported rather than
- * guessed at by the reader, because getting this wrong produces a connection refused that looks
- * like the gateway is down.
+ * The generator is on another machine, so `localhost` is useless to it. Reported rather than left
+ * for the reader to work out, because getting it wrong produces a connection refused that looks
+ * exactly like the gateway being down.
  */
 function lanAddresses(): string[] {
   const out: string[] = [];
   for (const [name, addrs] of Object.entries(networkInterfaces())) {
     for (const a of addrs ?? []) {
       if (a.family !== 'IPv4' || a.internal) continue;
-      // Docker and WSL create their own interfaces with private addresses that no other machine on
-      // the network can reach. Naming them would send the reader down a dead end.
+      // Docker and WSL create their own interfaces with private addresses no other machine on the
+      // network can reach. Naming them would send the reader down a dead end.
       if (/^(vEthernet|docker|br-|veth|WSL)/i.test(name)) continue;
       out.push(`${a.address}  (${name})`);
     }
@@ -62,6 +69,25 @@ function composeLogs(service: string): string {
   });
 }
 
+/**
+ * Store the key where it can be copied, and show only enough to recognise it.
+ *
+ * The obvious design prints the key inside the commands to paste. CodeQL calls that
+ * `js/clear-text-logging` and is right to: printed output lands in scrollback, in CI logs and in
+ * any terminal recording — and this is precisely the script somebody adapts to point at a gateway
+ * that is not a benchmark rig. "It is only a mock upstream" is how real credentials reach logs.
+ *
+ * So it goes to a 0600 file the commands read from, and the console gets a masked prefix: enough to
+ * confirm which key is in play, useless to anyone reading over a shoulder.
+ */
+function storeKey(apiKey: string): string {
+  mkdirSync(KEY_DIR, { recursive: true });
+  writeFileSync(KEY_FILE, apiKey, { mode: 0o600 });
+  // The mode argument is ignored on Windows, so it is applied explicitly where it means something.
+  if (process.platform !== 'win32') chmodSync(KEY_FILE, 0o600);
+  return `${apiKey.slice(0, 6)}…${apiKey.slice(-4)}`;
+}
+
 async function main(): Promise<void> {
   const hostUrl = `http://127.0.0.1:${GATEWAY_HOST_PORT}`;
 
@@ -72,38 +98,51 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const apiKey = readGeneratedApiKey(composeLogs('gateway'));
-  // `mock` is the service name on the compose network — the address the GATEWAY uses, which is not
-  // the address anything outside the rig uses.
+  const masked = storeKey(readGeneratedApiKey(composeLogs('gateway')));
+  // `mock` is the service name on the compose network — the address the GATEWAY uses to reach its
+  // upstream, which is not the address anything outside the rig uses.
   await provisionGateway(hostUrl, 'http://mock:3210');
 
   const addresses = lanAddresses();
   const primary = addresses[0]?.split(' ')[0] ?? '<this-host-ip>';
+  const gw = `http://${primary}:${GATEWAY_HOST_PORT}/v1/chat/completions`;
+  const mock = `http://${primary}:${MOCK_HOST_PORT}/v1/chat/completions`;
 
-  console.log('\n  Gateway provisioned: one pool, one key, one model.\n');
-  console.log('  Reachable on this host at:');
-  for (const a of addresses) console.log(`    http://${a.replace(/\s+\(/, ':' + GATEWAY_HOST_PORT + '  (')}`);
-  console.log('');
-  console.log('  ── On the LOAD GENERATOR machine ────────────────────────────────────────────');
-  console.log('');
-  console.log('  Measure the gateway:');
-  console.log(`    RATE=400 DURATION=20s PRE_VUS=400 MAX_VUS=2000 \\`);
-  console.log(`      TARGET_URL=http://${primary}:${GATEWAY_HOST_PORT}/v1/chat/completions \\`);
-  console.log(`      API_KEY=${apiKey} \\`);
-  console.log('      k6 run scripts/bench/k6/openLoop.js');
-  console.log('');
-  console.log('  And the rig\'s own ceiling — the SAME network, gateway removed from the path.');
-  console.log('  Run this every time. A gateway figure approaching it is measuring the rig:');
-  console.log(`    RATE=3000 DURATION=15s PRE_VUS=600 MAX_VUS=2000 \\`);
-  console.log(`      TARGET_URL=http://${primary}:3210/v1/chat/completions \\`);
-  console.log(`      API_KEY=${apiKey} \\`);
-  console.log('      k6 run scripts/bench/k6/openLoop.js');
-  console.log('');
-  console.log('  Closed-loop comparison (set VUS instead of RATE), which is how the coordinated-');
-  console.log('  omission claim is checked rather than asserted:');
-  console.log(`    VUS=64 DURATION=20s TARGET_URL=http://${primary}:${GATEWAY_HOST_PORT}/v1/chat/completions \\`);
-  console.log(`      API_KEY=${apiKey} k6 run scripts/bench/k6/openLoop.js`);
-  console.log('');
+  const lines = [
+    '',
+    '  Gateway provisioned: one pool, one key, one model.',
+    '',
+    `  API key  → ${KEY_FILE}   (mode 0600, git-ignored)`,
+    `             ${masked}  — masked here on purpose; the file holds the whole thing`,
+    '',
+    '  Reachable on this host at:',
+    ...addresses.map((a) => `    http://${a.replace(/\s+\(/, `:${GATEWAY_HOST_PORT}  (`)}`),
+    '',
+    '  ── On the LOAD GENERATOR machine ──────────────────────────────────────────────',
+    '',
+    '  Copy the key across first, so it never passes through a terminal:',
+    `    scp ${KEY_FILE} <user>@<generator>:/tmp/nexus-bench-key`,
+    '',
+    '  Measure the gateway:',
+    '    API_KEY=$(cat /tmp/nexus-bench-key) RATE=400 DURATION=20s PRE_VUS=400 MAX_VUS=2000 \\',
+    `      TARGET_URL=${gw} \\`,
+    '      k6 run scripts/bench/k6/openLoop.js',
+    '',
+    '  And the rig\'s own ceiling — same network, gateway removed from the path. Run it at',
+    '  EVERY rate you measure, not only the highest: a baseline taken at one rate cannot',
+    '  attribute a tail at another, and the overhead IS the subtraction between the two.',
+    '    API_KEY=$(cat /tmp/nexus-bench-key) RATE=400 DURATION=20s PRE_VUS=400 MAX_VUS=2000 \\',
+    `      TARGET_URL=${mock} \\`,
+    '      k6 run scripts/bench/k6/openLoop.js',
+    '',
+    '  Closed-loop comparison (set VUS instead of RATE) — how the coordinated-omission',
+    '  claim gets checked rather than asserted:',
+    '    API_KEY=$(cat /tmp/nexus-bench-key) VUS=64 DURATION=20s \\',
+    `      TARGET_URL=${gw} \\`,
+    '      k6 run scripts/bench/k6/openLoop.js',
+    '',
+  ];
+  console.log(lines.join('\n'));
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
