@@ -155,6 +155,56 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **A key from the wrong provider is now refused when you paste it, instead of quietly banning
+  itself an hour later.** A pool is bound to one provider: its slug picks the base URL, the auth
+  header and the models, and every key inside it inherits that. So an OpenRouter key pasted into an
+  Anthropic pool is not a configuration choice, it is a typo — and the way it used to fail was the
+  worst available. The key saved without complaint. Then every request routed to it came back 401,
+  the breaker counted the auth failures, and after two of them the key was banned. What the operator
+  saw was a pool that silently stopped working several minutes after the action that broke it, with
+  nothing on screen connecting the two.
+
+  Adding or rotating a key now runs two checks before anything is written:
+
+  - **The prefix**, instantly and offline. Most issuers stamp their keys — `sk-ant-` is Anthropic,
+    `sk-or-v1-` is OpenRouter, `hf_` is HuggingFace, `gsk_` is Groq, `AIza` is Google — which is
+    enough to catch the common paste error with no network at all.
+  - **The provider itself**, which is authoritative and the only thing that can catch a revoked key,
+    a mistyped character, or a key whose prefix says nothing.
+
+  The prefix rule only ever rejects a POSITIVE mismatch, and that restraint is the design rather
+  than a shortcut. A bare `sk-` is claimed by OpenAI and copied deliberately by every
+  OpenAI-compatible provider, so it is evidence of nothing. Mistral and self-hosted providers stamp
+  nothing at all. And formats change — OpenAI added `sk-proj-` years after `sk-`. A rule that
+  hard-failed on anything it did not recognise would start refusing valid keys the week a provider
+  rotated its format, with no way for the operator to know why. So unrecognised passes, and the live
+  check is what catches those.
+
+  The live half is equally narrow about what counts as evidence: **only a 401 or a 403 refuses the
+  save.** A 404 usually means the provider does not serve `/models`; a timeout means the network is
+  unhappy. Neither says anything about the credential, and refusing on either would make a working
+  key unsavable because something else was down — locking the operator out of the fix at the moment
+  they need it. `verify: false` on the request drops the network call for an air-gapped pool, but
+  never the offline check, which needed nothing and is certain.
+
+  Rotation is checked the same way a create is. Rotating a live key to a wrong one is the worse of
+  the two cases: the pool was serving traffic a minute ago, which makes the eventual failure even
+  harder to connect back to the action that caused it.
+
+  One consequence worth knowing about: adding or rotating a key now makes a real request to the
+  provider, so it appears in their request log against that credential. It is a `GET` of the models
+  listing, it happens once per admin action, and it does not touch the key's rate counters — but it
+  is a request, and an operator reading their provider dashboard should not have to wonder where it
+  came from. The e2e suite had quietly assumed the opposite, counting every request its mock
+  received as routed traffic; that oracle now counts completions, which is what it always meant.
+
+  Verified end to end in the dashboard rather than only in tests, which is how the grammar bug
+  ("This looks like OpenRouter key", "add a OpenRouter pool") was found — an error an operator reads
+  while something is already going wrong is not the place to be sloppy. The route test drives each
+  provider response through real Fastify and asserts which side of the line it lands on; it was
+  confirmed to fail by replacing the status rule with `if (!result.ok)`, which is the exact
+  "simplification" a later change is most likely to make.
+
 - **A benchmark for the routing path, and the discovery that no benchmark had ever taken it.** The
   gateway pins a conversation to the key that last served it, and the pin is keyed by a hash of the
   MESSAGE CONTENT (`src/lib/sticky.ts`). Every benchmark in this repository sent a byte-identical

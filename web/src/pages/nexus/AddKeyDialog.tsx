@@ -96,13 +96,20 @@ export function AddKeyDialog({
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!canSubmit}>{busy ? 'Adding…' : 'Add key'}</Button>
+          {/* "Verifying" rather than "Adding": saving now calls the provider to confirm the
+              credential before writing it, which takes a moment and is worth naming — a button that
+              says "Adding…" for four seconds reads as a hang. */}
+          <Button variant="primary" onClick={submit} disabled={!canSubmit}>{busy ? 'Verifying…' : 'Add key'}</Button>
         </>
       }
     >
       <form onSubmit={submit}>
         {error && <FormError>{error}</FormError>}
-        <FormNote>The key is encrypted before storage and only ever shown masked. Fetch its models to add them to this provider.</FormNote>
+        <FormNote>
+          The key is encrypted before storage and only ever shown masked. It is checked against
+          {' '}{providerName} before saving, so a key from a different provider is caught here rather
+          than by failing requests later. Fetch its models to add them to this provider.
+        </FormNote>
 
         <Field label="API key">
           <div class={s.keyInputRow}>

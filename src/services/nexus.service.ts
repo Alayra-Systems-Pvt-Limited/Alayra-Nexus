@@ -580,7 +580,7 @@ export async function validateProviderCredentials(
   authHeader: string,
   authPrefix: string | null,
   extraHeaders: string | null = null,
-): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+): Promise<{ ok: boolean; latencyMs: number; error?: string; status?: number }> {
   const base  = stripTrailingSlash(baseUrl ?? providerDefaultUrl(provider));
   const start = Date.now();
   try {
@@ -593,7 +593,13 @@ export async function validateProviderCredentials(
       headers: withExtraHeaders(extraHeaders, providerAuthHeader(authHeader, authPrefix, apiKey)),
       signal:  AbortSignal.timeout(8000),
     });
-    return { ok: res.ok, latencyMs: Date.now() - start, error: res.ok ? undefined : `HTTP ${res.status}` };
+    // `status` is returned alongside `ok` because callers need to tell WHY a check failed, not only
+    // that it did. A 401 or 403 means the credential is wrong and is worth refusing a save over; a
+    // 404 usually means the provider has no `/models` route, which says nothing about the key.
+    return {
+      ok: res.ok, status: res.status, latencyMs: Date.now() - start,
+      error: res.ok ? undefined : `HTTP ${res.status}`,
+    };
   } catch (err) {
     return { ok: false, latencyMs: Date.now() - start, error: err instanceof Error ? err.message : 'Connection failed' };
   }
