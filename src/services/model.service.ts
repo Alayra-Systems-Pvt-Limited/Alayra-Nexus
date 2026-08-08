@@ -19,6 +19,7 @@ import { prisma }                 from '../lib/prisma';
 import { getSetting, setSetting } from './settings.service';
 import { REGISTRY_CACHE_KEY }    from '../lib/registryCacheKey';
 import { getActiveProviders }    from './providerCache.service';
+import { TtlMemo }               from '../lib/ttlMemo';
 import { CAPABILITIES, type Capability } from '../lib/modelSelect';
 
 // The registry lives as a JSON blob in AppSettings, not a table, so its shape is not
@@ -113,14 +114,37 @@ export function normalizeModel(raw: Record<string, unknown>): AiModel {
   };
 }
 
+/**
+ * A few seconds in front of the Redis copy. Measured with `npm run bench:store-ops`, this key
+ * was fetched TWICE per request — free against the in-process map standalone mode uses, two
+ * network round trips against a real Redis, on a registry an operator edits from a dashboard.
+ * See lib/ttlMemo.ts for what the window costs.
+ */
+const registryMemo = new TtlMemo<AiModel[]>(5_000, 'REGISTRY_MEMO_TTL_MS');
+
+/** Drop the in-process registry memo. Backs `POST /admin/cache/flush`, which clears the shared
+ * copy directly and must clear this one too or the button appears to do nothing for a few
+ * seconds. */
+export function clearRegistryMemo(): void { registryMemo.forget(); }
+
 export async function getModelRegistry(): Promise<AiModel[]> {
+  const local = registryMemo.get(REGISTRY_CACHE_KEY);
+  if (local !== undefined) return local;
+
   const cached = await redis.get(REGISTRY_CACHE_KEY);
-  if (cached) { try { return JSON.parse(cached) as AiModel[]; } catch { /* fall through */ } }
+  if (cached) {
+    try {
+      const models = JSON.parse(cached) as AiModel[];
+      registryMemo.set(REGISTRY_CACHE_KEY, models);
+      return models;
+    } catch { /* fall through */ }
+  }
   const raw = await getSetting('AI_MODEL_REGISTRY');
   let stored: unknown[] = DEFAULT_REGISTRY;
   if (raw && raw !== '[]') { try { const p = JSON.parse(raw); if (Array.isArray(p)) stored = p; } catch { /* use defaults */ } }
   const models = stored.map((m) => normalizeModel(m as Record<string, unknown>));
   await redis.set(REGISTRY_CACHE_KEY, JSON.stringify(models), 'EX', 60);
+  registryMemo.set(REGISTRY_CACHE_KEY, models);
   return models;
 }
 
@@ -175,6 +199,7 @@ export async function reconcilePoolsToRegistry(): Promise<number> {
 export async function updateModelRegistry(models: AiModel[]): Promise<void> {
   await setSetting('AI_MODEL_REGISTRY', JSON.stringify(models));
   await redis.del(REGISTRY_CACHE_KEY);
+  registryMemo.forget();
 }
 
 /**
