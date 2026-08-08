@@ -40,15 +40,11 @@
 // If that direct ceiling falls as workers are added, the machine ran out of cores and the scaling
 // figure is a floor, not a finding. Distinguishing those two is the entire point of measuring it.
 
-import { execFileSync } from 'node:child_process';
+import {
+  containersDown, containersUp, createDatabase, migrate, redisUrlFor, waitForPostgres, waitForRedis,
+} from './containers';
 import { p50, p95, p99, run, calibrate, ms, type RunResult } from './driver';
 import { COMPLETION_BODY, setUpstream, startHarness } from './gateway';
-
-const PG_PORT = 55_432;
-const REDIS_PORT = 56_379;
-const PG_CONTAINER = 'nexus-bench-pg';
-const REDIS_CONTAINER = 'nexus-bench-redis';
-const PG_PASSWORD = 'benchpass';
 
 const MOCK_PORT = 3210;
 const GATEWAY_PORT = 3401;
@@ -69,67 +65,6 @@ const SECONDS = parseInt(process.env.BENCH_MAX_SECONDS ?? '12', 10);
 
 const sleep = (msec: number): Promise<void> => new Promise((r) => setTimeout(r, msec));
 
-function docker(args: string[], quiet = true): string {
-  try {
-    return execFileSync('docker', args, { encoding: 'utf8', stdio: quiet ? 'pipe' : 'inherit' }) ?? '';
-  } catch (e) {
-    if (quiet) return '';
-    throw e;
-  }
-}
-
-function dockerUp(): void {
-  console.log('bringing up postgres and redis…');
-  docker(['rm', '-f', PG_CONTAINER, REDIS_CONTAINER]);
-
-  docker(['run', '-d', '--name', PG_CONTAINER,
-    '-e', `POSTGRES_PASSWORD=${PG_PASSWORD}`,
-    '-p', `${PG_PORT}:5432`,
-    // The benchmark writes almost nothing, and what it does write does not need to survive the
-    // container. tmpfs keeps the host disk out of the measurement entirely.
-    '--tmpfs', '/var/lib/postgresql/data',
-    'postgres:16-alpine',
-  ], false);
-
-  docker(['run', '-d', '--name', REDIS_CONTAINER, '-p', `${REDIS_PORT}:6379`, 'redis:7-alpine'], false);
-}
-
-function dockerDown(): void {
-  docker(['rm', '-f', PG_CONTAINER, REDIS_CONTAINER]);
-}
-
-async function waitForPostgres(): Promise<void> {
-  for (let i = 0; i < 120; i++) {
-    const out = docker(['exec', PG_CONTAINER, 'pg_isready', '-U', 'postgres']);
-    if (out.includes('accepting connections')) return;
-    await sleep(500);
-  }
-  throw new Error('postgres never became ready');
-}
-
-async function waitForRedis(): Promise<void> {
-  for (let i = 0; i < 120; i++) {
-    if (docker(['exec', REDIS_CONTAINER, 'redis-cli', 'ping']).includes('PONG')) return;
-    await sleep(500);
-  }
-  throw new Error('redis never became ready');
-}
-
-/** A database of its own, so each run gets an unclaimed gateway. */
-function createDatabase(name: string): string {
-  docker(['exec', PG_CONTAINER, 'psql', '-U', 'postgres', '-c', `DROP DATABASE IF EXISTS ${name}`]);
-  docker(['exec', PG_CONTAINER, 'psql', '-U', 'postgres', '-c', `CREATE DATABASE ${name}`]);
-  return `postgresql://postgres:${PG_PASSWORD}@127.0.0.1:${PG_PORT}/${name}`;
-}
-
-function migrate(databaseUrl: string): void {
-  execFileSync('npx', ['prisma', 'migrate', 'deploy'], {
-    env: { ...process.env, DATABASE_URL: databaseUrl },
-    stdio: 'pipe',
-    shell: process.platform === 'win32',
-  });
-}
-
 interface Cell {
   workers: number;
   concurrency: number;
@@ -142,8 +77,8 @@ async function measure(workers: number, index: number): Promise<Cell[]> {
   migrate(databaseUrl);
 
   // A Redis database per run, so one run's rate-limit counters and sticky pins cannot be read by
-  // the next. Index 0 is left alone for anything else on the box.
-  const redisUrl = `redis://127.0.0.1:${REDIS_PORT}/${index + 1}`;
+  // the next. See containers.ts.
+  const redisUrl = redisUrlFor(index);
 
   const h = await startHarness(MOCK_PORT, GATEWAY_PORT, { workers, databaseUrl, redisUrl });
   const cells: Cell[] = [];
@@ -223,7 +158,7 @@ function report(cells: Cell[]): void {
 }
 
 async function main(): Promise<void> {
-  dockerUp();
+  containersUp();
   await waitForPostgres();
   await waitForRedis();
 
@@ -236,8 +171,8 @@ async function main(): Promise<void> {
     }
     report(cells);
   } finally {
-    dockerDown();
+    containersDown();
   }
 }
 
-main().catch((e) => { console.error(e); dockerDown(); process.exit(1); });
+main().catch((e) => { console.error(e); containersDown(); process.exit(1); });

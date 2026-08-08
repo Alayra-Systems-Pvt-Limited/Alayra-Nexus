@@ -11,6 +11,36 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **An open-loop load benchmark on k6, and the discovery that our own tail figures were about five
+  times too kind.** Every latency this project had published internally came from a closed-loop
+  driver: send a request, wait for the reply, send the next. That measurement has a known defect —
+  when the server stalls, the generator stops sending, so the requests that would have arrived
+  during the stall are never made and the stall never reaches the percentiles. The worse the server
+  behaves, the fewer slow samples are taken.
+
+  `npm run bench:k6` replaces it for anything published. It drives a fixed ARRIVAL RATE with k6
+  (pinned to v0.49.0) regardless of whether the gateway is keeping up, reports p50 through p99.9,
+  and counts the iterations it could not start on time. Both executors are in the one script, so
+  the comparison can be run with a single variable changed:
+
+  | same gateway, same network, ~equivalent throughput | p50 | p99 | p99.9 |
+  |---|---|---|---|
+  | closed loop, 64 VUs → 476 rps | 127.6 ms | **281.6 ms** | 965 ms |
+  | open loop, 400 rps requested | 45.7 ms | **1,404 ms** | 3,566 ms |
+
+  Nothing about the gateway changed between those two rows. Only the honesty of the measurement.
+
+- **The whole rig in containers, on one network.** The gateway, the mock upstream, Postgres, Redis
+  and the load generator now run as containers on a single Docker network, which is both what a
+  reader should be able to reproduce and the only way to get a trustworthy number: the first attempt
+  ran k6 against a gateway on the host and measured Docker Desktop's NAT — 88 ms p95 at 200 rps
+  where a host-side driver saw 17 ms, then connection refused. `--network host` is not an escape
+  either; on Docker Desktop it joins the VM's namespace rather than the host's.
+
+  The runner also measures its OWN ceiling every run, by pointing k6 straight at the mock with the
+  gateway out of the path, and says so when a result approaches it. That check exists because this
+  project has twice mistaken the harness's limit for the gateway's.
+
 - **Settings, the model registry and the provider pools are held in this process for a few
   seconds, and the gateway got roughly four times faster where it counts.** Each of these already
   sat in Redis, which is the right place for them — shared, and a write on one instance is visible
