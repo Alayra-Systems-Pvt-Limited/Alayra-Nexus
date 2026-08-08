@@ -44,6 +44,15 @@ import http from 'node:http';
 
 const PORT = parseInt(process.env.PORT ?? '3210', 10);
 
+// Loopback by default: run on a developer's machine this should not be reachable from the
+// network, and every host-side scenario talks to it over 127.0.0.1.
+//
+// Inside a container that default is wrong in a way that looks like the process is broken. A
+// container's 127.0.0.1 is its own, so a published port maps to an interface nothing is listening
+// on and the gateway cannot reach it by name either — both fail as `other side closed`, which
+// reads like a crash rather than a binding. The container image sets HOST explicitly.
+const HOST = process.env.HOST ?? '127.0.0.1';
+
 /**
  * Current behaviour. Mutable on purpose — see the header.
  *
@@ -224,6 +233,6 @@ const server = http.createServer((req, res) => {
 server.keepAliveTimeout = 120_000;
 server.headersTimeout = 125_000;
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`bench mock upstream on 127.0.0.1:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`bench mock upstream on ${HOST}:${PORT}`);
 });

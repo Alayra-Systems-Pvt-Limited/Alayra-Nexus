@@ -66,6 +66,16 @@ export interface HarnessOptions {
   databaseUrl?: string;
   /** A real Redis, instead of the in-process map. Required for `workers` > 1. */
   redisUrl?: string;
+  /**
+   * What the gateway binds to. Defaults to loopback.
+   *
+   * A load generator running in a container cannot reach 127.0.0.1 on the host, so the k6 scenario
+   * binds 0.0.0.0 and reaches it through host.docker.internal. That does expose the benchmark
+   * gateway to the local network for the length of the run — it is ephemeral, its API key is
+   * generated per run, and its only upstream is a mock, but it is worth knowing rather than
+   * discovering.
+   */
+  host?: string;
 
   /**
    * Run the gateway under a V8 sampling profiler that can be started and stopped mid-run.
@@ -131,7 +141,7 @@ export async function startHarness(
       ...process.env,
       NEXUS_MODE: '',
       PORT: String(gatewayPort),
-      HOST: '127.0.0.1',
+      HOST: opts.host ?? '127.0.0.1',
       NODE_ENV: 'production',
       ADMIN_PASSWORD: MASTER,
       MASTER_ENCRYPTION_KEY: 'b'.repeat(64),
@@ -174,56 +184,9 @@ export async function startHarness(
 
     // Printed once, on the first run, and never recoverable afterwards — so it is read from the log
     // rather than requested.
-    const apiKey = /Generated Nexus API Key[^]*?\b([0-9a-f]{64})\b/.exec(out)?.[1];
-    if (!apiKey) throw new Error(`could not read the generated API key from the gateway log:\n${out.slice(0, 800)}`);
+    const apiKey = readGeneratedApiKey(out);
 
-    const post = (path: string, body: unknown, token?: string) => json<Record<string, never>>(
-      `${gatewayUrl}${path}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify(body),
-      },
-    );
-
-    await post('/admin/setup/claim', { masterPassword: MASTER, name: 'Bench Owner', email: EMAIL, password: PASSWORD });
-    const login = await json<{ token: string }>(`${gatewayUrl}/admin/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
-    });
-    const adminToken = login.body.token;
-    if (!adminToken) throw new Error(`sign-in failed: ${JSON.stringify(login.body).slice(0, 300)}`);
-
-    const pool = await json<{ provider: { id: string } }>(`${gatewayUrl}/admin/providers`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({
-        name: 'Bench Pool', slug: 'bench', provider: 'custom', tier: 'standard',
-        baseUrl: `${mockUrl}/v1`, authHeader: 'Authorization', authPrefix: 'Bearer ',
-      }),
-    });
-    const poolId = pool.body.provider?.id;
-    if (!poolId) throw new Error(`provider creation failed: ${JSON.stringify(pool.body).slice(0, 300)}`);
-
-    // See the header: high enough that nothing here is ever refused for rate.
-    await post(`/admin/providers/${poolId}/keys`, {
-      apiKey: 'sk-bench-upstream', label: 'bench key', rpmLimit: 100_000_000, tpmLimit: 100_000_000,
-    }, adminToken);
-
-    await json(`${gatewayUrl}/admin/models`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({
-        models: [{
-          id: 'bench-model-1', displayName: 'Bench Model', provider: 'custom', modelString: 'bench-model-1',
-          tier: 'standard', status: 'active', priority: 1, capabilities: ['chat'],
-          // Plausible rather than absurd, so `estimatedUsd` and `savedUsd` mean something when the
-          // cache scenario reads them back.
-          inputCostPer1M: 3, outputCostPer1M: 15,
-        }],
-      }),
-    });
+    const adminToken = await provisionGateway(gatewayUrl, mockUrl);
 
     return { gatewayUrl, mockUrl, apiKey, adminToken, profileControlUrl, log: () => out, dispose };
   } catch (e) {
@@ -246,3 +209,73 @@ export const COMPLETION_BODY = {
   model: 'alayra-nexus-1',
   messages: [{ role: 'user', content: 'Benchmark request.' }],
 };
+
+/**
+ * Claim a fresh gateway and give it one pool, one key and one model.
+ *
+ * Exported because the k6 rig runs the gateway in a CONTAINER rather than as a child process, and
+ * has to do the same setup against it. Keeping one copy is what stops the two scenarios drifting
+ * into measuring subtly different configurations — the sort of difference that only ever shows up
+ * as an unexplained gap between two numbers.
+ *
+ * @param gatewayUrl a URL the CALLER can reach (for a container, its published host port)
+ * @param mockUrl    a URL the GATEWAY can reach, which is not always the same one
+ */
+export async function provisionGateway(gatewayUrl: string, mockUrl: string): Promise<string> {
+  const post = (path: string, body: unknown, token?: string) => json<Record<string, never>>(
+    `${gatewayUrl}${path}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+    },
+  );
+
+  await post('/admin/setup/claim', { masterPassword: MASTER, name: 'Bench Owner', email: EMAIL, password: PASSWORD });
+  const login = await json<{ token: string }>(`${gatewayUrl}/admin/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+  });
+  const adminToken = login.body.token;
+  if (!adminToken) throw new Error(`sign-in failed: ${JSON.stringify(login.body).slice(0, 300)}`);
+
+  const pool = await json<{ provider: { id: string } }>(`${gatewayUrl}/admin/providers`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({
+      name: 'Bench Pool', slug: 'bench', provider: 'custom', tier: 'standard',
+      baseUrl: `${mockUrl}/v1`, authHeader: 'Authorization', authPrefix: 'Bearer ',
+    }),
+  });
+  const poolId = pool.body.provider?.id;
+  if (!poolId) throw new Error(`provider creation failed: ${JSON.stringify(pool.body).slice(0, 300)}`);
+
+  // See the header: high enough that nothing here is ever refused for rate.
+  await post(`/admin/providers/${poolId}/keys`, {
+    apiKey: 'sk-bench-upstream', label: 'bench key', rpmLimit: 100_000_000, tpmLimit: 100_000_000,
+  }, adminToken);
+
+  await json(`${gatewayUrl}/admin/models`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({
+      models: [{
+        id: 'bench-model-1', displayName: 'Bench Model', provider: 'custom', modelString: 'bench-model-1',
+        tier: 'standard', status: 'active', priority: 1, capabilities: ['chat'],
+        // Plausible rather than absurd, so `estimatedUsd` and `savedUsd` mean something when the
+        // cache scenario reads them back.
+        inputCostPer1M: 3, outputCostPer1M: 15,
+      }],
+    }),
+  });
+
+  return adminToken;
+}
+
+/** The API key the gateway prints exactly once, on its first boot. */
+export function readGeneratedApiKey(log: string): string {
+  const key = /Generated Nexus API Key[^]*?\b([0-9a-f]{64})\b/.exec(log)?.[1];
+  if (!key) throw new Error(`could not read the generated API key from the gateway log:\n${log.slice(0, 800)}`);
+  return key;
+}
