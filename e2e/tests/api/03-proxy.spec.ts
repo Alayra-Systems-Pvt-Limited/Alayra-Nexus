@@ -20,11 +20,32 @@ let poolKeyId = '';
 let teamId = '';
 let teamKey = '';
 
-/** How many requests the mock provider has ever received. */
+/** How many requests the mock provider has ever received, of any kind. */
 async function upstreamCount(): Promise<number> {
   const res = await fetch(`${MOCK_PROVIDER_URL}/__requests`);
   const body = await res.json() as { count: number };
   return body.count;
+}
+
+/**
+ * How many of those were PROXIED TRAFFIC — a completion that a pool key served.
+ *
+ * Not every request the mock receives is routed traffic. Adding or rotating a key calls the
+ * provider once to confirm the credential before saving it (`GET /v1/models`), which the mock
+ * records like anything else. That call is made by the admin route, not by the router, so it never
+ * touches a key's RPM counter.
+ *
+ * Which matters for exactly one thing: the RPM test sets a key's limit from a count it read here
+ * and needs that count to be the key's own usage. Against the total it would be reading a number
+ * one larger than the key has actually spent, and hand it a request of extra headroom.
+ *
+ * Delta assertions ("the refusal never reached upstream") are unaffected either way, and stay on
+ * the total — there they mean "nothing at all reached the provider", which is the stronger claim.
+ */
+async function completionCount(): Promise<number> {
+  const res = await fetch(`${MOCK_PROVIDER_URL}/__requests`);
+  const body = await res.json() as { requests: { method: string; url: string }[] };
+  return body.requests.filter((r) => r.method === 'POST' && r.url === '/v1/chat/completions').length;
 }
 
 /** One completion request, returning the raw wire response. */
@@ -185,9 +206,11 @@ test('a team that hits its budget is refused before any provider work happens', 
 });
 
 test('the RPM limit admits exactly its budget and the refusal never reaches upstream', async () => {
-  // Every upstream call so far went through the one pool key, so its RPM counter equals the
-  // mock's ledger. Set the limit to that plus two: two more requests fit, the third cannot.
-  const used = await upstreamCount();
+  // Every COMPLETION so far went through the one pool key, so its RPM counter equals that count.
+  // Set the limit to it plus two: two more requests fit, the third cannot. (Deliberately not the
+  // mock's total — that also holds the credential check made when this key was added, which the
+  // key's rate counter never saw.)
+  const used = await completionCount();
   const patched = await gw.send('PATCH', `/admin/keys/${poolKeyId}`, {
     token: ownerToken, body: { rpmLimit: used + 2 },
   });
@@ -200,7 +223,7 @@ test('the RPM limit admits exactly its budget and the refusal never reaches upst
   // With the only key over its rate, the pool is exhausted: 503 with a Retry-After, telling
   // the caller when capacity returns — not 500, which would say something is broken.
   expect(refused.status).toBe(503);
-  expect(await upstreamCount()).toBe(used + 2);
+  expect(await completionCount()).toBe(used + 2);
 });
 
 test('the TPM limit refuses spent token budgets the same way', async () => {

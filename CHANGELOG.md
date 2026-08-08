@@ -191,6 +191,13 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   the two cases: the pool was serving traffic a minute ago, which makes the eventual failure even
   harder to connect back to the action that caused it.
 
+  One consequence worth knowing about: adding or rotating a key now makes a real request to the
+  provider, so it appears in their request log against that credential. It is a `GET` of the models
+  listing, it happens once per admin action, and it does not touch the key's rate counters — but it
+  is a request, and an operator reading their provider dashboard should not have to wonder where it
+  came from. The e2e suite had quietly assumed the opposite, counting every request its mock
+  received as routed traffic; that oracle now counts completions, which is what it always meant.
+
   Verified end to end in the dashboard rather than only in tests, which is how the grammar bug
   ("This looks like OpenRouter key", "add a OpenRouter pool") was found — an error an operator reads
   while something is already going wrong is not the place to be sloppy. The route test drives each
