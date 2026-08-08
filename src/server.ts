@@ -49,6 +49,8 @@ import { configureSqlite } from './lib/sqlitePragma';
 import { resolveDatabaseUrl } from './lib/mode';
 import { isSpaNavigation } from './lib/spaFallback';
 import { normalizePublicUrl } from './lib/baseUrl';
+import cluster from 'node:cluster';
+import { assertClusterSafe, desiredWorkers, ownsBackgroundJobs, ClusterUnsafeError } from './lib/cluster';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -62,7 +64,14 @@ const HOST = process.env.HOST ?? '0.0.0.0';
 const ABUSE_RATE_LIMIT_MAX    = parseInt(process.env.ABUSE_RATE_LIMIT_MAX ?? '12000', 10);
 const ABUSE_RATE_LIMIT_WINDOW = process.env.ABUSE_RATE_LIMIT_WINDOW ?? '1 minute';
 
-async function bootstrap() {
+/**
+ * Everything that must happen exactly once per deployment, whatever the worker count.
+ *
+ * Creating the SQLite schema, putting it into WAL, seeding the registry and generating the API
+ * key are all one-time. Run in every worker they would race each other, and the key would be
+ * announced four times for one key.
+ */
+async function initOnce() {
   // Fail with an instruction, not a retry storm, when the database or Redis is missing.
   await assertDependencies();
 
@@ -119,6 +128,10 @@ async function bootstrap() {
     console.log('    Send it as:  Authorization: Bearer <key>   (or  x-api-key: <key>)\n');
   }
 
+}
+
+/** Build the app and take traffic. Runs in every worker. */
+async function serve() {
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info' },
     // Tool-mercy rewrite — must live HERE, not in an onRequest hook: Fastify routes the request
@@ -229,6 +242,16 @@ async function bootstrap() {
   // Which stores this process is actually on, plus a caution when a restart would lose something.
   logMode();
 
+}
+
+/**
+ * Timers that are not per-request work, and must not run once per worker.
+ *
+ * Only the first worker calls this. Retention deleting the same rows from four processes is
+ * wasted contention, and four health samplers write four separate in-memory ring buffers of
+ * which a dashboard read sees exactly one.
+ */
+function startBackgroundJobs() {
   // Compliance retention (Phase 6.7): apply the configured audit/usage retention windows
   // daily. Deletion is bounded to whatever the operator set (default 90 days; "Off" keeps
   // everything). The first pass is delayed a minute so it never contends with startup, and
@@ -251,10 +274,71 @@ async function bootstrap() {
   startBackupScheduler();
 }
 
+/**
+ * One process, or several sharing the listening socket.
+ *
+ * The primary does the one-time work and then serves nothing itself — it only supervises. Workers
+ * skip `initOnce` entirely: by the time they exist the schema is built, the registry is seeded and
+ * the key is generated, and repeating any of that would at best be noise and at worst a race.
+ *
+ * See lib/cluster.ts for why this refuses to fork without a shared Redis.
+ */
+async function bootstrap() {
+  const workers = desiredWorkers();
+
+  if (workers > 1 && cluster.isPrimary) {
+    // Before anything is forked, and before the one-time work: an operator who asked for something
+    // unsafe should learn about it immediately, not after a schema has been built.
+    assertClusterSafe(workers, { usingMemoryKv, dbEngine });
+
+    await initOnce();
+
+    console.log(`\n🚀  Alayra Nexus starting ${workers} workers on http://${HOST}:${PORT}`);
+    for (let i = 0; i < workers; i++) cluster.fork();
+
+    // A worker that dies takes its share of the traffic with it until something replaces it. Not
+    // restarted after an explicit shutdown, or the gateway could never be stopped.
+    let stopping = false;
+    cluster.on('exit', (worker, code, signal) => {
+      if (stopping) return;
+      console.error(`  worker ${worker.process.pid} exited (${signal ?? code}) — restarting`);
+      cluster.fork();
+    });
+
+    // The primary owns no sockets, so the only thing it has to do on the way out is take the
+    // workers with it. Without this they are re-parented and keep the port bound.
+    const stop = (): void => {
+      stopping = true;
+      for (const w of Object.values(cluster.workers ?? {})) w?.kill('SIGTERM');
+      process.exit(0);
+    };
+    process.on('SIGTERM', stop);
+    process.on('SIGINT', stop);
+    return;
+  }
+
+  // A worker: the primary has already done initOnce. Dependencies are still checked, because each
+  // worker opens its own connections and a worker that cannot reach the database should say so
+  // rather than serve 500s.
+  if (cluster.isWorker) {
+    await assertDependencies();
+    await serve();
+    if (ownsBackgroundJobs(cluster.worker?.id)) startBackgroundJobs();
+    return;
+  }
+
+  // The ordinary single-process gateway, unchanged.
+  await initOnce();
+  await serve();
+  startBackgroundJobs();
+}
+
 bootstrap().catch((err) => {
   // A missing dependency already carries a complete, actionable message; its stack
-  // is noise. Anything else is a real bug and keeps its stack.
+  // is noise. So does an unsafe cluster configuration. Anything else is a real bug and keeps
+  // its stack.
   if (err instanceof StartupCheckError) console.error(err.message);
+  else if (err instanceof ClusterUnsafeError) console.error(`\n✗ ${err.message}\n`);
   else console.error('Fatal startup error:', err);
   process.exit(1);
 });

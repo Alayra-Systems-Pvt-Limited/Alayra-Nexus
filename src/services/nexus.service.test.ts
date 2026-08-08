@@ -53,6 +53,9 @@ const { state, prismaMock } = vi.hoisted(() => {
         return { ...k, provider: state.providers.find(p => p.id === k.providerId) };
       }),
       update: vi.fn(async () => ({})),
+      // `lastUsedAt` is written with updateMany, not update: Prisma compiles `update` to a
+      // RETURNING of every column and nothing reads the row back.
+      updateMany: vi.fn(async () => ({ count: 1 })),
     },
     nexusProvider: {
       // Handles every query shape the router uses, exactly as Postgres would: the legacy tier walk
@@ -80,13 +83,27 @@ vi.mock('./model.service',   () => ({
   getModelRegistry:    vi.fn(async () => state.registry),
   activeProviderSlugs: vi.fn(async () => new Set(state.providers.map(p => p.provider as string))),
 }));
+// Routing reads its pools through the provider cache rather than querying per request. Mocked here
+// for the same reason model.service is: this suite is about SELECTION, and a real cache would carry
+// one test's providers into the next (which is exactly what it did, and how these four tests caught
+// the change). providerCache.service.test.ts covers the caching itself.
+vi.mock('./providerCache.service', () => ({
+  // Filtered on isActive, because the real cache holds ONLY active pools — that is the property
+  // sticky routing now relies on to notice a deactivated pool, having previously read
+  // `key.provider.isActive` off an include. A mock that returned inactive rows too would make the
+  // fall-through untestable and quietly greener than the code deserves.
+  getActiveProviders:      vi.fn(async () => state.providers.filter((p) => p.isActive !== false)),
+  invalidateProviderCache: vi.fn(async () => {}),
+}));
 vi.mock('./ssrf.service',    () => ({ getSsrfPolicy: vi.fn(async () => ({})) }));
 vi.mock('./notifications.service', () => ({ notify: vi.fn(async () => {}) }));
 
-import { discoverBestPool, SHARED_SCOPE, reportTierExhausted } from './nexus.service';
+import { discoverBestPool, SHARED_SCOPE, reportTierExhausted, banKey } from './nexus.service';
 import { notify } from './notifications.service';
 import { getStickyKeyId } from '../lib/sticky';
 import { admitKey, admitUser } from '../lib/admission';
+import { forgetLastUsed } from '../lib/lastUsed';
+import { forgetKeyRow } from '../lib/keyRowCache';
 import type { RoutingScope } from '../lib/scope';
 
 const scopeFor = (teamId: string, fallback: boolean): RoutingScope =>
@@ -94,6 +111,10 @@ const scopeFor = (teamId: string, fallback: boolean): RoutingScope =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The debounce keeps module-level state, so without this a key written in one test would stay
+  // suppressed in the next and the suite would depend on execution order.
+  forgetLastUsed();
+  forgetKeyRow();
   vi.mocked(admitKey).mockResolvedValue(true);
   vi.mocked(admitUser).mockResolvedValue(true);
   vi.mocked(getStickyKeyId).mockResolvedValue(null);
@@ -275,6 +296,47 @@ describe('discoverBestPool — sticky pins are re-authorized against scope', () 
     const route = await discoverBestPool(10, 'sess', scopeFor('team-a', true));
     expect(route?.keyId).toBe('shared-2');
     expect(route?.sticky).toBe(true);
+  });
+
+  it('writes lastUsedAt once for a burst on the same key, not once per request', async () => {
+    // lastUsed.test.ts proves the debounce decides correctly in isolation; this proves ROUTING
+    // asks it. The two are different failures — a helper nobody calls passes its own tests.
+    vi.mocked(getStickyKeyId).mockResolvedValue('shared-1');
+    for (let i = 0; i < 5; i++) await discoverBestPool(10, 'sess', SHARED_SCOPE);
+    expect(prismaMock.nexusKey.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the pinned key from the database once for a burst, not once per request', async () => {
+    vi.mocked(getStickyKeyId).mockResolvedValue('shared-1');
+    for (let i = 0; i < 5; i++) await discoverBestPool(10, 'sess', SHARED_SCOPE);
+    expect(prismaMock.nexusKey.findUnique).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-reads the key immediately after it is banned, without waiting out the TTL', async () => {
+    // The property the whole cache stands on. A banned key's credential may already be revoked
+    // upstream, so "it will refresh in a second" is not good enough -- banKey has to drop it.
+    vi.mocked(getStickyKeyId).mockResolvedValue('shared-1');
+    await discoverBestPool(10, 'sess', SHARED_SCOPE);
+    expect(prismaMock.nexusKey.findUnique).toHaveBeenCalledTimes(1);
+
+    await banKey('shared-1');
+    await discoverBestPool(10, 'sess', SHARED_SCOPE);
+    expect(prismaMock.nexusKey.findUnique).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses a pin to a key whose pool was deactivated, and falls through', async () => {
+    // A pin outlives the request that set it, so an operator can switch a pool off underneath one.
+    // This used to be caught by reading `isActive` from the joined provider row; the join is gone,
+    // and the equivalent signal is now the pool's ABSENCE from the active-provider cache. Same
+    // outcome, different mechanism — which is exactly the kind of swap that needs its own test.
+    state.providers.push({ ...provider('p2', 'premium'), isActive: false });
+    state.keys.push(key('p2-1', null, 'p2'));
+
+    vi.mocked(getStickyKeyId).mockResolvedValue('p2-1');
+    const route = await discoverBestPool(10, 'sess', SHARED_SCOPE);
+
+    expect(route?.keyId).toBe('shared-1');   // fell through to normal discovery
+    expect(route?.sticky).toBe(false);
   });
 });
 

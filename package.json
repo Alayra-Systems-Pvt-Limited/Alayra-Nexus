@@ -52,7 +52,7 @@
     "db:sqlite-schema": "tsx scripts/db/sqliteSchema.ts",
     "db:drift": "prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script",
     "db:generate": "npx prisma generate && npx prisma generate --schema prisma/schema.sqlite.prisma",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
@@ -66,7 +66,15 @@
     "smoke:npx": "tsx scripts/smoke/npx.ts",
     "postinstall": "node scripts/npm/postinstall.js",
     "prepack": "node scripts/npm/prepack.js",
-    "db:column-facts": "tsx scripts/db/columnFacts.ts"
+    "db:column-facts": "tsx scripts/db/columnFacts.ts",
+    "bench:overhead": "tsx scripts/bench/overhead.ts",
+    "bench:profile": "tsx scripts/bench/profile.ts",
+    "bench:queries": "tsx scripts/bench/queryCount.ts",
+    "bench:scaling": "tsx scripts/bench/scaling.ts",
+    "bench:store-ops": "tsx scripts/bench/storeOps.ts",
+    "bench:k6": "tsx scripts/bench/k6.ts",
+    "bench:provision": "tsx scripts/bench/provision.ts",
+    "bench:routing": "tsx scripts/bench/routing.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",

@@ -43,8 +43,14 @@ import { SQLITE_TIMESTAMP_FORMAT, type SqliteAdapterOptions } from './sqliteTime
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
+// PRISMA_LOG_QUERIES is a diagnostic switch, separate from NODE_ENV on purpose: the question
+// "how many queries does one request make" can only be answered against a PRODUCTION build, since
+// that is the build whose cost we care about, and NODE_ENV=development changes more than logging.
+// Off unless asked for — query logging is expensive enough to distort what it is measuring.
 const log: ('query' | 'error' | 'warn')[] =
-  process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'];
+  process.env.NODE_ENV === 'development' || process.env.PRISMA_LOG_QUERIES === '1'
+    ? ['query', 'error', 'warn']
+    : ['error'];
 
 /** The bare specifier the second client is generated under. See scripts/db/sqliteSchema.ts. */
 export const SQLITE_CLIENT_SPECIFIER = '.prisma/client-sqlite';

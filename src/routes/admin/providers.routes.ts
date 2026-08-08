@@ -22,6 +22,7 @@ import { prisma }              from '../../lib/prisma';
 import { randomUUID } from 'crypto';
 import { validateProviderCredentials, validateModel, fetchProviderModels } from '../../services/nexus.service';
 import { removeModelsForProvider } from '../../services/model.service';
+import { invalidateProviderCache } from '../../services/providerCache.service';
 import { z }                   from 'zod';
 import { adminGuard, adminWriteGuard } from './guard';
 
@@ -78,6 +79,7 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
     const existing = await prisma.nexusProvider.findUnique({ where: { slug: body.slug } });
     if (existing) return reply.code(409).send({ error: 'Slug already exists' });
     const provider = await prisma.nexusProvider.create({ data: { id: randomUUID(), ...toProviderData(body) } });
+    await invalidateProviderCache();
     return reply.code(201).send({ provider });
   });
 
@@ -87,6 +89,7 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
     const urlErr = await assertProviderUrlsSafe(body);
     if (urlErr) return reply.code(400).send({ error: urlErr });
     const provider = await prisma.nexusProvider.update({ where: { id }, data: toProviderData(body) });
+    await invalidateProviderCache();
     return reply.send({ provider });
   });
 
@@ -96,6 +99,7 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
     // that slug is the only thing tying the registry's models to this pool.
     const pool = await prisma.nexusProvider.findUnique({ where: { id }, select: { provider: true } });
     await prisma.nexusProvider.delete({ where: { id } });
+    await invalidateProviderCache();
 
     // The model registry is keyed by provider slug with no foreign key, so deleting a pool used to
     // orphan its models — they stayed in the registry and reappeared the moment a pool of the same
