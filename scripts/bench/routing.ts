@@ -42,8 +42,9 @@
 // So this creates several pools with deliberately TINY limits, drives enough traffic to exhaust them
 // in order, and reports the per-request cost as the walk gets deeper.
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { completionBody, startHarness, setUpstream } from './gateway';
+import { isRoundTrip } from './monitor';
 
 const REDIS_CONTAINER = process.env.OPS_REDIS_CONTAINER ?? 'nexus-ops-redis';
 const REDIS_PORT = parseInt(process.env.OPS_REDIS_PORT ?? '56379', 10);
@@ -58,7 +59,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 const redisCli = (args: string[]): string =>
   execFileSync('docker', ['exec', REDIS_CONTAINER, 'redis-cli', ...args], { encoding: 'utf8' });
 
-interface Cost { requests: number; redis: number; ok: number; failed: number }
+interface Cost { requests: number; roundTrips: number; commands: number; queries: number; ok: number; failed: number }
 
 function commandTotal(): number {
   let total = 0;
@@ -69,7 +70,16 @@ function commandTotal(): number {
   return total;
 }
 
+// Round trips are counted from MONITOR rather than from `INFO commandstats`, because commandstats
+// counts the calls a Lua script makes internally too. See monitor.ts — getting this wrong is what
+// made the first version of this measurement overstate the problem by about two and a half times.
+
 async function main(): Promise<void> {
+  // Set before the harness copies process.env into the child, so the database side of the walk is
+  // counted too. Redis is not the only thing that grows per pool: tryPickKey issues a findMany for
+  // EVERY pool it tries, and a database round trip is not cheaper than a Redis one.
+  process.env.PRISMA_LOG_QUERIES = '1';
+
   redisCli(['flushall']);
   const h = await startHarness(3210, 3401, { redisUrl: `redis://127.0.0.1:${REDIS_PORT}/0` });
 
@@ -164,37 +174,63 @@ async function main(): Promise<void> {
     for (let band = 0; band < POOLS + 1; band++) {
       redisCli(['config', 'resetstat']);
       const before = commandTotal();
-      let ok = 0; let failed = 0;
 
+      // A MONITOR per band rather than one for the whole run, so lines never have to be attributed
+      // to a band by timestamp. It slows Redis considerably; that is free here, because nothing in
+      // this script is a latency measurement.
+      const monitor = spawn('docker', ['exec', REDIS_CONTAINER, 'redis-cli', 'monitor']);
+      const seen: string[] = [];
+      monitor.stdout.on('data', (d: Buffer) => { seen.push(d.toString()); });
+      await sleep(300);
+
+      const queryMark = h.log().length;
+      let ok = 0; let failed = 0;
       for (let i = 0; i < RPM_PER_KEY; i++) {
         const status = await send();
         if (status === 200) ok++; else failed++;
       }
       await sleep(300);
+      monitor.kill();
 
-      const redis = commandTotal() - before;
-      bands.push({ requests: RPM_PER_KEY, redis, ok, failed });
+      const roundTrips = seen.join('').split(/\r?\n/).filter(isRoundTrip).length;
+      const queries = h.log().slice(queryMark).split(/\r?\n/)
+        .filter((l) => /^prisma:query\s/.test(l.trim())).length;
+
+      bands.push({ requests: RPM_PER_KEY, roundTrips, commands: commandTotal() - before, queries, ok, failed });
       console.log(
         `  band ${band}: ${ok} ok, ${failed} refused — ` +
-        `${(redis / RPM_PER_KEY).toFixed(1)} Redis ops per request`,
+        `${(roundTrips / RPM_PER_KEY).toFixed(1)} Redis round trips, ` +
+        `${(queries / RPM_PER_KEY).toFixed(1)} DB queries per request`,
       );
     }
 
-    console.log('\n| band | expected depth | ok | refused | Redis ops / request |');
-    console.log('|---|---|---|---|---|');
+    console.log('\n| band | expected depth | ok | refused | Redis round trips / req | DB queries / req | raw commands / req |');
+    console.log('|---|---|---|---|---|---|---|');
     bands.forEach((b, i) => {
-      console.log(`| ${i} | pool ${Math.min(i, POOLS - 1)} | ${b.ok} | ${b.failed} | ${(b.redis / b.requests).toFixed(1)} |`);
+      console.log(
+        `| ${i} | pool ${Math.min(i, POOLS - 1)} | ${b.ok} | ${b.failed} | ` +
+        `${(b.roundTrips / b.requests).toFixed(1)} | ${(b.queries / b.requests).toFixed(1)} | ` +
+        `${(b.commands / b.requests).toFixed(1)} |`,
+      );
     });
 
     const shallow = bands[0];
     const deep = bands[bands.length - 2];
     if (shallow && deep) {
-      const growth = (deep.redis / deep.requests) / (shallow.redis / shallow.requests);
+      const perPool = ((deep.roundTrips / deep.requests) - (shallow.roundTrips / shallow.requests))
+        / Math.max(1, bands.length - 2);
+      const queryPerPool = ((deep.queries / deep.requests) - (shallow.queries / shallow.requests))
+        / Math.max(1, bands.length - 2);
       console.log('');
       console.log(
-        `Cost from the first band to the deepest served one grew ${growth.toFixed(2)}x. ` +
-        'Growth here means the router pays per key it has to reject, which is a cost that arrives ' +
-        'exactly when capacity is tight.',
+        `Each extra pool the router walks costs about ${perPool.toFixed(1)} more Redis round trips ` +
+        `and ${queryPerPool.toFixed(1)} more database queries on the request that walks it. That is a ` +
+        'cost that arrives exactly when capacity is tight, which is the worst moment to get slower.',
+      );
+      console.log(
+        'The raw-commands column is what `INFO commandstats` reports, and it is roughly double the ' +
+        'round-trip count because it also counts the calls made INSIDE each Lua script. Those cost ' +
+        'Redis CPU but not a network hop, so quoting them as round trips overstates the problem.',
       );
     }
     console.log('');
