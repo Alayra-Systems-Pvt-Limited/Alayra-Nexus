@@ -73,6 +73,7 @@ afterAll(async () => { if (realRedis) await realRedis.quit(); });
 import { ADMIT_LUA as ADMIT, RECONCILE_LUA as RECONCILE, ADMIT_USER_LUA as ADMIT_USER } from '../admission';
 import { ACQUIRE_LUA as ACQUIRE, SERVER_FAILURE_LUA as SERVER_FAILURE } from '../breaker';
 import { ADD_SPEND_LUA as ADD_SPEND } from '../../services/budget.service';
+import { SELECT_KEY_LUA as SELECT_KEY } from '../selectKey';
 
 // Imported rather than re-typed or scraped out of the source: this way the Lua under test and the
 // twin under test are exactly the pair the gateway ships, and no copy exists that could drift.
@@ -296,6 +297,155 @@ describe('ADD_SPEND_LUA — budget accumulation', () => {
       await r.set('budget', '0', 'EX', 3600);
       await r.eval(ADD_SPEND, 1, 'budget', '1');
       return (await r.ttl('budget')) > 3500;
+    });
+  });
+});
+
+describe('SELECT_KEY_LUA — pick a key and reserve on it, in one call', () => {
+  // Five KV keys per candidate — open, probe, users, rpm, tpm — then the shared ARGV, then three
+  // limits per candidate. Built here the same way selectAndReserve builds it, so the parity suite
+  // exercises the real argument shape rather than a convenient one.
+  const call = (
+    r: Runner,
+    n: number,
+    opts: { reserve?: number; userId?: string; limits?: [number, number, number][]; nowMs?: number } = {},
+  ): Promise<unknown> => {
+    const keys: (string | number)[] = [];
+    for (let i = 1; i <= n; i++) keys.push(`open${i}`, `probe${i}`, `users${i}`, `rpm${i}`, `tpm${i}`);
+    const limits: (string | number)[] = [];
+    for (let i = 1; i <= n; i++) {
+      const [rpm, tpm, max] = opts.limits?.[i - 1] ?? [10, 100_000, 1_000];
+      limits.push(rpm, tpm, max);
+    }
+    return r.eval(
+      SELECT_KEY, keys.length, ...keys,
+      opts.nowMs ?? 1_000_000, 30, 60, opts.reserve ?? 100, opts.userId ?? '', 86_400,
+      ...limits,
+    );
+  };
+
+  it('picks the first candidate when it has headroom', async () => {
+    await parity('first wins', async (r) => ({
+      chosen: await call(r, 3),
+      rpm1: await r.get('rpm1'), tpm1: await r.get('tpm1'),
+      rpm2: await r.get('rpm2'), tpm2: await r.get('tpm2'),
+    }));
+  });
+
+  it('walks to the second when the first is out of RPM, and leaves the first untouched', async () => {
+    await parity('walk on rpm', async (r) => {
+      await r.set('rpm1', '10');
+      return {
+        chosen: await call(r, 3),
+        rpm1: await r.get('rpm1'), tpm1: await r.get('tpm1'),
+        rpm2: await r.get('rpm2'), tpm2: await r.get('tpm2'),
+      };
+    });
+  });
+
+  it('walks past a key whose TPM would be exceeded by this request alone', async () => {
+    await parity('walk on tpm', async (r) => {
+      await r.set('tpm1', '99_950'.replace('_', ''));
+      return { chosen: await call(r, 2, { reserve: 100 }), tpm1: await r.get('tpm1'), tpm2: await r.get('tpm2') };
+    });
+  });
+
+  it('returns -1 when every candidate is exhausted, having reserved on none of them', async () => {
+    // "Rotate first, fail last": the caller may only fail once nothing in the pool has headroom.
+    await parity('all exhausted', async (r) => {
+      await r.set('rpm1', '10');
+      await r.set('rpm2', '10');
+      return { chosen: await call(r, 2), rpm1: await r.get('rpm1'), rpm2: await r.get('rpm2') };
+    });
+  });
+
+  it('skips a breaker-open key whose cooldown has not elapsed', async () => {
+    await parity('breaker open', async (r) => {
+      await r.set('open1', String(2_000_000));       // reopens after now
+      return { chosen: await call(r, 2, { nowMs: 1_000_000 }), rpm1: await r.get('rpm1'), rpm2: await r.get('rpm2') };
+    });
+  });
+
+  it('claims the probe slot for a half-open key and reports gate=probe', async () => {
+    await parity('half open', async (r) => {
+      await r.set('open1', String(500_000));         // reopen time already passed
+      return {
+        chosen: await call(r, 1, { nowMs: 1_000_000 }),
+        probe1: await r.get('probe1'), rpm1: await r.get('rpm1'),
+      };
+    });
+  });
+
+  it('walks past a half-open key whose probe another caller already holds', async () => {
+    await parity('probe taken', async (r) => {
+      await r.set('open1', String(500_000));
+      await r.set('probe1', '1');                    // someone else is already probing
+      return { chosen: await call(r, 2, { nowMs: 1_000_000 }), rpm1: await r.get('rpm1'), rpm2: await r.get('rpm2') };
+    });
+  });
+
+  it('does NOT claim a probe slot on a half-open key it then rejects for RPM', async () => {
+    // The bug the old ordering had. breaker.acquire claimed the slot before RPM was checked, so a
+    // busy half-open key held the slot for its full TTL and the breaker could not send the trial
+    // request it was waiting to send. A key recovering from an outage stayed dark longer exactly
+    // when its pool was busy.
+    await parity('probe not wasted', async (r) => {
+      await r.set('open1', String(500_000));
+      await r.set('rpm1', '10');
+      return { chosen: await call(r, 2, { nowMs: 1_000_000 }), probe1: await r.get('probe1') };
+    });
+  });
+
+  it('admits a new user and records them against the key that served', async () => {
+    await parity('new user', async (r) => ({
+      chosen: await call(r, 1, { userId: 'u1' }),
+      users1: await r.smembers('users1'),
+    }));
+  });
+
+  it('walks past a key that is full for a NEW user but would admit a known one', async () => {
+    await parity('max users', async (r) => {
+      await r.eval(ADMIT_USER, 1, 'users1', 'someone', 1, 86_400);   // fills the cap of 1
+      return {
+        newUser:   await call(r, 2, { userId: 'u-new',   limits: [[10, 100_000, 1], [10, 100_000, 1]] }),
+        knownUser: await call(r, 2, { userId: 'someone', limits: [[10, 100_000, 1], [10, 100_000, 1]] }),
+      };
+    });
+  });
+
+  it('does NOT record a user against a key it then rejects for RPM', async () => {
+    // The second bug in the old ordering: admitUser SADDed before RPM was checked, so a key that
+    // was skipped still counted that user against its Max Users cap forever after.
+    await parity('user not recorded on a skipped key', async (r) => {
+      await r.set('rpm1', '10');
+      return {
+        chosen: await call(r, 2, { userId: 'u1' }),
+        users1: await r.smembers('users1'),
+        users2: await r.smembers('users2'),
+      };
+    });
+  });
+
+  it('skips the Max Users test entirely when the request carries no user identity', async () => {
+    // A missing signal must never block traffic — the cap cannot be enforced without an identity.
+    await parity('no identity', async (r) => ({
+      chosen: await call(r, 1, { userId: '', limits: [[10, 100_000, 1]] }),
+      users1: await r.smembers('users1'),
+    }));
+  });
+
+  it('sets the window TTL on the counters it touches', async () => {
+    await parity('ttls', async (r) => {
+      await call(r, 1, { userId: 'u1' });
+      return { rpm: await r.ttl('rpm1'), tpm: await r.ttl('tpm1'), users: await r.ttl('users1') };
+    });
+  });
+
+  it('admits exactly up to the limit across repeated calls and then rotates', async () => {
+    await parity('walk to the limit', async (r) => {
+      const chosen: unknown[] = [];
+      for (let i = 0; i < 5; i++) chosen.push(await call(r, 2, { limits: [[2, 100_000, 1_000], [2, 100_000, 1_000]] }));
+      return { chosen, rpm1: await r.get('rpm1'), rpm2: await r.get('rpm2') };
     });
   });
 });

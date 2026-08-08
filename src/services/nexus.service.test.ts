@@ -35,9 +35,21 @@ const provider = (id: string, tier: string): Provider => ({
 
 // `vi.mock` factories are hoisted above the module body, so the shared fixture
 // state has to be hoisted with them.
-const { state, prismaMock } = vi.hoisted(() => {
+const { state, prismaMock, admission } = vi.hoisted(() => {
   const state: { keys: Record<string, unknown>[]; providers: Record<string, unknown>[]; registry: Record<string, unknown>[] } =
     { keys: [], providers: [], registry: [] };
+
+  // Selection is now a single KV call that walks the candidates itself (lib/selectKey.ts), so these
+  // tests can no longer steer it by stubbing a per-key `admitKey`. This stands in for that walk:
+  // the two predicates say which keys would be admitted, and `reserved` records the ones actually
+  // written to — which is how "a key skipped for Max Users must not burn rate budget" stays
+  // testable now that the guarantee lives inside the script.
+  const admission: {
+    admits: (keyId: string) => boolean;
+    admitsUser: (keyId: string) => boolean;
+    reserved: string[];
+    calls: { candidates: { id: string; maxUsers: number }[]; reserveTokens: number; userId: string | null }[];
+  } = { admits: () => true, admitsUser: () => true, reserved: [], calls: [] };
   // findMany honours the `ownerTeamId` equality filter exactly as Postgres would
   // (null matches only null) — that equality *is* the isolation guarantee.
   const prismaMock = {
@@ -70,12 +82,33 @@ const { state, prismaMock } = vi.hoisted(() => {
         })),
     },
   };
-  return { state, prismaMock };
+  return { state, prismaMock, admission };
 });
 
 vi.mock('../lib/prisma',     () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 vi.mock('../lib/encryption', () => ({ decrypt: (s: string) => `dec-${s}`, maskKey: (s: string) => s }));
-vi.mock('../lib/admission',  () => ({ admitKey: vi.fn(async () => true), admitUser: vi.fn(async () => true) }));
+// The real selectAndReserve talks to the KV; this suite is about SELECTION, not admission mechanics.
+// The walk itself — breaker gate, Max Users, RPM/TPM, and the order the side effects happen in — is
+// covered against BOTH the Lua and its twin in lib/kv/parity.test.ts, which is where it belongs.
+vi.mock('../lib/selectKey', () => ({
+  selectAndReserve: vi.fn(async (
+    candidates: { id: string; maxUsers: number }[],
+    reserveTokens: number,
+    userId: string | null,
+  ) => {
+    admission.calls.push({ candidates, reserveTokens, userId });
+    for (let i = 0; i < candidates.length; i++) {
+      const id = candidates[i]!.id;
+      // A request with no user identity cannot be capped, matching the script's "no signal never
+      // blocks" rule — so the user predicate only applies when there is a user.
+      if (userId !== null && !admission.admitsUser(id)) continue;
+      if (!admission.admits(id)) continue;
+      admission.reserved.push(id);
+      return { index: i, gate: 'closed' as const };
+    }
+    return null;
+  }),
+}));
 vi.mock('../lib/breaker',    () => ({ acquire: vi.fn(async () => 'closed'), RATE_LIMIT_COOLDOWN_SECONDS: 60 }));
 vi.mock('../lib/sticky',     () => ({ getStickyKeyId: vi.fn(async () => null) }));
 vi.mock('./routing.service', () => ({ getCostWeight: vi.fn(async () => 0) }));
@@ -101,7 +134,6 @@ vi.mock('./notifications.service', () => ({ notify: vi.fn(async () => {}) }));
 import { discoverBestPool, SHARED_SCOPE, reportTierExhausted, banKey } from './nexus.service';
 import { notify } from './notifications.service';
 import { getStickyKeyId } from '../lib/sticky';
-import { admitKey, admitUser } from '../lib/admission';
 import { forgetLastUsed } from '../lib/lastUsed';
 import { forgetKeyRow } from '../lib/keyRowCache';
 import type { RoutingScope } from '../lib/scope';
@@ -115,8 +147,10 @@ beforeEach(() => {
   // suppressed in the next and the suite would depend on execution order.
   forgetLastUsed();
   forgetKeyRow();
-  vi.mocked(admitKey).mockResolvedValue(true);
-  vi.mocked(admitUser).mockResolvedValue(true);
+  admission.admits = () => true;
+  admission.admitsUser = () => true;
+  admission.reserved = [];
+  admission.calls = [];
   vi.mocked(getStickyKeyId).mockResolvedValue(null);
   state.providers = [provider('p1', 'premium')];
   state.keys = [key('shared-1', null), key('shared-2', null), key('a-1', 'team-a'), key('a-2', 'team-a')];
@@ -166,14 +200,14 @@ describe('discoverBestPool — BYOK scoping', () => {
 
   it('falls back to the shared pool once the team\'s own keys are exhausted', async () => {
     // Own keys admit nothing; pooled keys admit.
-    vi.mocked(admitKey).mockImplementation(async (keyId: string) => !keyId.startsWith('a-'));
+    admission.admits = (keyId) => !keyId.startsWith('a-');
     const route = await discoverBestPool(10, null, scopeFor('team-a', true));
     expect(route?.keyId).toBe('shared-1');
     expect(route?.byok).toBe(false);
   });
 
   it('returns null instead of a pooled key when the team is hard-isolated', async () => {
-    vi.mocked(admitKey).mockImplementation(async (keyId: string) => !keyId.startsWith('a-'));
+    admission.admits = (keyId) => !keyId.startsWith('a-');
     const route = await discoverBestPool(10, null, scopeFor('team-a', false));
     expect(route).toBeNull(); // → 503, never a credential the team did not bring
   });
@@ -193,22 +227,24 @@ describe('discoverBestPool — BYOK scoping', () => {
 describe('discoverBestPool — Max Users cap (P7.4d)', () => {
   it('rotates a new user past a key that is full, to the next key', async () => {
     // shared-1 is at its Max Users cap for this new user; shared-2 has room.
-    vi.mocked(admitUser).mockImplementation(async (keyId: string) => keyId !== 'shared-1');
+    admission.admitsUser = (keyId) => keyId !== 'shared-1';
     const route = await discoverBestPool(10, null, SHARED_SCOPE, 'chat', 'user-new');
     expect(route?.keyId).toBe('shared-2');
-    // The user cap is checked before RPM/TPM admission, so a full key never burns rate budget.
-    expect(admitKey).not.toHaveBeenCalledWith('shared-1', expect.anything(), expect.anything(), expect.anything());
+    // A key that is full for a new user must not burn rate budget being skipped. The script now
+    // reads every test before it writes anything, so nothing was reserved on shared-1 at all.
+    expect(admission.reserved).not.toContain('shared-1');
   });
 
   it('passes the request through when no user id is supplied (cap cannot be enforced)', async () => {
     const route = await discoverBestPool(10, null, SHARED_SCOPE);
     expect(route?.keyId).toBe('shared-1');
-    // Called with a null user id — admitUser itself decides not to block.
-    expect(admitUser).toHaveBeenCalledWith('shared-1', 1000, null);
+    // Offered with a null user id and the key's cap, and the script decides not to block on it.
+    expect(admission.calls[0]?.userId).toBeNull();
+    expect(admission.calls[0]?.candidates[0]).toMatchObject({ id: 'shared-1', maxUsers: 1000 });
   });
 
   it('returns null when every key is full for a new user', async () => {
-    vi.mocked(admitUser).mockResolvedValue(false);
+    admission.admitsUser = () => false;
     const route = await discoverBestPool(10, null, SHARED_SCOPE, 'chat', 'user-new');
     expect(route).toBeNull();
   });
@@ -226,7 +262,7 @@ describe('discoverBestPool — wasDowngrade', () => {
   it('is true when a staffed higher tier is exhausted and a lower tier answers', async () => {
     state.providers = [provider('p1', 'premium'), provider('p2', 'standard')];
     state.keys = [key('prem-1', null, 'p1'), key('std-1', null, 'p2')];
-    vi.mocked(admitKey).mockImplementation(async (keyId: string) => !keyId.startsWith('prem-'));
+    admission.admits = (keyId) => !keyId.startsWith('prem-');
 
     const route = await discoverBestPool(10, null, SHARED_SCOPE);
     expect(route?.keyId).toBe('std-1');
@@ -260,7 +296,7 @@ describe('discoverBestPool — wasDowngrade', () => {
   it('is true across a two-tier gap', async () => {
     state.providers = [provider('p1', 'premium'), provider('p2', 'standard'), provider('p3', 'fast')];
     state.keys = [key('prem-1', null, 'p1'), key('std-1', null, 'p2'), key('fast-1', null, 'p3')];
-    vi.mocked(admitKey).mockImplementation(async (keyId: string) => keyId.startsWith('fast-'));
+    admission.admits = (keyId) => keyId.startsWith('fast-');
 
     const route = await discoverBestPool(10, null, SHARED_SCOPE);
     expect(route?.tier).toBe('fast');
