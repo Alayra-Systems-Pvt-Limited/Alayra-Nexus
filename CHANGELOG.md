@@ -11,6 +11,40 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **A two-machine benchmark rig, and four measurements of the same build that disagree by twelve
+  times.** `docker-compose.bench.yml` brings up everything that gets MEASURED — gateway, mock
+  upstream, Postgres, Redis — on one host. `npm run bench:provision` claims it and prints the exact
+  commands for the load generator, which runs on a SECOND MACHINE and is deliberately not in the
+  compose file: it must not share a CPU with the thing it is measuring.
+
+  Measured across four configurations, same code each time:
+
+  | configuration | throughput | what actually limited it |
+  |---|---|---|
+  | host process, load driver on the same box | 1,094 rps | **Nexus** |
+  | Docker Desktop VM, k6 in the same VM | 476 rps | the VM |
+  | Docker Desktop VM, k6 on a second machine | ~320 rps | the VM |
+  | closed loop, 64 VUs | 90 rps | its own tail |
+
+  Only the first is a measurement of the gateway. The others are the rig, and each looked like a
+  result until it was checked. That table is the finding.
+
+  With a load generator that is no longer stealing CPU, overhead is finally a subtraction at matched
+  load rather than an estimate — the same rate driven at the mock directly and then through the
+  gateway:
+
+  | arrival rate | network alone | through the gateway | overhead |
+  |---|---|---|---|
+  | 200 rps | 3.8 ms p50 | 10.9 ms p50 | **7.1 ms** |
+  | 400 rps | 3.7 ms p50 | 152.1 ms p50 | 148.4 ms — past the knee |
+
+  The network was suspected and is innocent: it carries 600 rps at a 16 ms p99 with nothing dropped,
+  while the gateway at that rate collapses to 320 rps and a 20-second tail. Congestion collapse
+  under a virtualisation tax, not a slow link.
+
+  No absolute figure is published from any of this. What the rig establishes is that the number has
+  to be taken on Linux, where Docker is native and the VM tax does not exist.
+
 - **An open-loop load benchmark on k6, and the discovery that our own tail figures were about five
   times too kind.** Every latency this project had published internally came from a closed-loop
   driver: send a request, wait for the reply, send the next. That measurement has a known defect —
