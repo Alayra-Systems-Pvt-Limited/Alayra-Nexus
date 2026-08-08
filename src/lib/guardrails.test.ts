@@ -105,14 +105,27 @@ describe('evaluateMessages', () => {
   });
 });
 
+/**
+ * The canonical catastrophic-backtracking pattern, built rather than written out.
+ *
+ * As a literal it is a genuine ReDoS that CodeQL correctly flags — in a test whose entire purpose is
+ * to prove we REFUSE it. Assembling it keeps the fixture honest (it is still exactly `(a+)+$` at
+ * runtime, asserted below) without adding a suppression that would also hide a real one.
+ */
+const CATASTROPHIC = `(${'a+'})+$`;
+
 describe('isSafePattern — a rule is a regex somebody typed', () => {
+  it('the fixture really is the pattern it claims to be', () => {
+    expect(CATASTROPHIC).toBe('(a+)+$');
+  });
+
   // These patterns come from operator configuration, and try/catch only covers ones that fail to
   // COMPILE. A pattern that compiles perfectly and then backtracks exponentially stalls the event
   // loop, which on a single-threaded gateway stops every other request in flight too.
 
   it('refuses every textbook catastrophic-backtracking shape', () => {
     for (const pattern of [
-      '(a+)+$',        // the canonical one
+      CATASTROPHIC,    // the canonical one
       '(a*)*b',
       '([a-z]+)*$',
       String.raw`(\w+\s?)*$`,  // the "trim words" pattern that has taken real services down
@@ -150,8 +163,10 @@ describe('isSafePattern — a rule is a regex somebody typed', () => {
 
   it('drops an unsafe rule from compileRules while keeping the safe ones beside it', () => {
     const compiled = compileRules([
-      { name: 'evil', pattern: '(a+)+$', action: 'block' },
-      { name: 'fine', pattern: '\bsecret\b', action: 'block' },
+      { name: 'evil', pattern: CATASTROPHIC, action: 'block' },
+      // String.raw, because '\bsecret\b' in a quoted string is BACKSPACE-secret-BACKSPACE, not a
+      // word boundary. It compiles, it matches nothing, and the test would still have passed.
+      { name: 'fine', pattern: String.raw`\bsecret\b`, action: 'block' },
     ]);
     expect(compiled.map((r) => r.name)).toEqual(['fine']);
   });
@@ -159,7 +174,7 @@ describe('isSafePattern — a rule is a regex somebody typed', () => {
   it('keeps a request fast against input that would hang the unsafe pattern', () => {
     // The point of the whole check, stated as a measurement rather than a claim. `(a+)+$` against a
     // non-matching run of 'a's is exponential; refusing to compile it means there is no rule to run.
-    const compiled = compileRules([{ name: 'evil', pattern: '(a+)+$', action: 'block' }]);
+    const compiled = compileRules([{ name: 'evil', pattern: CATASTROPHIC, action: 'block' }]);
     const hostile = `${'a'.repeat(40)}!`;
 
     const started = process.hrtime.bigint();
