@@ -22,6 +22,8 @@ import { getApiKeyInfo, rotateApiKey } from '../../services/apiKey.service';
 import { prisma }              from '../../lib/prisma';
 import { redis }               from '../../lib/redis';
 import { invalidateProviderCache } from '../../services/providerCache.service';
+import { clearSettingMemo } from '../../services/settings.service';
+import { clearRegistryMemo } from '../../services/model.service';
 import { adminGuard, adminOwnerGuard, adminWriteGuard } from './guard';
 import { ADMIN_WRITE_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
 
@@ -120,7 +122,11 @@ export default async function adminSystemRoutes(fastify: FastifyInstance) {
 
   fastify.post('/admin/cache/flush', withRateLimit(adminWriteGuard, ADMIN_WRITE_RATE_LIMIT), async (_req, reply) => {
     await redis.del(REGISTRY_CACHE_KEY);
+    clearRegistryMemo();
     await invalidateProviderCache();
+    // Settings are memoised in this process as well as cached in Redis, and "flush the cache" has
+    // to mean both — otherwise the button appears to do nothing for several seconds.
+    clearSettingMemo();
     return reply.send({ success: true });
   });
 }

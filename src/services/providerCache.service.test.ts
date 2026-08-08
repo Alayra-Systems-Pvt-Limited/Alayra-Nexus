@@ -43,9 +43,13 @@ const row = (id: string, provider: string, tier = 'standard') => ({
   preferredModel: null, extraHeaders: null,
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   store.clear();
+  // There are two tiers now — the shared copy in the KV, and an in-process memo in front of it.
+  // Emptying only the first leaves the second serving the previous test's pools, which is exactly
+  // the staleness this cache is designed to bound and exactly what a unit test must not inherit.
+  await invalidateProviderCache();
   prismaMock.nexusProvider.findMany.mockResolvedValue([]);
 });
 

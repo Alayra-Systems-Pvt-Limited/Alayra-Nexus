@@ -11,6 +11,40 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **Settings, the model registry and the provider pools are held in this process for a few
+  seconds, and the gateway got roughly four times faster where it counts.** Each of these already
+  sat in Redis, which is the right place for them — shared, and a write on one instance is visible
+  to the others at once. It is also a network round trip, and a request made a great many of them:
+  **31 per request**, eighteen of them individual `nexus:setting:*` reads, plus the model registry
+  and the active pools fetched twice each.
+
+  None of it could be seen in a CPU profile, because none of it uses CPU. The process was waiting.
+  That is the whole reason the same gateway measured 671 requests a second on the standalone file
+  and 281 against Postgres and Redis — and why the previous release's figures, measured standalone,
+  did not describe a real deployment.
+
+  A small in-process memo now sits in front of each, holding a value for a few seconds. The windows
+  are seconds rather than minutes on purpose: the saving comes from holding a value across the
+  requests arriving while it is hot, not from holding it long — five seconds already removes better
+  than 99.9% of these reads — while the cost is the window in which two instances can disagree.
+  The instance making a change is never stale about it, since every write path updates its own memo.
+  `SETTING_MEMO_TTL_MS`, `REGISTRY_MEMO_TTL_MS` and `PROVIDER_MEMO_TTL_MS` tune them; `0` disables.
+
+  Measured against Postgres and Redis, one worker at 64 concurrent callers:
+
+  | | before | after |
+  |---|---|---|
+  | Redis round trips per request | 31 | **18** |
+  | throughput | 281 RPS | **1,094 RPS** |
+  | median latency | 222 ms | **34.7 ms** |
+
+  What remains is live shared state that must be remote for a scaled deployment to be correct —
+  rate-limit and token-budget counters, breaker state, session pins.
+
+  Scaling works now that requests are not spent waiting: **two workers serve 2,244 RPS, 2.05× one
+  worker**. Three and four could not be measured on the development machine, which has four physical
+  cores and was also running the load driver and both containers.
+
 - **The gateway can run as several processes, and refuses to when that would be wrong.**
   `NEXUS_CLUSTER_WORKERS=4` (or `auto`) forks that many workers over one listening socket. One
   process costs about 1.5 ms of CPU per request and tops out near 670 a second, and no amount of
