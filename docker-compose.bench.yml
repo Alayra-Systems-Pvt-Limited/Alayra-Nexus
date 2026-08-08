@@ -80,6 +80,10 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     environment:
+      # Where the gateway writes its generated API key, so `npm run bench:provision` knows the path
+      # to read it back from. It is written to a 0600 file rather than printed, precisely so it
+      # never reaches the container logs.
+      NEXUS_DATA_DIR: /tmp/nexus-data
       DATABASE_URL: postgresql://postgres:benchpass@postgres:5432/nexus
       REDIS_URL: redis://redis:6379
       ADMIN_PASSWORD: bench-master-password

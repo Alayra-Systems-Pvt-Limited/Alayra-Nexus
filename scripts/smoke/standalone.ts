@@ -144,7 +144,14 @@ async function main(): Promise<void> {
     // other job uses, and a standalone gateway has no CLI to run it with.
     check('the gateway created its own database', /Database created → \d+ tables/.test(output),
       output.split('\n').find((l) => l.includes('Database created')) ?? 'no such line in the log');
-    check('it printed an API key on first run', /Generated Nexus API Key/.test(output));
+    // The key must NOT be in the log — that is the whole point of writing it to a file — so this
+    // checks two things at once: that the gateway announced where it put the key, and that the
+    // 64-hex key itself is nowhere in stdout. A regression that started printing it again would
+    // pass the first check and fail the second.
+    check('it wrote the API key to a file on first run', /Generated your Nexus API Key/.test(output),
+      output.split('\n').find((l) => l.includes('API Key')) ?? 'no such line in the log');
+    check('the key itself never reached the log', !/\b[0-9a-f]{64}\b/.test(output),
+      'a 64-hex value appeared in stdout');
 
     check('GET /health answers', (await req('GET', '/health')).status === 200);
 

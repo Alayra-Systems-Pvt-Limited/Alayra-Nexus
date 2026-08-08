@@ -49,7 +49,10 @@
 
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { provisionGateway, readGeneratedApiKey } from './gateway';
+import { API_KEY_FILE, provisionGateway, readContainerApiKey } from './gateway';
+
+/** Inside the gateway container: where it writes the API key, and where the rig reads it back. */
+const GW_DATA_DIR = '/tmp/nexus-data';
 
 const ROOT = resolve(__dirname, '..', '..');
 
@@ -163,6 +166,8 @@ export async function startRig(opts: { workers?: number } = {}): Promise<Rig> {
   docker(['exec', PG_CONTAINER, 'psql', '-U', 'postgres', '-c', 'CREATE DATABASE nexus']);
 
   const env = [
+    // Where the gateway writes its generated API key. Pinned so the rig knows the path to read back.
+    '-e', `NEXUS_DATA_DIR=${GW_DATA_DIR}`,
     '-e', `DATABASE_URL=postgresql://postgres:${PG_PASSWORD}@${PG_CONTAINER}:5432/nexus`,
     '-e', `REDIS_URL=redis://${REDIS_CONTAINER}:6379`,
     '-e', `ADMIN_PASSWORD=${MASTER}`,
@@ -189,7 +194,12 @@ export async function startRig(opts: { workers?: number } = {}): Promise<Rig> {
   const hostUrl = `http://127.0.0.1:${GW_HOST_PORT}`;
   await waitForHttp(`${hostUrl}/health`, 'gateway');
 
-  const apiKey = readGeneratedApiKey(docker(['logs', GW_CONTAINER]));
+  // Out of the container's filesystem, not its logs: the gateway writes the key to a 0600 file
+  // precisely so it never reaches stdout, and the rig has to collect it the same way an operator
+  // would.
+  const apiKey = readContainerApiKey(
+    () => docker(['exec', GW_CONTAINER, 'cat', `${GW_DATA_DIR}/${API_KEY_FILE}`]),
+  );
   const mockInternalUrl = `http://${MOCK_CONTAINER}:3210`;
   await provisionGateway(hostUrl, mockInternalUrl);
 

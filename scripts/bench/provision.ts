@@ -32,7 +32,7 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
-import { provisionGateway, readGeneratedApiKey } from './gateway';
+import { API_KEY_FILE, provisionGateway, readContainerApiKey } from './gateway';
 
 const COMPOSE_FILE = 'docker-compose.bench.yml';
 const GATEWAY_HOST_PORT = 3401;
@@ -63,8 +63,9 @@ function lanAddresses(): string[] {
   return out;
 }
 
-function composeLogs(service: string): string {
-  return execFileSync('docker', ['compose', '-f', COMPOSE_FILE, 'logs', '--no-log-prefix', service], {
+/** Run a command inside a compose service and return its stdout. */
+function composeExec(service: string, ...command: string[]): string {
+  return execFileSync('docker', ['compose', '-f', COMPOSE_FILE, 'exec', '-T', service, ...command], {
     encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
   });
 }
@@ -100,7 +101,9 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  storeKey(readGeneratedApiKey(composeLogs('gateway')));
+  // From the container's filesystem rather than its logs — the gateway writes the key to a 0600
+  // file so it never reaches stdout, and this reads it the same way an operator would.
+  storeKey(readContainerApiKey(() => composeExec('gateway', 'cat', `/tmp/nexus-data/${API_KEY_FILE}`)));
   // `mock` is the service name on the compose network — the address the GATEWAY uses to reach its
   // upstream, which is not the address anything outside the rig uses.
   await provisionGateway(hostUrl, 'http://mock:3210');

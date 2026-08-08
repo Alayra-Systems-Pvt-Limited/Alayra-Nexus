@@ -32,7 +32,7 @@
 // the deliberately absurd ones the e2e suite uses to trip a budget on the first request.
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -152,6 +152,10 @@ export async function startHarness(
       // remains on the measured path instead of being switched off for the convenience of the
       // benchmark. Its cost is then part of what these numbers report, which is honest.
       SSRF_ALLOWLIST: `127.0.0.1:${mockPort}`,
+      // The generated API key is written here rather than printed, so this is where the harness
+      // collects it. Pinned to the run's own temp directory so a benchmark never reads — or worse,
+      // overwrites — the key of a real gateway on the same machine.
+      NEXUS_DATA_DIR: dir,
     } as NodeJS.ProcessEnv;
     // Deleted unless the caller pins them. A developer's .env would otherwise make a run that
     // reports "standalone" quietly measure their PostgreSQL.
@@ -182,9 +186,9 @@ export async function startHarness(
     await waitFor(`${gatewayUrl}/health`, 'gateway');
     if (profileControlUrl) await waitFor(`${profileControlUrl}/health`, 'profiler control');
 
-    // Printed once, on the first run, and never recoverable afterwards — so it is read from the log
-    // rather than requested.
-    const apiKey = readGeneratedApiKey(out);
+    // Written once, on the first run, and never recoverable afterwards — so it is read from the file
+    // the gateway put it in rather than requested.
+    const apiKey = readGeneratedApiKey(dir);
 
     const adminToken = await provisionGateway(gatewayUrl, mockUrl);
 
@@ -286,9 +290,39 @@ export async function provisionGateway(gatewayUrl: string, mockUrl: string): Pro
   return adminToken;
 }
 
-/** The API key the gateway prints exactly once, on its first boot. */
-export function readGeneratedApiKey(log: string): string {
-  const key = /Generated Nexus API Key[^]*?\b([0-9a-f]{64})\b/.exec(log)?.[1];
-  if (!key) throw new Error(`could not read the generated API key from the gateway log:\n${log.slice(0, 800)}`);
+/**
+ * The API key the gateway writes exactly once, on its first boot.
+ *
+ * It used to be scraped out of the log, which is exactly the habit the gateway stopped supporting —
+ * a credential on stdout is a credential in whatever collects stdout. It is written to a 0600 file
+ * in the data directory instead, and `startHarness` points that at the run's own temp directory.
+ */
+export const API_KEY_FILE = 'api-key.txt';
+
+export function readGeneratedApiKey(dataDir: string): string {
+  const path = join(dataDir, API_KEY_FILE);
+  let key: string;
+  try {
+    key = readFileSync(path, 'utf8').trim();
+  } catch (err) {
+    throw new Error(`could not read the generated API key from ${path}`, { cause: err });
+  }
+  if (!key) throw new Error(`the API key file at ${path} is empty`);
+  return key;
+}
+
+/**
+ * The same key, when the gateway is in a CONTAINER and the file is on its filesystem rather than
+ * this one. `readKeyFile` is passed in so this stays testable and so the caller keeps ownership of
+ * how it talks to Docker — `docker exec` in the rig, `docker compose exec` in provision.
+ */
+export function readContainerApiKey(readKeyFile: () => string): string {
+  const key = readKeyFile().trim();
+  if (!key) {
+    throw new Error(
+      'the gateway container has no API key file yet. It is written on first boot to ' +
+      `NEXUS_DATA_DIR/${API_KEY_FILE}; check the container reached that point.`,
+    );
+  }
   return key;
 }
