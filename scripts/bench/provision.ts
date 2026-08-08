@@ -70,22 +70,24 @@ function composeLogs(service: string): string {
 }
 
 /**
- * Store the key where it can be copied, and show only enough to recognise it.
+ * Store the key where it can be copied, and print none of it.
  *
  * The obvious design prints the key inside the commands to paste. CodeQL calls that
  * `js/clear-text-logging` and is right to: printed output lands in scrollback, in CI logs and in
  * any terminal recording — and this is precisely the script somebody adapts to point at a gateway
  * that is not a benchmark rig. "It is only a mock upstream" is how real credentials reach logs.
  *
- * So it goes to a 0600 file the commands read from, and the console gets a masked prefix: enough to
- * confirm which key is in play, useless to anyone reading over a shoulder.
+ * A masked prefix was the first attempt and CodeQL still flagged it, because `slice` does not
+ * sanitise anything — the value is still derived from the secret. On reflection the analyser has
+ * the better instinct: six characters of a key are no use to a reader who has the file, and the
+ * habit of printing "just a bit" of a credential is not one worth keeping. Nothing derived from the
+ * key reaches the console now; the path does, and the file holds the value.
  */
-function storeKey(apiKey: string): string {
+function storeKey(apiKey: string): void {
   mkdirSync(KEY_DIR, { recursive: true });
   writeFileSync(KEY_FILE, apiKey, { mode: 0o600 });
   // The mode argument is ignored on Windows, so it is applied explicitly where it means something.
   if (process.platform !== 'win32') chmodSync(KEY_FILE, 0o600);
-  return `${apiKey.slice(0, 6)}…${apiKey.slice(-4)}`;
 }
 
 async function main(): Promise<void> {
@@ -98,7 +100,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const masked = storeKey(readGeneratedApiKey(composeLogs('gateway')));
+  storeKey(readGeneratedApiKey(composeLogs('gateway')));
   // `mock` is the service name on the compose network — the address the GATEWAY uses to reach its
   // upstream, which is not the address anything outside the rig uses.
   await provisionGateway(hostUrl, 'http://mock:3210');
@@ -113,7 +115,7 @@ async function main(): Promise<void> {
     '  Gateway provisioned: one pool, one key, one model.',
     '',
     `  API key  → ${KEY_FILE}   (mode 0600, git-ignored)`,
-    `             ${masked}  — masked here on purpose; the file holds the whole thing`,
+    '             Not printed, not even in part. Read the file if you need to see it.',
     '',
     '  Reachable on this host at:',
     ...addresses.map((a) => `    http://${a.replace(/\s+\(/, `:${GATEWAY_HOST_PORT}  (`)}`),
