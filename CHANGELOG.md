@@ -40,30 +40,39 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
   *What does it cost?* This is the defect:
 
-  | band | pool reached | served | refused | Redis ops / request |
-  |---|---|---|---|---|
-  | 0 | pool 0 | 10 | 0 | 19.7 |
-  | 1 | pool 1 | 10 | 0 | 24.7 |
-  | 2 | pool 2 | 10 | 0 | 29.8 |
-  | 3 | pool 3 | 10 | 0 | 35.4 |
-  | 4 | pool 4 | 7 | 3 | 36.3 |
+  | band | pool reached | served | refused | Redis round trips / req | DB queries / req |
+  |---|---|---|---|---|---|
+  | 0 | pool 0 | 10 | 0 | 7.7 | 1.5 |
+  | 1 | pool 1 | 10 | 0 | 9.7 | 2.5 |
+  | 2 | pool 2 | 10 | 0 | 12.8 | 3.5 |
+  | 3 | pool 3 | 10 | 0 | 13.7 | 4.5 |
+  | 4 | pool 4 | 7 | 3 | 14.7 | 5.5 |
 
-  **Five extra Redis round trips per exhausted pool walked**, linear, reproduced twice. Each
-  candidate costs a breaker gate, a user-admission check and an atomic RPM/TPM reservation, and the
-  router pays them one by one for every key it ends up rejecting. Extrapolated to a deployment with
-  20 pools of which 19 are busy, a single request pays roughly 95 sequential round trips — and it
-  pays them precisely when capacity is tight, which is the worst moment to get slower.
+  **About two extra Redis round trips and exactly one extra database query per exhausted pool
+  walked**, linear in both. The Redis pair is the breaker gate and the RPM/TPM reservation, paid per
+  key the router rejects; the query is the `findMany` that `tryPickKey` issues for every pool it
+  tries. Extrapolated to a deployment with 20 pools of which 19 are busy, one request pays roughly
+  38 extra Redis round trips and 19 extra database queries — precisely when capacity is tight, which
+  is the worst moment to get slower. The database half is the more expensive of the two.
 
   This is a real defect in our own code, not a rig artifact. The fix it justifies is select-and-
-  reserve in a single server-side Lua script, so the cost is flat regardless of how deep the walk
-  goes; that work is not in this change.
+  reserve in a single server-side Lua script, with pool metadata already cached in process, so the
+  cost is flat regardless of how deep the walk goes; that work is not in this change.
 
-  One note on how the number was nearly missed. The first version of this script clamped keys via
-  `/admin/keys`, which does not exist — keys live under their provider. The 404 produced `undefined`,
-  the clamp silently did nothing, the harness's own key kept its 100,000,000 rpm and absorbed the
-  entire run, and the script printed a beautifully flat cost curve for a walk that never happened.
-  It now asserts that every key was clamped and fails loudly if not. A setup step that quietly does
-  nothing is worse than one that crashes.
+  Two ways this measurement lied before it was believed, both now fixed in the script.
+
+  `INFO commandstats` counts the calls a Lua script makes INTERNALLY, not just the ones that crossed
+  the network — one `EVALSHA` doing two `GET`s registers as three commands. Reported as-is, the
+  growth above reads as 19.7 → 35.4 "Redis ops", which was quoted as round trips and overstated the
+  problem by about two and a half times. The script now counts round trips from a `MONITOR` capture,
+  where a call made inside a script is logged against `lua` instead of a client address, and prints
+  the raw command count beside it as a separate column so the two can never be confused again.
+
+  And the first version clamped keys via `/admin/keys`, which does not exist — keys live under their
+  provider. The 404 produced `undefined`, the clamp silently did nothing, the harness's own key kept
+  its 100,000,000 rpm and absorbed the entire run, and the script printed a beautifully flat cost
+  curve for a walk that never happened. It now asserts that every key was clamped and fails loudly
+  if not. A setup step that quietly does nothing is worse than one that crashes.
 
 - **A two-machine benchmark rig, and four measurements of the same build that disagree by twelve
   times.** `docker-compose.bench.yml` brings up everything that gets MEASURED — gateway, mock
@@ -133,8 +142,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   seconds, and the gateway got roughly four times faster where it counts.** Each of these already
   sat in Redis, which is the right place for them — shared, and a write on one instance is visible
   to the others at once. It is also a network round trip, and a request made a great many of them:
-  **31 per request**, eighteen of them individual `nexus:setting:*` reads, plus the model registry
-  and the active pools fetched twice each.
+  **31 commands per request**, eighteen of them individual `nexus:setting:*` reads, plus the model
+  registry and the active pools fetched twice each.
 
   None of it could be seen in a CPU profile, because none of it uses CPU. The process was waiting.
   That is the whole reason the same gateway measured 671 requests a second on the standalone file
@@ -152,9 +161,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
   | | before | after |
   |---|---|---|
-  | Redis round trips per request | 31 | **18** |
+  | Redis commands executed per request | 31 | **18** |
+  | Redis network round trips per request | — | **7** |
   | throughput | 281 RPS | **1,094 RPS** |
   | median latency | 222 ms | **34.7 ms** |
+
+  The first row is what `INFO commandstats` reports, and it counts the calls a Lua script makes
+  internally as well as the ones that crossed the network — our breaker and admission scripts each
+  turn one `EVAL` into two or more counted commands. An earlier draft of this entry called that row
+  round trips, which it is not. The 18 that remain are **7 network hops**; the rest is Redis CPU.
+  The throughput and latency rows are direct measurements and are unaffected either way.
 
   What remains is live shared state that must be remote for a scaled deployment to be correct —
   rate-limit and token-budget counters, breaker state, session pins.
@@ -183,13 +199,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   the only topology where forking is allowed. It measures the load driver's own ceiling in every
   run, so "the gateway stopped scaling" can be told apart from "the machine ran out of cores".
 
-  The second counts Redis round trips per request, and exists because the first produced a number
-  less than half the standalone one and the reason had to be found rather than guessed at. It found
-  **31 Redis round trips per request**, eighteen of them individual `nexus:setting:*` reads for
-  values that change when an operator edits them and never between two requests. Against an
-  in-process map those are free, which is why nothing had noticed. Against a real Redis they are the
-  dominant cost of a request, and they are why the production topology measures 281 RPS where
-  standalone measures 671.
+  The second counts Redis work per request, and exists because the first produced a number less than
+  half the standalone one and the reason had to be found rather than guessed at. It found **31 Redis
+  commands per request**, eighteen of them individual `nexus:setting:*` reads for values that change
+  when an operator edits them and never between two requests. Against an in-process map those are
+  free, which is why nothing had noticed. Against a real Redis they are the dominant cost of a
+  request, and they are why the production topology measures 281 RPS where standalone measures 671.
+
+  It now reports round trips and executed commands as two separate figures, tagging the `(lua)`
+  lines that happened inside a script that had already crossed the network. Conflating the two is a
+  mistake this repository made and had to correct.
 
 - **The pinned key's row is cached for one second, taking the last query off the request path.**
   This one was held back from the previous change on purpose, because it is not the same kind of
