@@ -11,6 +11,55 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Changed
 
+- **Picking a key is now one call to the KV instead of three per candidate, so an exhausted pool
+  costs a fifth of what it did.** Routing asked three separate questions about every candidate, one
+  at a time — a breaker gate, a Max Users admission, an atomic RPM/TPM reservation. A key that
+  failed the last of them had already cost two round trips, and the router paid that again for every
+  key it rejected before finding one that worked.
+
+  The whole candidate list now goes in one script and the loop runs inside the KV. Depth costs Redis
+  CPU — a few reads per rejected key — but no additional network hops.
+
+  Measured with `ROUTING_POOLS=1 ROUTING_KEYS_PER_POOL=10`, which is the shape a real deployment has
+  when one provider account holds many keys:
+
+  | | before | after |
+  |---|---|---|
+  | first key has headroom | 7.1 | **6.1** |
+  | pool partly exhausted, walking past most keys | 12.1 | **5.8** |
+  | pool fully exhausted, every request walks all ten | 23.7 | **4.5** |
+
+  Round trips per request. The gap widens exactly as pressure rises, which is the point — the old
+  shape was slowest at its busiest. On the sticky path, which is the common one once a conversation
+  is going, a pinned request paid three round trips to be told yes and now pays one.
+
+  Two things worth being precise about. Within a pool the walk does not deepen as smoothly as
+  expected, because LRU ordering sorts freshly-unused keys to the front — the cost only materialises
+  once many keys are unusable at the same time, which is when the last two rows above apply. And the
+  sweep across POOLS is still one call each; a deployment with many pools rather than many keys sees
+  a smaller share of this.
+
+  **Two bugs fell out of writing the sequence down in one place.** The old order performed its side
+  effects as it went, so a key rejected late had already been written to.
+
+  A half-open key's probe slot is claimed with `SET NX`, and exactly one caller may hold it.
+  `breaker.acquire` claimed it *before* the RPM/TPM check, so a half-open key then skipped for lack
+  of headroom left the slot claimed for its full thirty-second TTL — thirty seconds in which the
+  breaker could not send the trial request it was waiting to send. A key recovering from an outage
+  stayed dark longer precisely when its pool was busy.
+
+  And `admitUser` recorded a new end-user with `SADD` before RPM/TPM was checked, so a key that was
+  then skipped still counted that user against its Max Users cap from then on.
+
+  The script reads every test before it writes anything, and the probe claim goes first among the
+  writes because it is the only one that can fail — losing that race skips the key with nothing yet
+  written. Both fixes are covered in the parity suite.
+
+  Like every other script here it ships with a synchronous JS twin so standalone mode keeps working,
+  and `lib/kv/parity.test.ts` runs fourteen scenarios through both. That gate was verified by
+  deliberately diverging the twin from the Lua: the memory-only run still passed and the real-Redis
+  run caught it, which is exactly why `PARITY_REDIS_URL` matters.
+
 - **The routing sweep no longer queries the database once per pool it tries, so a deep walk costs
   what a shallow one does.** `bench:routing` measured the defect: exactly one extra `SELECT NexusKey`
   per exhausted pool walked, arriving when every pool is tight and the walk is deepest — the moment

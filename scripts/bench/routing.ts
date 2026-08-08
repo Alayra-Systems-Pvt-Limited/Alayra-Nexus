@@ -49,8 +49,18 @@ import { isRoundTrip } from './monitor';
 const REDIS_CONTAINER = process.env.OPS_REDIS_CONTAINER ?? 'nexus-ops-redis';
 const REDIS_PORT = parseInt(process.env.OPS_REDIS_PORT ?? '56379', 10);
 
-/** Pools to create, each with one key. */
+/** Pools to create. */
 const POOLS = parseInt(process.env.ROUTING_POOLS ?? '5', 10);
+/**
+ * Extra keys to add to each pool beyond the one it starts with.
+ *
+ * The two shapes cost differently and the difference is the point. Walking to the next POOL is a
+ * fresh selection call; walking to the next KEY inside a pool is another iteration of a loop that
+ * already ran inside the KV. So `ROUTING_POOLS=5 ROUTING_KEYS_PER_POOL=1` measures the cross-pool
+ * cost, and `ROUTING_POOLS=1 ROUTING_KEYS_PER_POOL=10` measures the within-pool cost — which is the
+ * shape a deployment actually has when one provider account holds many keys.
+ */
+const KEYS_PER_POOL = parseInt(process.env.ROUTING_KEYS_PER_POOL ?? '1', 10);
 /** Requests each key will accept before it is out of headroom. Small, so the walk is quick to reach. */
 const RPM_PER_KEY = parseInt(process.env.ROUTING_RPM ?? '10', 10);
 
@@ -89,6 +99,17 @@ async function main(): Promise<void> {
     // Extra pools beyond the one the harness already made, each with a key limited hard enough that
     // a handful of requests exhausts it. Same provider slug is fine — routing walks pools, and what
     // is being measured is the walk.
+    const addKey = async (providerId: string, label: string): Promise<void> => {
+      await fetch(`${h.gatewayUrl}/admin/providers/${providerId}/keys`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${h.adminToken}` },
+        body: JSON.stringify({
+          apiKey: `sk-bench-${label}`, label: `bench key ${label}`,
+          rpmLimit: RPM_PER_KEY, tpmLimit: 10_000_000,
+        }),
+      });
+    };
+
     for (let i = 1; i < POOLS; i++) {
       const pool = await fetch(`${h.gatewayUrl}/admin/providers`, {
         method: 'POST',
@@ -101,15 +122,20 @@ async function main(): Promise<void> {
 
       const id = pool.provider?.id;
       if (!id) throw new Error(`could not create pool ${i}`);
+      await addKey(id, String(i));
+    }
 
-      await fetch(`${h.gatewayUrl}/admin/providers/${id}/keys`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${h.adminToken}` },
-        body: JSON.stringify({
-          apiKey: `sk-bench-${i}`, label: `bench key ${i}`,
-          rpmLimit: RPM_PER_KEY, tpmLimit: 10_000_000,
-        }),
-      });
+    // Extra keys inside every pool, the harness's own included. Walking to one of these is another
+    // turn of a loop the KV already runs; walking to the next POOL is a fresh call. Which of the two
+    // a deployment does is the difference between the two shapes this script can measure.
+    if (KEYS_PER_POOL > 1) {
+      const existing = await fetch(`${h.gatewayUrl}/admin/providers`, {
+        headers: { authorization: `Bearer ${h.adminToken}` },
+      }).then((r) => r.json() as Promise<{ providers?: { id: string }[] }>);
+
+      for (const p of existing.providers ?? []) {
+        for (let k = 1; k < KEYS_PER_POOL; k++) await addKey(p.id, `${p.id}-${k}`);
+      }
     }
 
     // Clamp EVERY key to the same small limit, the harness's included, so pool 0 exhausts like the
@@ -140,16 +166,17 @@ async function main(): Promise<void> {
       }
     }
 
-    if (clamped < POOLS) {
+    const EXPECTED_KEYS = POOLS * KEYS_PER_POOL;
+    if (clamped < EXPECTED_KEYS) {
       throw new Error(
-        `only ${clamped} of ${POOLS} keys were clamped to ${RPM_PER_KEY} rpm. Without every key ` +
-        'limited, one of them absorbs the whole run and no walk is measured.',
+        `only ${clamped} of ${EXPECTED_KEYS} keys were clamped to ${RPM_PER_KEY} rpm. Without every ` +
+        'key limited, one of them absorbs the whole run and no walk is measured.',
       );
     }
     console.log(`clamped ${clamped} keys to ${RPM_PER_KEY} rpm`);
 
-    console.log(`\n${POOLS} pools, one key each, ${RPM_PER_KEY} rpm per key.`);
-    console.log(`Total headroom: ${POOLS * RPM_PER_KEY} requests before everything is exhausted.\n`);
+    console.log(`\n${POOLS} pool(s), ${KEYS_PER_POOL} key(s) each, ${RPM_PER_KEY} rpm per key.`);
+    console.log(`Total headroom: ${EXPECTED_KEYS * RPM_PER_KEY} requests before everything is exhausted.\n`);
 
     let n = 0;
     const send = async (): Promise<number> => {
@@ -171,7 +198,7 @@ async function main(): Promise<void> {
     // One band per key's worth of headroom. Band 0 should be served by the first key, band 1 after
     // it is exhausted, and so on — each band walking one pool deeper than the last.
     const bands: Cost[] = [];
-    for (let band = 0; band < POOLS + 1; band++) {
+    for (let band = 0; band < EXPECTED_KEYS + 1; band++) {
       redisCli(['config', 'resetstat']);
       const before = commandTotal();
 
@@ -204,11 +231,11 @@ async function main(): Promise<void> {
       );
     }
 
-    console.log('\n| band | expected depth | ok | refused | Redis round trips / req | DB queries / req | raw commands / req |');
+    console.log('\n| band | depth reached | ok | refused | Redis round trips / req | DB queries / req | raw commands / req |');
     console.log('|---|---|---|---|---|---|---|');
     bands.forEach((b, i) => {
       console.log(
-        `| ${i} | pool ${Math.min(i, POOLS - 1)} | ${b.ok} | ${b.failed} | ` +
+        `| ${i} | step ${Math.min(i, EXPECTED_KEYS - 1)} | ${b.ok} | ${b.failed} | ` +
         `${(b.roundTrips / b.requests).toFixed(1)} | ${(b.queries / b.requests).toFixed(1)} | ` +
         `${(b.commands / b.requests).toFixed(1)} |`,
       );
@@ -223,7 +250,7 @@ async function main(): Promise<void> {
         / Math.max(1, bands.length - 2);
       console.log('');
       console.log(
-        `Each extra pool the router walks costs about ${perPool.toFixed(1)} more Redis round trips ` +
+        `Each extra step the router walks costs about ${perPool.toFixed(1)} more Redis round trips ` +
         `and ${queryPerPool.toFixed(1)} more database queries on the request that walks it. That is a ` +
         'cost that arrives exactly when capacity is tight, which is the worst moment to get slower.',
       );

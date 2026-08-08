@@ -16,7 +16,7 @@
 
 import { prisma }           from '../lib/prisma';
 import { decrypt, maskKey } from '../lib/encryption';
-import { admitKey, admitUser } from '../lib/admission';
+import { selectAndReserve } from '../lib/selectKey';
 import * as breaker         from '../lib/breaker';
 import { getStickyKeyId }   from '../lib/sticky';
 import { costOrder, effectivePrice } from '../lib/routing';
@@ -137,7 +137,7 @@ async function tryPickKey(
 
   const now  = new Date();
   // Cooling keys are included so the circuit breaker can decide (open vs. probe)
-  // — the live gate is breaker.acquire(), not the DB column. Banned keys stay out.
+  // — the live gate is the breaker state in the KV, not the DB column. Banned keys stay out.
   //
   // `ownerTeamId` scopes the candidate set: null selects the shared pool (keys with
   // no owner), a team id selects only that team's private keys. It is an equality
@@ -161,32 +161,27 @@ async function tryPickKey(
     setKeyList(providerRow.id, ownerTeamId, keys);
   }
 
-  for (const key of keys) {
-    // Circuit breaker gate first, so an open (cooling) key never burns RPM/TPM.
-    const gate = await breaker.acquire(key.id);
-    if (gate === 'open') continue;
+  // The breaker gate, the Max Users cap and the atomic RPM/TPM reservation, for EVERY candidate, in
+  // one round trip. This was a loop that asked each of those separately per key, so a key rejected
+  // at the last test had already cost two hops — paid again for every key turned down before one
+  // worked. The selection rules are unchanged and still "rotate first, fail last": null here means
+  // nothing in this pool had headroom, and the caller moves on to the next.
+  //
+  // See lib/selectKey.ts, including the two side effects the old order left on keys it went on to
+  // reject — an abandoned probe slot and a Max Users entry for a key that never served the user.
+  const chosen = await selectAndReserve(keys, reserveTokens, userId);
+  if (!chosen) return null;
 
-    // Max Users cap next, before RPM/TPM admission: a key that is full for a *new* end-user is
-    // skipped cheaply, without consuming rate budget. A known user (or a request with no user
-    // identity) always passes. See admitUser for the "no signal → never block" rule.
-    const userOk = await admitUser(key.id, key.maxUsers, userId);
-    if (!userOk) continue;
+  const key = keys[chosen.index];
+  if (!key) return null;
 
-    // Atomic RPM + TPM admission. A key at either limit is skipped so the loop
-    // rotates to the next key/tier; the caller only fails once every key is
-    // exhausted (rotate first, fail last).
-    const admitted = await admitKey(key.id, key.rpmLimit, key.tpmLimit, reserveTokens);
-    if (!admitted) continue;
-
-    // Written at most once per window, not once per request. `updateMany` rather than `update`
-    // because Prisma's `update` compiles to a RETURNING of every column, and nothing here reads
-    // the row back. See lib/lastUsed.ts for what the window costs.
-    if (shouldWriteLastUsed(key.id, now.getTime())) {
-      await prisma.nexusKey.updateMany({ where: { id: key.id }, data: { lastUsedAt: now } });
-    }
-    return buildRoute(key, providerRow, gate, model);
+  // Written at most once per window, not once per request. `updateMany` rather than `update`
+  // because Prisma's `update` compiles to a RETURNING of every column, and nothing here reads
+  // the row back. See lib/lastUsed.ts for what the window costs.
+  if (shouldWriteLastUsed(key.id, now.getTime())) {
+    await prisma.nexusKey.updateMany({ where: { id: key.id }, data: { lastUsedAt: now } });
   }
-  return null;
+  return buildRoute(key, providerRow, chosen.gate, model);
 }
 
 /**
@@ -242,21 +237,19 @@ async function tryStickyKey(
     || (key.ownerTeamId === null && scope.fallbackToShared);
   if (!eligible) return null;
 
-  const gate = await breaker.acquire(key.id);
-  if (gate === 'open') return null;
-
-  // Even a pinned key honours its Max Users cap: a new end-user over the cap falls through to
-  // normal discovery rather than riding the sticky pin.
-  if (!(await admitUser(key.id, key.maxUsers, userId))) return null;
-
-  const admitted = await admitKey(key.id, key.rpmLimit, key.tpmLimit, reserveTokens);
-  if (!admitted) return null;
+  // The same three tests the sweep applies — breaker gate, Max Users cap, atomic RPM/TPM
+  // reservation — against a candidate list of exactly one. They were three separate round trips
+  // here, on what is the COMMON path once a conversation is going: a pinned request paid three hops
+  // to be told yes. A pinned key still honours its Max Users cap, so a new end-user over it falls
+  // through to normal discovery rather than riding the pin.
+  const chosen = await selectAndReserve([key], reserveTokens, userId);
+  if (!chosen) return null;
 
   const now = Date.now();
   if (shouldWriteLastUsed(key.id, now)) {
     await prisma.nexusKey.updateMany({ where: { id: key.id }, data: { lastUsedAt: new Date(now) } });
   }
-  return { ...buildRoute(key, provider, gate, model), wasDowngrade: false, sticky: true };
+  return { ...buildRoute(key, provider, chosen.gate, model), wasDowngrade: false, sticky: true };
 }
 
 /**
