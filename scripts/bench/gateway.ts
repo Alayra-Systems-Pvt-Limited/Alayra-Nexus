@@ -204,11 +204,24 @@ export async function setUpstream(
   });
 }
 
-/** The body every scenario sends, so they are all measuring the same request. */
-export const COMPLETION_BODY = {
+/**
+ * A body whose content — and so whose sticky session — is unique to `n`.
+ *
+ * The gateway pins a conversation to the key that last served it, keyed by a hash of the message
+ * content (src/lib/sticky.ts). An identical body therefore pins every request to the SAME key and
+ * takes `tryStickyKey`, one indexed lookup — while the routing sweep that real traffic exercises
+ * never runs at all. Every measurement in this repository had that blind spot until it was found by
+ * being asked why the benchmark used a single pool.
+ *
+ * Pass an incrementing `n` to force a sticky miss on every request and measure the sweep instead.
+ */
+export const completionBody = (n?: number): Record<string, unknown> => ({
   model: 'alayra-nexus-1',
-  messages: [{ role: 'user', content: 'Benchmark request.' }],
-};
+  messages: [{ role: 'user', content: n === undefined ? 'Benchmark request.' : `Benchmark request. n=${n}` }],
+});
+
+/** The body every scenario sends, so they are all measuring the same request. */
+export const COMPLETION_BODY = completionBody();
 
 /**
  * Claim a fresh gateway and give it one pool, one key and one model.

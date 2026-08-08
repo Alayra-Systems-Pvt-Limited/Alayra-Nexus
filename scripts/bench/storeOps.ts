@@ -30,7 +30,8 @@
 // Redis's own `INFO commandstats` does the counting, so nothing here has to instrument the client.
 
 import { execFileSync, spawn } from 'node:child_process';
-import { COMPLETION_BODY, setUpstream, startHarness } from './gateway';
+import { COMPLETION_BODY, completionBody, setUpstream, startHarness } from './gateway';
+import { isRoundTrip, parseMonitorLine } from './monitor';
 
 const REDIS_CONTAINER = process.env.OPS_REDIS_CONTAINER ?? 'nexus-ops-redis';
 const REDIS_PORT = parseInt(process.env.OPS_REDIS_PORT ?? '56379', 10);
@@ -40,26 +41,6 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 function redisCli(args: string[]): string {
   return execFileSync('docker', ['exec', REDIS_CONTAINER, 'redis-cli', ...args], { encoding: 'utf8' });
-}
-
-/**
- * Collapse a monitored key to the thing it identifies.
- *
- * `nexus:setting:CACHE_ENABLED` is worth seeing in full — WHICH setting is the whole question.
- * `nexus:sticky:<64 hex chars>` is not; the hash differs per session and would turn a summary into
- * a list. So identifiers are folded and namespaces are kept.
- */
-export function foldKey(key: string): string {
-  return key
-    .replace(/[0-9a-f]{16,}/gi, '<hash>')
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<uuid>');
-}
-
-/** A MONITOR line: `1699…  [0 127.0.0.1:1] "get" "nexus:setting:CACHE_ENABLED"` */
-export function parseMonitorLine(line: string): { command: string; key: string } | null {
-  const m = /\]\s+"([^"]+)"(?:\s+"([^"]*)")?/.exec(line);
-  if (!m?.[1]) return null;
-  return { command: m[1].toLowerCase(), key: m[2] ? foldKey(m[2]) : '' };
 }
 
 /** `cmdstat_get:calls=12,usec=…` → `{ get: 12 }` */
@@ -89,10 +70,13 @@ async function main(): Promise<void> {
   try {
     await setUpstream(h.mockUrl, { latencyMs: 0 });
 
+    // See queryCount.ts: unique bodies force a sticky miss and the full routing sweep.
+    const unique = process.env.BENCH_SESSIONS === 'unique';
+    let n = 0;
     const send = (): Promise<Response> => fetch(`${h.gatewayUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${h.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify(COMPLETION_BODY),
+      body: JSON.stringify(unique ? completionBody(n++) : COMPLETION_BODY),
     });
 
     // Warm up first: the caches this is meant to measure are cold on the first request, and a cold
@@ -118,16 +102,25 @@ async function main(): Promise<void> {
     const stats = parseCommandStats(redisCli(['info', 'commandstats']));
     const total = Object.values(stats).reduce((a, b) => a + b, 0);
 
-    console.log(`\n${total} Redis commands over ${REQUESTS} requests — ${(total / REQUESTS).toFixed(1)} per request\n`);
-    console.log('  per req   total   command');
+    // The two numbers are different and the difference matters. `INFO commandstats` counts every
+    // command Redis EXECUTES, and a Lua script's internal calls are executions — our ACQUIRE_LUA
+    // alone turns one EVAL into two counted commands. Only the client-issued ones cost a network
+    // hop, and latency is what this script exists to explain. See monitor.ts.
+    const lines = seen.join('').split(/\r?\n/);
+    const roundTrips = lines.filter(isRoundTrip).length;
+
+    console.log(`\n${(roundTrips / REQUESTS).toFixed(1)} Redis ROUND TRIPS per request (${roundTrips} over ${REQUESTS})`);
+    console.log(`${(total / REQUESTS).toFixed(1)} commands EXECUTED per request (${total}) — the extra are calls made inside Lua scripts\n`);
+    console.log('  per req   total   command (executed, including inside scripts)');
     for (const [cmd, n] of Object.entries(stats).sort((a, b) => b[1] - a[1])) {
       console.log(`  ${(n / REQUESTS).toFixed(1).padStart(7)}  ${String(n).padStart(6)}   ${cmd}`);
     }
     const byKey = new Map<string, number>();
-    for (const line of seen.join('').split(/\r?\n/)) {
+    for (const line of lines) {
       const parsed = parseMonitorLine(line);
       if (!parsed || !parsed.key) continue;
-      const label = `${parsed.command} ${parsed.key}`;
+      // Tag the origin, so a reader can tell at a glance which of these cost a hop.
+      const label = `${isRoundTrip(line) ? '     ' : '(lua)'} ${parsed.command} ${parsed.key}`;
       byKey.set(label, (byKey.get(label) ?? 0) + 1);
     }
 
@@ -139,8 +132,11 @@ async function main(): Promise<void> {
     }
 
     console.log('');
-    console.log('Each of these is a network round trip when Redis is not in this process. Sequential');
-    console.log('ones cost latency that no amount of concurrency removes from a single request.');
+    console.log('The untagged lines each cost a network round trip when Redis is not in this process,');
+    console.log('and sequential ones cost latency no amount of concurrency removes from one request.');
+    console.log('The (lua) lines happened inside a script that had already crossed the network: they');
+    console.log('cost Redis CPU, not a hop. Counting them as hops is a mistake this repository has');
+    console.log('made and had to correct.');
     console.log('');
   } finally {
     h.dispose();
