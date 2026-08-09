@@ -25,8 +25,19 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
   So the key is written to a `0600` file in the data directory and the log gets the **path**. One
   `cat`, and the file survives a terminal that has already scrolled away or closed. `NEXUS_DATA_DIR`
-  picks the location; it defaults to the same `~/.alayra-nexus` the CLI already uses, so there is one
-  directory to secure rather than a secret filed somewhere nobody was told about.
+  picks the location, and it falls back to exactly what the **database** falls back to — `.nexus`,
+  relative to the working directory — so there is one directory to secure rather than a secret filed
+  somewhere nobody was told about.
+
+  That last sentence was not true when this change was first written, and it cost the release. The
+  key had its own fallback, `~/.alayra-nexus`, while the database used `.nexus`: two defaults for
+  one idea. In a container they resolve to different places, and running the image the way the
+  README documents for a bind mount — `--user "$(id -u):$(id -g)"` — gives the process a uid with no
+  passwd entry, so `homedir()` is `/`. First boot died with
+  `EACCES: permission denied, mkdir '/.alayra-nexus'`, *after* building the database, so the failure
+  arrived with a working database sitting next to it. The unit test that covered the fallback
+  asserted the buggy path and so passed on every run; it now states the two functions must agree
+  rather than restating a literal, and the container job runs the bind mount as an arbitrary uid.
 
   The mode is set on write and then applied again with `chmod`, because the mode argument only takes
   effect when a file is CREATED — a re-run over a world-readable leftover would otherwise keep it
