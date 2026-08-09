@@ -155,6 +155,54 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **`npm run bench:guard` — a CI gate on the findings that were measured and fixed.** Three real
+  defects were found by running the gateway and counting, and until now nothing would have noticed
+  any of them coming back. All three pass typecheck, lint and the entire unit suite in their broken
+  form, which is the whole problem: they are invisible to every check this project already had.
+
+  A new required job asserts **counts and correctness, never latency.** That is this repository's
+  own rule, already written into the e2e job — a shared runner's timings are noise, a flaky gate
+  gets ignored, and an ignored gate is worse than none. A count reads the same on a laptop and on a
+  loaded runner.
+
+  | check | healthy | limit | the bug produced |
+  |---|---|---|---|
+  | the response cache serves | 1 provider call per 5 identical requests | 1 | 5 — the feature silently inert |
+  | database queries per request | 0.15 | 0.80 | 1.10 |
+
+  **Both limits were verified by breaking the fix and watching the guard fail** — making `getCached`
+  always return null took the cache check to 5 provider calls, and disabling the key-row list cache
+  took queries to 1.10. A guard nobody has seen fail is a guard nobody knows works. The limits sit
+  above the healthy value with room for variation and below what the defect produces; both numbers
+  are printed next to every limit so the next person can see the gap rather than guess at it.
+
+  The cache check has two independent witnesses — the provider's own counter, which cannot be wrong
+  in our favour, and the `X-Nexus-Cache` header a caller sees. They are reported separately, because
+  a response stamped `hit` that the provider actually served is a different and worse bug than no
+  caching at all.
+
+  **PR #78's round-trip reduction is deliberately not guarded, and that is worth stating plainly**
+  because it is the most valuable of the three. Two implementations were written and discarded
+  rather than shipped green:
+
+  - `INFO commandstats` counts the calls a Lua script makes internally — the exact distinction this
+    project already got wrong once and corrected publicly. After the fix a single `EVAL` performs
+    about eight internal operations, so executed commands stay level or *rise* while round trips
+    fall fivefold. Reverting the fix would barely move the number.
+  - Counting true round trips measures the right thing, but not against this harness: one pool with
+    one key gives 7.1 before and 6.1 after, a gap too small to separate from variation. The
+    23.7-to-4.5 result needs ten keys deliberately exhausted, which is the rig `bench:routing`
+    builds.
+
+  So it is filed against that rig rather than faked here. A check that cannot detect the regression
+  it names is worse than an absent one — it reports coverage that does not exist. The Redis service
+  is still used by the job, because it makes the cache check exercise the production key-value store
+  rather than the in-process stand-in.
+
+  A skipped check prints as loudly as a failing one. `npm test` silently skipping the parity suites
+  without Docker has already produced one wrong "all green" in this project, and a gate that reports
+  success while asserting nothing is the same mistake with higher stakes.
+
 - **`npm run bench:cache` — the response cache measured, and the doubt about it settled.** The cache
   is the gateway's headline cost-saving feature and had never been measured once. Worse, it had been
   DOUBTED: reported from real use as writing and reading but never actually serving. A code audit
