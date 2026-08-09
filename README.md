@@ -998,6 +998,56 @@ entirely**: a real **$0** call. Off by default; turn it on under *Settings → R
 
 </details>
 
+<details>
+<summary><b>When Redis is unreachable, and how the process is supposed to die</b></summary>
+
+Nexus is **crash-only**: it never tries to nurse itself back to health in place. Failures
+split in two, and they get opposite treatment.
+
+**A dependency is down — never fatal.** Every routing decision (breaker state, rate limits,
+sticky pins, budgets) lives in the key-value store, so a gateway that cannot reach it cannot
+enforce a limit. It **fails closed**: proxy requests are refused with **`503` and a
+`Retry-After`**, no provider is contacted, and no credit is spent with the controls switched
+off. Commands are bounded by `NEXUS_KV_COMMAND_TIMEOUT_MS` (2s), so a caller is answered
+rather than left holding a connection. The gateway stays up throughout and resumes on its own
+within a second of Redis returning — measured, no restart and no operator action.
+
+**A bug reached the top of the process — always fatal.** An escaped rejection means the
+process state is no longer known, and code that continues on unknown state is how a
+cost-control gateway starts double-charging. Nexus logs one line carrying a stable `FATAL`
+token plus the stack, drains its listener and buffers under a 10s deadline
+(`NEXUS_SHUTDOWN_DEADLINE_MS`), and **exits 1**. Alert on `FATAL`.
+
+**The two probes answer different questions, so wire them differently.**
+
+| Probe | Depends on | Use it for |
+|---|---|---|
+| `GET /health` | nothing external | **liveness** — restart the process |
+| `GET /ready` | Redis + Postgres | **readiness** — take it out of rotation |
+
+Pointing a liveness probe at `/ready` turns a Redis blip into a restart of every replica at
+once. The bundled Docker `HEALTHCHECK` uses `/health` for exactly this reason.
+
+**Give it a supervisor.** Exit codes are load-bearing: a signal exits 0, a crash exits 1.
+Nothing in the default single-process deployment restarts the gateway on its own, so:
+
+```bash
+docker run --restart=unless-stopped ...
+```
+
+```ini
+# systemd
+Restart=on-failure
+RestartSec=2s
+```
+
+Kubernetes restarts on a non-zero exit by default; set `terminationGracePeriodSeconds`
+above 10 so the drain finishes before SIGKILL. Running `NEXUS_CLUSTER_WORKERS` > 1 adds a
+second layer — the primary replaces a dead worker immediately, then backs off to a 30s
+ceiling if they keep dying, so a dependency outage cannot become a fork loop.
+
+</details>
+
 ## Teams & budgets
 
 Group your scoped access keys into **teams**, and give each team a **USD budget cap**

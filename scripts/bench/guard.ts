@@ -51,6 +51,7 @@
 // limit so the next person can see the gap they are working with rather than guess at it.
 
 import Redis from 'ioredis';
+import { createServer, connect, type Socket } from 'node:net';
 import { completionBody, setUpstream, startHarness, type Harness } from './gateway';
 
 const REQUESTS = parseInt(process.env.GUARD_REQUESTS ?? '20', 10);
@@ -85,6 +86,116 @@ function verdict(c: Check): 'PASS' | 'FAIL' | 'SKIP' {
 }
 
 // ── The checks ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Does a key-value outage still end in a 503, with the gateway alive to serve it?
+ *
+ * This one guards a production bug rather than a benchmark number. The gateway used to EXIT when
+ * Redis stayed away long enough for ioredis to exhaust its retries: an unhandled rejection, and
+ * `/health` never answered again. The version before that returned 500 for the requests it did
+ * answer, and left the rest hanging until the client gave up.
+ *
+ * Three separate regressions are possible here and the check has to distinguish them, because they
+ * need different fixes: the process dying (lifecycle), a 500 instead of a 503 (the error handler),
+ * and a request that never returns at all (the command timeout). A hang counts as a failure — it
+ * is the worst of the three for a caller, whose connection pool saturates long before anyone has
+ * worked out why.
+ *
+ * The outage is simulated with a TCP forwarder rather than by stopping Redis. Deliberate: it needs
+ * no privileges and no container names, behaves identically on a laptop and in CI, and — unlike
+ * `docker stop` — severs the connection at a moment this code chooses rather than whenever the
+ * daemon gets round to it.
+ */
+async function checkKvOutageIsA503(): Promise<Check> {
+  const base = {
+    name: 'kv outage answers 503',
+    unit: 'requests during a KV outage that were not a prompt 503',
+    wasBefore: 'the process exited — MaxRetriesPerRequestError, /health dead, no recovery',
+  };
+  if (!REDIS_URL) {
+    return { ...base, measured: null, limit: 0, skipped: 'no GUARD_REDIS_URL — needs a real Redis to cut off' };
+  }
+
+  const FORWARD_PORT = 3405;
+  const target = new URL(REDIS_URL);
+  const live = new Set<Socket>();
+  let accepting = true;
+
+  const forwarder = createServer((client) => {
+    if (!accepting) { client.destroy(); return; }
+    const upstream = connect(Number(target.port || 6379), target.hostname);
+    live.add(client); live.add(upstream);
+    client.on('close', () => live.delete(client));
+    upstream.on('close', () => live.delete(upstream));
+    client.on('error', () => client.destroy());
+    upstream.on('error', () => { client.destroy(); upstream.destroy(); });
+    client.pipe(upstream).pipe(client);
+  });
+  await new Promise<void>((r) => forwarder.listen(FORWARD_PORT, '127.0.0.1', r));
+
+  const flush = new Redis(REDIS_URL);
+  await flush.flushall();
+  flush.disconnect();
+
+  const h = await startHarness(3212, 3406, { redisUrl: `redis://127.0.0.1:${FORWARD_PORT}` });
+  try {
+    await setUpstream(h.mockUrl, { latencyMs: 0 });
+
+    /** One completion, with a ceiling well past the command timeout so a hang is visible as one. */
+    const send = async (): Promise<number | 'hung'> => {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 15_000);
+      try {
+        const res = await fetch(`${h.gatewayUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${h.apiKey}`, 'content-type': 'application/json' },
+          body: JSON.stringify(completionBody(1)),
+          signal: ac.signal,
+        });
+        return res.status;
+      } catch {
+        return 'hung';
+      } finally { clearTimeout(timer); }
+    };
+
+    // The fixture has to be proven before its result means anything: a check that measures a
+    // gateway which was never working would pass by accident.
+    const baseline = await send();
+    if (baseline !== 200) {
+      return { ...base, measured: null, limit: 0, skipped: `baseline request returned ${baseline}, not 200 — the fixture is wrong` };
+    }
+
+    accepting = false;
+    for (const s of live) s.destroy();
+    live.clear();
+    await sleep(500);
+
+    const during = await Promise.all([send(), send(), send(), send(), send()]);
+    const notRefused = during.filter((r) => r !== 503);
+
+    // Alive is not the same as answering. A process can survive and still have stopped serving.
+    let alive = false;
+    try {
+      const res = await fetch(`${h.gatewayUrl}/health`, { signal: AbortSignal.timeout(3000) });
+      alive = res.ok;
+    } catch { alive = false; }
+
+    const hung = during.filter((r) => r === 'hung').length;
+    const codes = [...new Set(during.map(String))].join(', ');
+    const problem = !alive
+      ? 'the gateway stopped answering /health — the process did not survive the outage, which is the original bug'
+      : notRefused.length > 0
+        ? `saw ${codes} instead of 503${hung ? ` (${hung} never returned at all)` : ''}`
+        : undefined;
+
+    return { ...base, measured: notRefused.length, limit: 0, problem };
+  } finally {
+    h.dispose();
+    accepting = false;
+    for (const s of live) s.destroy();
+    await new Promise<void>((r) => forwarder.close(() => r()));
+  }
+}
 
 /**
  * Does the response cache still serve?
@@ -403,6 +514,10 @@ async function main(): Promise<void> {
   } finally {
     h.dispose();
   }
+
+  // Its own gateway, on its own Redis connection: this check severs that connection on purpose,
+  // and a harness shared with the checks above would not survive it. It disposes its own.
+  checks.push(await checkKvOutageIsA503());
 
   console.log('');
   console.log(`  ${'check'.padEnd(30)}${'measured'.padStart(10)}${'limit'.padStart(9)}   verdict`);
