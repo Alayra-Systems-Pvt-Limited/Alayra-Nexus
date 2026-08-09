@@ -141,6 +141,11 @@ async function initOnce() {
     // service, and a credential written there outlives the boot that printed it. The operator still
     // gets exactly one sight of the key, and one that survives a closed terminal. See lib/secretFile.
     const keyPath = writeSecretFile('api-key.txt', newKey);
+    // MUTATION 3 — DELIBERATE, DO NOT MERGE. Restores the pre-1.6.0 behaviour: the key on stdout,
+    // where Docker, systemd and every hosted log service collect it. The file is still written, so
+    // every existing assertion still passes and ONLY the new leak check can catch this. Green here
+    // would mean the security fix 1.6.0 shipped has nothing verifying it stays fixed.
+    console.log(`  Your key: ${newKey}`);
     console.log('\n🔑  Generated your Nexus API Key. It cannot be shown again, and it is in:');
     console.log(`    ${keyPath}`);
     console.log('    Read it with `cat`, save it somewhere safe, then delete that file.');
