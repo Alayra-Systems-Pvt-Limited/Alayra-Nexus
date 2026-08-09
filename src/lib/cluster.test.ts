@@ -16,7 +16,10 @@
 
 import { cpus } from 'node:os';
 import { describe, expect, it } from 'vitest';
-import { assertClusterSafe, ClusterUnsafeError, desiredWorkers, ownsBackgroundJobs } from './cluster';
+import {
+  assertClusterSafe, ClusterUnsafeError, desiredWorkers, ownsBackgroundJobs,
+  forkDelayMs, createCrashWindow, FORK_BACKOFF_MAX_MS, CRASH_WINDOW_MS,
+} from './cluster';
 
 const CORES = cpus().length;
 const REDIS = { usingMemoryKv: false, dbEngine: 'postgres' };
@@ -92,5 +95,74 @@ describe('ownsBackgroundJobs', () => {
     expect(ownsBackgroundJobs(1)).toBe(true);
     expect(ownsBackgroundJobs(2)).toBe(false);
     expect(ownsBackgroundJobs(4)).toBe(false);
+  });
+});
+
+describe('forkDelayMs (the fork loop this exists to stop)', () => {
+  it('replaces the first casualty immediately', () => {
+    // One worker hitting a bug on one request is what supervision is FOR. It must not be slowed
+    // down by protection aimed at a different failure.
+    expect(forkDelayMs(1)).toBe(0);
+  });
+
+  it('backs off once deaths start repeating', () => {
+    expect(forkDelayMs(2)).toBe(200);
+    expect(forkDelayMs(3)).toBe(400);
+    expect(forkDelayMs(4)).toBe(800);
+    expect(forkDelayMs(5)).toBe(1600);
+  });
+
+  it('stops climbing at the cap, and never gives up', () => {
+    // Never returning "don't fork" is deliberate: a cap that stopped replacing workers would turn
+    // a recoverable dependency outage into one that needs a human.
+    expect(forkDelayMs(20)).toBe(FORK_BACKOFF_MAX_MS);
+    expect(forkDelayMs(200)).toBe(FORK_BACKOFF_MAX_MS);
+    expect(Number.isFinite(forkDelayMs(2000))).toBe(true);
+  });
+
+  it('reaches a sane ceiling fast enough to matter', () => {
+    // The scenario is every worker dying at boot because Redis is unreachable. Left at zero delay
+    // that is a spin; the curve has to be steep enough to stop it within a second or so.
+    let elapsed = 0;
+    for (let crash = 1; crash <= 10; crash++) elapsed += forkDelayMs(crash);
+    expect(elapsed).toBeGreaterThan(1_000);
+    expect(forkDelayMs(10)).toBeGreaterThanOrEqual(10_000);
+  });
+});
+
+describe('createCrashWindow', () => {
+  it('counts the crash it is given', () => {
+    const w = createCrashWindow();
+    expect(w.record(1_000)).toBe(1);
+    expect(w.record(1_100)).toBe(2);
+    expect(w.record(1_200)).toBe(3);
+  });
+
+  it('forgets crashes older than the window', () => {
+    const w = createCrashWindow(60_000);
+    w.record(0);
+    w.record(1_000);
+    // An hour later, the earlier pair must not still be counting against this one.
+    expect(w.record(3_600_000)).toBe(1);
+  });
+
+  it('never penalises a gateway that loses one worker occasionally', () => {
+    const w = createCrashWindow(CRASH_WINDOW_MS);
+    let at = 0;
+    for (let i = 0; i < 20; i++) {
+      at += CRASH_WINDOW_MS * 2;              // one death every two windows
+      expect(forkDelayMs(w.record(at))).toBe(0);
+    }
+  });
+
+  it('does penalise a gateway whose workers are dying continuously', () => {
+    const w = createCrashWindow(CRASH_WINDOW_MS);
+    let at = 0;
+    let last = 0;
+    for (let i = 0; i < 12; i++) {
+      at += 50;                               // as fast as a failing boot loops
+      last = forkDelayMs(w.record(at));
+    }
+    expect(last).toBe(FORK_BACKOFF_MAX_MS);
   });
 });

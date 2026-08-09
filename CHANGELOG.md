@@ -62,6 +62,61 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   lookup is CALLED, and it now verifies `typeof impl === 'function'` rather than mere truthiness.
   Addresses CodeQL `js/unvalidated-dynamic-method-call` (alert #46).
 
+### Fixed
+
+- **The gateway now ends deliberately, with the exit code a supervisor needs.** An error reaching
+  the top of the process — a background promise nobody caught — got Node's default: terminate,
+  print a stack, lose whatever was buffered. That default is right about the terminating part. A
+  process whose state nobody has checked must not keep serving traffic, still holding the port and
+  still passing its liveness probe. What it cannot do is leave well.
+
+  So the crash is kept and made to land properly. `unhandledRejection` and `uncaughtException` now
+  log one line carrying a stable `FATAL` token — the string an operator's log alert matches on —
+  followed by the stack, which for a programmer error is the report rather than the noise. Then the
+  listener closes, in-flight requests finish, the buffered usage and audit entries are flushed, and
+  the database disconnects. Every step is contained, so a failed flush still leaves the disconnect
+  behind it to run.
+
+  Deliberately NOT a rescue. Logging the error and carrying on is the tempting version and it is
+  worse than the bug: it converts a crash into a process that is broken, quiet, and still in the
+  load balancer.
+
+  The whole wind-down is bounded by `NEXUS_SHUTDOWN_DEADLINE_MS` (10s). Every step talks to
+  something that can itself be down, and a drain with no deadline against a dead dependency does
+  not fail — it waits, until the orchestrator's grace period ends in SIGKILL and nothing is
+  flushed at all. Ten seconds sits comfortably inside Kubernetes' default 30s
+  `terminationGracePeriodSeconds`, so the deliberate exit always wins that race.
+
+- **A crash exits 1; only a signal exits 0.** The shutdown path always exited 0, whatever brought
+  it about. `systemd Restart=on-failure` and `docker --restart=on-failure` both read that code and
+  both treat 0 as "it meant to stop" — so a gateway that had just crashed was left down, by a
+  supervisor that was configured correctly and told the process had finished its work.
+
+- **A worker that dies at boot no longer spins the machine.** The cluster primary replaced a dead
+  worker immediately, which is right for the failure it was written for: one worker hitting a bug
+  on one request. It is wrong for the failure that actually happens, which is every worker dying
+  for the same reason at once — each replacement checks its dependencies at boot, so while Redis
+  is unreachable the primary forked, failed and forked again as fast as the machine allowed. That
+  burns a core per worker and floods the log at precisely the moment an operator is trying to read
+  it: damage added on top of an outage that was going to last as long as it lasted.
+
+  The first replacement in any minute is still immediate, so single-casualty recovery is unchanged.
+  Beyond that the delay doubles from 200ms to a 30s ceiling, and crashes older than a minute stop
+  counting — a gateway losing one worker an hour is never penalised. It never stops trying: a cap
+  that gave up would turn a recoverable dependency outage into one that needs a human.
+
+- **Signal handling no longer cuts its own flush short.** The cluster primary registered both its
+  own handler and the shared one. The shared handler began an async drain; the primary's ran next,
+  synchronously called `process.exit(0)`, and ended the process mid-flush. The primary now uses
+  only its own handler — it has no buffers of its own to drain — and gives its workers, which do,
+  a moment to finish before it leaves.
+
+- **A retention pass can no longer take the gateway down.** `runRetention` guards each of its three
+  deletes and not the settings read in front of them, and that read goes to the key-value store. On
+  a gateway whose Redis was unreachable it produced a rejected promise with nobody holding it, one
+  minute after boot — which, before the change above, ended the process. A housekeeping job is
+  best-effort by nature: the rows it did not delete today are still there tomorrow.
+
 ### Changed
 
 - **Picking a key is now one call to the KV instead of three per candidate, so an exhausted pool

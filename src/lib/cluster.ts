@@ -98,6 +98,65 @@ export function assertClusterSafe(workers: number, opts: { usingMemoryKv: boolea
   }
 }
 
+// ── Replacing a worker that died ──────────────────────────────────────────────────────────────
+//
+// Supervision is the whole reason to run a cluster: a worker dies, another takes its place, and the
+// gateway keeps serving. That is right for the failure it was written for — ONE worker hitting a bug
+// on one request.
+//
+// It is wrong for the failure that actually happens in production, which is every worker dying for
+// the same reason at the same time. A worker checks its dependencies at boot, so while Redis is
+// unreachable each replacement dies during startup and is replaced immediately. Forking with no
+// delay turns that into a spin: fork, fail, fork, fail, as fast as the machine allows, burning a
+// core per worker and filling the log at the exact moment an operator is trying to read it. The
+// outage lasts as long as it lasts; the fork loop is damage we add on top of it.
+//
+// So a replacement is instant the first time — the one-bad-request case keeps its fast recovery —
+// and backs off from there. The window matters as much as the curve: crashes are counted only over
+// the last minute, so a gateway that drops one worker an hour is never penalised for it, while one
+// failing continuously slows to a probe every thirty seconds.
+//
+// It never gives up. A cap that stopped forking would make a recoverable dependency outage
+// permanent, needing a human to restart something that would otherwise have healed itself.
+
+/** First replacement is immediate; each further crash inside the window doubles from here. */
+export const FORK_BACKOFF_BASE_MS = 200;
+/** Ceiling. Long enough to stop the spin, short enough that recovery is not left waiting. */
+export const FORK_BACKOFF_MAX_MS = 30_000;
+/** Crashes older than this stop counting, so isolated deaths never accumulate into a penalty. */
+export const CRASH_WINDOW_MS = 60_000;
+
+/**
+ * How long to wait before replacing a worker, given how many have died in the current window.
+ *
+ * `crashesInWindow` counts the crash being handled, so the first is 1 and returns no delay.
+ */
+export function forkDelayMs(crashesInWindow: number): number {
+  if (crashesInWindow <= 1) return 0;
+  const doublings = crashesInWindow - 2;
+  // 2 ** 31 and beyond overflows into Infinity territory long before it matters, but Math.min
+  // handles that too — the cap is what the caller actually sees.
+  return Math.min(FORK_BACKOFF_BASE_MS * 2 ** doublings, FORK_BACKOFF_MAX_MS);
+}
+
+/**
+ * Keeps the crash timestamps that `forkDelayMs` needs, discarding those that have aged out.
+ *
+ * A tiny amount of state, but it belongs next to the curve it feeds rather than loose in the
+ * server's bootstrap — and out here it can be tested without forking anything.
+ */
+export function createCrashWindow(windowMs: number = CRASH_WINDOW_MS) {
+  let recent: number[] = [];
+  return {
+    /** Record a crash at `now` and return how many are inside the window, including this one. */
+    record(now: number): number {
+      recent = recent.filter((at) => now - at < windowMs);
+      recent.push(now);
+      return recent.length;
+    },
+  };
+}
+
 /**
  * Whether this process should run the once-per-deployment background jobs.
  *
