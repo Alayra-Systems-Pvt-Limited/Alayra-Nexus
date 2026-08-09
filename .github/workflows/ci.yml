@@ -199,6 +199,45 @@ jobs:
       - run: npm run build
       - run: npm run smoke:standalone
 
+  # ── The measured findings, guarded (2026-08-09) ───────────────────────────────────────────────
+  #
+  # Three real defects were found by measurement and fixed, and until this job existed nothing would
+  # have noticed any of them coming back: a response cache that serves nothing (#81), a database
+  # query per pool the router walks (#77), and three Redis round trips per candidate key (#78). All
+  # three pass typecheck, lint and the entire unit suite in their broken form — they were found by
+  # running the gateway and counting, and only counting will find them again.
+  #
+  # Counts and correctness only, never latency, for the same reason spelled out on the e2e job
+  # below: a shared runner's timings are noise, a flaky gate gets ignored, and an ignored gate is
+  # worse than none. A count is the same number here as on a laptop.
+  bench-guard:
+    name: Benchmark guard (counts, not latency)
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run build
+      # SQLite for the database and a real Redis for the KV: the Redis check needs a real one, and
+      # the query check is about our own query COUNT, which does not depend on the engine.
+      - name: Assert the measured findings have not regressed
+        run: npm run bench:guard
+        env:
+          GUARD_REDIS_URL: redis://127.0.0.1:6379
+
   # End-to-end proof (P7.15): the compiled gateway, a real PostgreSQL, a real Redis, and a
   # real browser. Everything above tests our code with stand-ins; this job is the one that
   # would have caught the bugs humans kept finding by clicking — /v1/v1 on the Connect page,
