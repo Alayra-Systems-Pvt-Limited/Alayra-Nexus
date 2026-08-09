@@ -429,9 +429,13 @@ bootstrap().catch((err) => {
 // lib/lifecycle.ts exits 1 for the opposite reason. The steps themselves are registered in
 // `serve()`, where the server instance they close actually exists.
 function installSignalHandlers(): void {
-  // MUTATION 1 — DELIBERATE, DO NOT MERGE. Swallows SIGTERM, which is the regression the CI guard
-  // claims to catch: Docker waits out its grace period and SIGKILLs, so the exit code is 137 and
-  // the drain never runs. Expect "SIGTERM stops it cleanly" to FAIL on both the code and the timing.
-  process.on('SIGTERM', () => { /* swallowed on purpose */ });
+  // MUTATION 2 — DELIBERATE, DO NOT MERGE. Mutation 1 proved the exit-code and timing assertions
+  // by making the stop fail outright, which means it never exercised the THIRD one. This reports a
+  // clean stop as a crash while still exiting 0 in about a second, so the first two assertions pass
+  // and only `grep -q FATAL` can catch it. If the step goes green, that grep is decoration.
+  process.on('SIGTERM', () => {
+    console.error('✗ FATAL (uncaughtException) — mutation 2, not a real crash');
+    void shutdown(0);
+  });
   process.on('SIGINT',  () => { void shutdown(0); });
 }
