@@ -16,7 +16,7 @@
 
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { DEFAULT_DATA_DIR } from './mode';
 
 // Hand a freshly generated secret to the operator without putting it in a log.
 //
@@ -42,18 +42,31 @@ import { homedir } from 'node:os';
 const OWNER_ONLY = 0o600;
 
 /**
- * Where a secret file goes: the data directory when one is configured, else the user's
- * `~/.alayra-nexus`, else the working directory as a last resort.
+ * Where a secret file goes: the configured data directory, else the same default the DATABASE uses.
  *
- * Deliberately the same place the CLI keeps its data, so an operator has one directory to secure
- * rather than a secret filed somewhere they were not told about.
+ * The point is that an operator has one directory to secure rather than a secret filed somewhere
+ * they were not told about — so this has to agree with `lib/mode.ts`, and it did not.
+ *
+ * ── What disagreeing cost ─────────────────────────────────────────────────────────────────────
+ *
+ * This used to fall back to `~/.alayra-nexus` while the database fell back to `.nexus` relative to
+ * the working directory. Two defaults for one idea, and in a container they resolve to different
+ * places: the database landed in `/app/.nexus` and the key was written to `/.alayra-nexus`.
+ *
+ * That is not merely untidy. Running the image the way the README documents for a bind mount —
+ * `--user "$(id -u):$(id -g)"` — gives the process a uid with no passwd entry, so `homedir()` is
+ * `/`, and an unprivileged user cannot create a directory there. First run died with
+ * `EACCES: permission denied, mkdir '/.alayra-nexus'` AFTER building the database, so the failure
+ * arrived with a working database sitting next to it. The release smoke test caught it; nothing
+ * else did, because every other place that runs the image lets it keep its own user.
+ *
+ * The homedir branch was written for the CLI, which is the one caller that never needed it:
+ * `cli.ts` pins `NEXUS_DATA_DIR` before the server starts, so the fallback only ever ran where it
+ * was wrong.
  */
 export function secretDir(env: NodeJS.ProcessEnv = process.env, cwd: string = process.cwd()): string {
   const fromEnv = env.NEXUS_DATA_DIR?.trim();
-  if (fromEnv) return resolve(cwd, fromEnv);
-
-  const home = homedir();
-  return home ? join(home, '.alayra-nexus') : cwd;
+  return resolve(cwd, fromEnv || DEFAULT_DATA_DIR);
 }
 
 /**

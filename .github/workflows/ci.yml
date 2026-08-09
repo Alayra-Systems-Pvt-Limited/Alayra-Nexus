@@ -377,6 +377,44 @@ jobs:
         run: |
           docker logs nexus 2>&1 | grep -q "migrations have been successfully applied" || {
             echo "::error::migrate deploy did not report success"; docker logs nexus; exit 1; }
+      # The bind mount, run as an arbitrary uid — the recipe the README documents.
+      #
+      # This exists because its absence cost a release. The image built, pushed and was tagged, and
+      # only the release workflow's own smoke test caught that first boot died with
+      # `EACCES: permission denied, mkdir '/.alayra-nexus'`. `--user` gives the process a uid with
+      # no passwd entry, so `homedir()` is `/` — and the secret file resolved its directory from the
+      # home directory while the database resolved its own from the working directory. Two defaults
+      # for one idea, and they only disagree when nobody owns the uid.
+      #
+      # Every other place that runs this image lets it keep its own user, which is why nothing
+      # before the release noticed. Finding it at tag time is finding it too late: the version has
+      # been decided and the tag is already pushed.
+      - name: A bind mount, as an arbitrary uid, boots and writes both files
+        run: |
+          set -euo pipefail
+          BIND="$GITHUB_WORKSPACE/ci-bind"
+          mkdir -p "$BIND"
+          docker run -d --name nexus-bind \
+            --user "$(id -u):$(id -g)" \
+            -p 3100:3100 \
+            -v "$BIND:/app/.nexus" \
+            -e MASTER_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
+            -e ADMIN_PASSWORD=ci-bind-password \
+            -e PORT=3100 \
+            nexus:ci
+          for i in $(seq 1 60); do
+            curl -fsS -o /dev/null http://127.0.0.1:3100/health && break
+            if [ "$(docker inspect -f '{{.State.Running}}' nexus-bind)" != "true" ]; then
+              echo "::error::the container exited before answering"; docker logs nexus-bind; exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS -o /dev/null http://127.0.0.1:3100/health || { docker logs nexus-bind; exit 1; }
+          # Both artefacts, in the ONE directory. The key landing anywhere else is the bug.
+          test -f "$BIND/nexus.db"    || { echo "::error::no database in the bind mount"; docker logs nexus-bind; exit 1; }
+          test -f "$BIND/api-key.txt" || { echo "::error::the API key was not written beside the database"; docker logs nexus-bind; exit 1; }
+          docker rm -f nexus-bind >/dev/null
+
       # What SIGTERM does is on the path of every REDEPLOY, not just of a rare failure — which is
       # why this is worth a CI step rather than a note. A gateway that ignores the signal is killed
       # with in-flight requests still open and its buffered usage and audit entries unwritten, and

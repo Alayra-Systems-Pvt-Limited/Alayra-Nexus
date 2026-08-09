@@ -16,9 +16,10 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { secretDir, writeSecretFile } from './secretFile';
+import { DEFAULT_DATA_DIR, resolveDatabaseUrl } from './mode';
 
 const made: string[] = [];
 
@@ -43,10 +44,33 @@ describe('secretDir', () => {
     expect(secretDir({ NEXUS_DATA_DIR: 'data' }, '/srv/nexus')).toBe(resolve('/srv/nexus', 'data'));
   });
 
-  it('falls back to the CLI data directory when nothing is configured', () => {
-    // Same place the CLI keeps its data on purpose: an operator should have one directory to secure,
-    // not a credential filed somewhere nobody told them about.
-    expect(secretDir({}, process.cwd())).toMatch(/\.alayra-nexus$/);
+  // The assertion that used to live here required `~/.alayra-nexus` and so locked in the bug below,
+  // passing on every run while the container it describes could not start.
+  it('falls back to the SAME directory the database uses', () => {
+    // One idea, one default. The whole point of writing the key to a file is that an operator has
+    // one directory to secure; two defaults for that directory defeats it before anything else.
+    const cwd = '/srv/nexus';
+    expect(secretDir({}, cwd)).toBe(resolve(cwd, DEFAULT_DATA_DIR));
+  });
+
+  it('agrees with resolveDatabaseUrl about where the data directory is', () => {
+    // Stated as agreement between the two functions rather than as a literal, so this keeps holding
+    // if the default is ever changed in one place — which is exactly how they drifted apart.
+    for (const env of [{}, { NEXUS_DATA_DIR: 'data' }, { NEXUS_DATA_DIR: '/var/lib/nexus' }]) {
+      const cwd = '/srv/nexus';
+      const dbFile = resolveDatabaseUrl(env, cwd).replace(/^file:/, '');
+      expect(dirname(dbFile)).toBe(secretDir(env, cwd));
+    }
+  });
+
+  it('never escapes the working directory when the process has no real home', () => {
+    // The container case, and the one that failed a release. `--user "$(id -u):$(id -g)"` — the
+    // recipe the README documents for a bind mount — gives the process a uid with no passwd entry,
+    // so homedir() is `/`. The old fallback then aimed at `/.alayra-nexus`, which an unprivileged
+    // user cannot create: EACCES, at first boot, after the database had already been built.
+    const dir = secretDir({}, '/app');
+    expect(dir.startsWith(resolve('/app'))).toBe(true);
+    expect(dir).not.toBe(resolve('/'));
   });
 });
 
