@@ -377,6 +377,45 @@ jobs:
         run: |
           docker logs nexus 2>&1 | grep -q "migrations have been successfully applied" || {
             echo "::error::migrate deploy did not report success"; docker logs nexus; exit 1; }
+      # What SIGTERM does is on the path of every REDEPLOY, not just of a rare failure — which is
+      # why this is worth a CI step rather than a note. A gateway that ignores the signal is killed
+      # with in-flight requests still open and its buffered usage and audit entries unwritten, and
+      # nothing about that is visible afterwards: no error, no alert, just rows that are missing.
+      #
+      # `docker stop` is what makes this precise instead of a smoke check. It sends SIGTERM, waits,
+      # and SIGKILLs — so the two failures tell themselves apart without any extra instrumentation:
+      #
+      #   handled          exits 0, in about a second
+      #   not handled      Docker gives up and kills it, and the exit code is 137
+      #
+      # The 20s grace is deliberately longer than the gateway's own 10s wind-down deadline, so a
+      # drain that has to fall back on its watchdog still exits under its own power and reports 0.
+      # Anything at or past 15s means it did not, and is a failure even if the code looks right.
+      #
+      # This asserts the exit code and the timing, which is the whole observable contract of a
+      # clean stop. That the buffers were actually flushed is covered by unit tests over the
+      # shutdown steps; there is no log line to grep for here, and inventing one to be grepped
+      # would be testing the assertion rather than the behaviour.
+      - name: SIGTERM stops it cleanly, and it says so with exit 0
+        run: |
+          start=$(date +%s)
+          docker stop -t 20 nexus
+          took=$(( $(date +%s) - start ))
+          code=$(docker inspect -f '{{.State.ExitCode}}' nexus)
+          echo "exited ${code} after ${took}s"
+          if [ "$code" != "0" ]; then
+            echo "::error::exited ${code} on SIGTERM. 137 means Docker had to SIGKILL it, so the signal was never handled and the drain never ran."
+            docker logs nexus; exit 1
+          fi
+          if [ "$took" -ge 15 ]; then
+            echo "::error::took ${took}s to stop. The wind-down deadline is 10s, so it did not finish under its own power."
+            docker logs nexus; exit 1
+          fi
+          # A deliberate stop is not a crash. If the FATAL path fired on a signal, the exit code
+          # above would still be 0 and this would otherwise pass while reporting a bug every time.
+          if docker logs nexus 2>&1 | grep -q "FATAL"; then
+            echo "::error::a clean SIGTERM was reported as a crash"; docker logs nexus; exit 1
+          fi
       - name: Show the logs when something failed
         if: failure()
         run: docker logs nexus || true
