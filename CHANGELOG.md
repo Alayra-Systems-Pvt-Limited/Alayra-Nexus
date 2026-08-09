@@ -155,6 +155,59 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **`npm run bench:failures` — what the gateway does when things break, and a crash it found.**
+  Every other benchmark here measures a gateway that is working. The resilience machinery — strikes,
+  cooldowns, half-open probes, credential bans — only runs when something is broken, which makes it
+  the least exercised code in the product and the code whose failure costs most. It had unit tests.
+  Nothing had ever watched it work end to end against a provider that was actually misbehaving.
+
+  Four scenarios, all counted at the provider's own request counter rather than in our logs:
+
+  | scenario | result |
+  |---|---|
+  | provider returns 500 | blast radius **3 requests** — once the breaker trips the provider is not contacted again, so an outage costs the strike threshold and not one call per request for its duration |
+  | credential rejected (401) | **4 wasted calls** for 2 keys — 2 per key, as designed — then the key is banned rather than cooled, because a bad credential does not recover on its own |
+  | cooldown expires under load | **2 probes for 2 keys from 20 simultaneous callers.** The half-open slot is claimed atomically per key, so a recovering provider sees one trial request per credential however many callers are queued. A successful probe closes the breaker and the next 10 requests all succeed — recovery needs no operator action |
+  | Redis disappears | **the process exits.** See below |
+
+  **The Redis finding is a crash, not a degradation.** When Redis is unavailable long enough for
+  ioredis to exhaust its default 20 retries per request, the resulting `MaxRetriesPerRequestError`
+  arrives as an unhandled promise rejection and terminates the process. The gateway does not fail
+  closed — failing closed is a decision, and this stops answering `/health` altogether. It does not
+  return when Redis does; it needs a restart. Under a container runtime with a restart policy that
+  is a crash loop for as long as the outage lasts, and for anyone running it directly from `npx`
+  it is simply gone.
+
+  The script distinguishes the two deliberately, because "refused every request" and "stopped
+  existing" look identical from the client side, and reporting the second as the first would credit
+  the gateway with a safety behaviour it did not perform.
+
+  Two smaller observations from the same window, recorded rather than fixed: 3 of 5 requests during
+  the outage returned nothing at all — hanging until the client timed them out rather than being
+  refused promptly, which saturates a caller's connection pool long before anyone has identified the
+  cause — and the prompt refusals were `500` rather than `503`, which is the code that actually
+  means a dependency is unavailable and the only one that carries `Retry-After`.
+
+  Fixing this needs a decision rather than a patch, which is why it is reported here rather than
+  changed: `maxRetriesPerRequest: null` stops the crash but converts it into an unbounded hang,
+  which is the failure mode the paragraph above argues against.
+
+  Three fixture bugs were found and fixed while writing this, each of which had produced a confident
+  false claim about the product:
+
+  - Bodyless `POST`s were sent with `content-type: application/json`, which Fastify correctly
+    refuses with a 400. Every `unban` in the setup failed silently, keys stayed cooling, and two
+    later scenarios measured a gateway with no usable keys — blaming the result on what they were
+    testing. The heal step now checks every response and asserts the keys came back.
+  - The half-open scenario sent exactly `STRIKE_THRESHOLD` failures, which is right for one key and
+    wrong for any other number. With two keys the failures split, neither tripped, and the burst
+    flooded a provider whose breaker had never opened — reported as a **stampede that had not
+    happened**. It now drives failures until the provider stops receiving them, which is what "the
+    breaker is open" means from outside.
+  - Recovery was polled with a 15-second timeout inside a 60-second budget, so "still failing after
+    60s" really meant "tried four times". It now probes with a short timeout and reports how long
+    recovery actually took.
+
 - **`npm run bench:guard` — a CI gate on the findings that were measured and fixed.** Three real
   defects were found by running the gateway and counting, and until now nothing would have noticed
   any of them coming back. All three pass typecheck, lint and the entire unit suite in their broken
