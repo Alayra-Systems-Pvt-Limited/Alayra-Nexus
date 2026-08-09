@@ -165,6 +165,48 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Internal
 
+- **`npm run bench:resources` — where the gateway stops, rather than what it costs.** Every other
+  benchmark here measures price per request. This one measures ceilings, which is the question
+  behind "it worked in testing and fell over in production": a gateway rarely fails by getting
+  slower, it fails by running out of something, and the symptom is timeouts that look exactly like
+  a slow provider.
+
+  | | measured |
+  |---|---|
+  | memory | RSS plateaus at **~505 MB** and stays there — `+0.04 MB` per 1000 requests once the ramp is over |
+  | database pool | never the constraint. Peak **5** connections at 64 concurrent callers, no `P2024`, no latency cliff — the routing path commits 0.13 transactions per request, so the pool is barely asked for anything |
+  | the ceiling | 128 concurrent callers → **100% 200s, zero dropped connections**. The failure shape matters more than the number: a refusal a client can act on, never a dropped socket that fills its pool |
+
+  The memory figure carries a sizing warning worth having: **size a container from the ~505 MB of
+  RSS, not from the ~230 MB of live heap.** V8 sizes its reservation from the memory it can see
+  rather than from what the process needs, so RSS follows the reservation. A container sized from
+  the live-heap number gets killed by the allocator rather than by a bug. `--max-old-space-size`
+  pins it lower.
+
+  Two things this benchmark got wrong about itself before it was right, both left in the file
+  because they are the obvious way to build it:
+
+  - **It reported a leak on healthy code — twice.** The first version drove three waves of load and
+    watched RSS rise; three waves is entirely inside the ramp, so it could only ever see a rise and
+    reported one whatever the truth was. The second version compared per-wave deltas and asked
+    whether they were shrinking, which flipped to "leak" on a single busy wave. What works is
+    throwing the ramp away and measuring a rate — bytes per thousand requests — across the second
+    half of the run only.
+  - **The pool check could pass without touching the database.** "The pool was never the limit" is
+    only a finding if the pool was asked for something, and this request path resolves most requests
+    without a query. It now counts committed transactions from `pg_stat_database` and reports SKIP
+    below a floor, rather than a clean result about a component it never used.
+
+  The leak threshold was set from both sides, which is why it is trustworthy: four healthy runs
+  measured 0.061–0.442 MB/1k, and a deliberate 10 KB-per-request leak measured 2.82. The limit of
+  1.2 sits 2.7x above the worst healthy reading and 2.4x below the leaking one. The detector was
+  verified by injecting that leak and watching it fire — including the `external` column, which
+  pinpointed off-heap buffers while the JavaScript heap stayed flat.
+
+  Not a CI gate: it needs a real PostgreSQL and runs for about four minutes, which is the wrong
+  shape for a merge check. It resets both stores at the start so a second run measures the same
+  thing as the first.
+
 - **`bench:guard` gained a fourth check: a KV outage must still answer 503, from a process that is
   still alive.** It guards a production bug rather than a benchmark number, and distinguishes the
   three regressions that are possible — the process dying, a 500 instead of a 503, and a request

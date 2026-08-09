@@ -82,6 +82,14 @@ export interface Harness {
   apiKey: string;
   /** An owner session token, for /admin reads. */
   adminToken: string;
+  /**
+   * The credential /metrics wants, which is NOT the session token above.
+   *
+   * `verifyMetricsToken` compares against METRICS_TOKEN or ADMIN_PASSWORD — a scraper is not a
+   * signed-in user and never holds a session. Exposed here because the difference is invisible
+   * until a scrape comes back 401, and the obvious guess is the token that works everywhere else.
+   */
+  metricsToken: string;
   /** Set only when `profile` was requested — see scripts/bench/profileServer.cjs. */
   profileControlUrl?: string;
   /** Everything the gateway has written to stdout/stderr so far. See scripts/bench/queryCount.ts. */
@@ -235,7 +243,7 @@ export async function startHarness(
 
     const adminToken = await provisionGateway(gatewayUrl, mockUrl);
 
-    return { gatewayUrl, mockUrl, apiKey, adminToken, profileControlUrl, log: () => out, dispose };
+    return { gatewayUrl, mockUrl, apiKey, adminToken, metricsToken: MASTER, profileControlUrl, log: () => out, dispose };
   } catch (e) {
     dispose();
     throw e;
