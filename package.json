@@ -1,6 +1,6 @@
 {
   "name": "@alayrasystems/nexus",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "description": "AI key pool proxy — route Claude, Gemini, GPT through one OpenAI-compatible endpoint",
   "license": "Apache-2.0",
   "main": "dist/server.js",
