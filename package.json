@@ -76,7 +76,8 @@
     "bench:provision": "tsx scripts/bench/provision.ts",
     "bench:routing": "tsx scripts/bench/routing.ts",
     "bench:cache": "tsx scripts/bench/cache.ts",
-    "bench:guard": "tsx scripts/bench/guard.ts"
+    "bench:guard": "tsx scripts/bench/guard.ts",
+    "bench:failures": "tsx scripts/bench/failure.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",
