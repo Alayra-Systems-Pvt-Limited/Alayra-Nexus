@@ -429,6 +429,9 @@ bootstrap().catch((err) => {
 // lib/lifecycle.ts exits 1 for the opposite reason. The steps themselves are registered in
 // `serve()`, where the server instance they close actually exists.
 function installSignalHandlers(): void {
-  process.on('SIGTERM', () => { void shutdown(0); });
+  // MUTATION 1 — DELIBERATE, DO NOT MERGE. Swallows SIGTERM, which is the regression the CI guard
+  // claims to catch: Docker waits out its grace period and SIGKILLs, so the exit code is 137 and
+  // the drain never runs. Expect "SIGTERM stops it cleanly" to FAIL on both the code and the timing.
+  process.on('SIGTERM', () => { /* swallowed on purpose */ });
   process.on('SIGINT',  () => { void shutdown(0); });
 }
