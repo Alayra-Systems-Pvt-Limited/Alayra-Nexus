@@ -402,7 +402,7 @@ async function bootstrap() {
   if (cluster.isWorker) {
     await assertDependencies();
     await serve();
-    installSignalHandlers();
+    // MUTATION: signal handlers deliberately not installed
     if (ownsBackgroundJobs(cluster.worker?.id)) startBackgroundJobs();
     return;
   }
@@ -410,7 +410,7 @@ async function bootstrap() {
   // The ordinary single-process gateway, unchanged.
   await initOnce();
   await serve();
-  installSignalHandlers();
+  // MUTATION: signal handlers deliberately not installed
   startBackgroundJobs();
 }
 
