@@ -214,7 +214,26 @@ async function checkQueriesPerRequest(h: Harness): Promise<Check> {
  *   before PR #78   7.1 -> 23.7 round trips per request, a ratio of 3.34
  *   after           6.1 ->  4.5, a ratio of 0.74 — deeper is not more expensive
  *
- * A limit of 2.0 sits far above the healthy ratio and far below the broken one.
+ * ── Where the limit came from, because the first one was useless ──────────────────────────────
+ *
+ * It was set to 2.0 on the reasoning above, and the mutation test then PASSED: reverting the fix to
+ * one call per candidate moved the ratio to 1.67, comfortably under the limit. A guard that a
+ * regression walks straight through is the thing this file exists to not be, and it was only caught
+ * because breaking the fix is a required step rather than an optional one.
+ *
+ * Measured on this rig instead of reasoned about:
+ *
+ *   healthy                   0.55, 0.58, 0.55 over three runs — a spread of 0.03
+ *   one call per candidate    1.67   (the WEAKEST regression available: the real pre-#78 code made
+ *                                     three calls per candidate, which is the 3.34 above)
+ *
+ * The limit is 1.2. That is roughly twice the healthy value, so ordinary variation cannot reach it,
+ * and it still fails the weakest regression with margin to spare. Anything worse fails harder.
+ *
+ * The healthy ratio is below 1.0 for a structural reason worth knowing: a request that walks a fully
+ * exhausted pool is REFUSED, so it never makes the upstream call or the bookkeeping that follows
+ * one. Deep is cheaper than shallow while the walk costs a single call, and stops being so the
+ * moment it does not.
  *
  * Runs LAST, because it deliberately exhausts every key in the pool and leaves the gateway with no
  * capacity — any check after it would be measuring a gateway that can only answer 503.
@@ -348,7 +367,7 @@ async function checkRoutingWalkIsFlat(h: Harness): Promise<Check> {
     return {
       ...base,
       measured: (deep.trips / WALK_RPM) / (shallow.trips / WALK_RPM),
-      limit:    parseFloat(process.env.GUARD_MAX_WALK_RATIO ?? '2.0'),
+      limit:    parseFloat(process.env.GUARD_MAX_WALK_RATIO ?? '1.2'),
     };
   } finally {
     client.disconnect();

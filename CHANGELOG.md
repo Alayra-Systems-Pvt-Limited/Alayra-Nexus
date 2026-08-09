@@ -169,6 +169,7 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   |---|---|---|---|
   | the response cache serves | 1 provider call per 5 identical requests | 1 | 5 — the feature silently inert |
   | database queries per request | 0.15 | 0.80 | 1.10 |
+  | routing walk stays flat | 0.55–0.58 | 1.20 | 1.67 (weakest form), 3.34 (full) |
 
   **Both limits were verified by breaking the fix and watching the guard fail** — making `getCached`
   always return null took the cache check to 5 provider calls, and disabling the key-row list cache
@@ -181,23 +182,35 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   a response stamped `hit` that the provider actually served is a different and worse bug than no
   caching at all.
 
-  **PR #78's round-trip reduction is deliberately not guarded, and that is worth stating plainly**
-  because it is the most valuable of the three. Two implementations were written and discarded
-  rather than shipped green:
+  **PR #78's round-trip reduction took three attempts to guard**, and it is worth recording the two
+  that were thrown away, because both look correct:
 
   - `INFO commandstats` counts the calls a Lua script makes internally — the exact distinction this
     project already got wrong once and corrected publicly. After the fix a single `EVAL` performs
     about eight internal operations, so executed commands stay level or *rise* while round trips
     fall fivefold. Reverting the fix would barely move the number.
-  - Counting true round trips measures the right thing, but not against this harness: one pool with
-    one key gives 7.1 before and 6.1 after, a gap too small to separate from variation. The
-    23.7-to-4.5 result needs ten keys deliberately exhausted, which is the rig `bench:routing`
-    builds.
+  - An **absolute** round-trip limit measures the right thing but needs a number that travels. Round
+    trips per request depend on how many pools and keys exist, so any constant is a fact about the
+    fixture rather than about the gateway.
 
-  So it is filed against that rig rather than faked here. A check that cannot detect the regression
-  it names is worse than an absent one — it reports coverage that does not exist. The Redis service
-  is still used by the job, because it makes the cache check exercise the production key-value store
-  rather than the in-process stand-in.
+  What is asserted is a **ratio**: the cost of a request that walks past every exhausted key over
+  one served immediately. That is the *shape* of the defect rather than its size — the old code paid
+  round trips per candidate, so walking ten keys cost ten times walking one; the new code pays them
+  inside a single script, so depth costs Redis CPU and no further hops. A ratio also cancels the
+  machine, the fixture size and the Redis version.
+
+  The healthy ratio is below 1.0 for a structural reason: a request that walks a fully exhausted
+  pool is *refused*, so it never makes the upstream call or the bookkeeping that follows one. Deep
+  is cheaper than shallow while the walk costs a single call, and stops being so the moment it does
+  not.
+
+  **The first limit for this check was useless and the mutation test is the only reason anyone
+  knows.** Set to 2.0 from the numbers in PR #78's own changelog entry, it then *passed* while the
+  fix was reverted — one call per candidate produces a ratio of 1.67, comfortably underneath it. The
+  limit is now 1.2, taken from measurement rather than reasoning: healthy runs at 0.55–0.58 with a
+  spread of 0.03, so 1.2 is roughly double the healthy value and still fails the weakest available
+  regression with margin. The real pre-#78 code made *three* calls per candidate, so anything closer
+  to the original fails harder.
 
   A skipped check prints as loudly as a failing one. `npm test` silently skipping the parity suites
   without Docker has already produced one wrong "all green" in this project, and a gate that reports
