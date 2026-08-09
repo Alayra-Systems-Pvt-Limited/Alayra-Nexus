@@ -53,6 +53,7 @@ import { normalizePublicUrl } from './lib/baseUrl';
 import cluster from 'node:cluster';
 import { assertClusterSafe, desiredWorkers, ownsBackgroundJobs, ClusterUnsafeError, forkDelayMs, createCrashWindow } from './lib/cluster';
 import { installCrashHandlers, onShutdown, shutdown } from './lib/lifecycle';
+import { kvAwareErrorHandler } from './lib/kvUnavailable';
 
 // Before anything else can throw. Registered at import time rather than inside `bootstrap`, because
 // the window this closes includes the boot itself — `initOnce` builds a schema and talks to Redis,
@@ -214,6 +215,19 @@ async function serve() {
     prefix:   '/',
     wildcard: false,
   });
+
+  // An unreachable key-value store is somebody else's outage, and the answer has to say so.
+  //
+  // Without this, a Redis failure reached Fastify's default handler and became a 500 — "the gateway
+  // is broken", with no Retry-After and no reason for a client to try again. It is the wrong answer
+  // twice over: the gateway is fine, and the condition is temporary. A 503 with a Retry-After is
+  // the one a well-written client already knows how to act on, and it is what every other
+  // temporarily-unavailable path here already returns (maintenance, tier exhaustion, migrations).
+  //
+  // Narrow on purpose. Only errors that specifically mean "the store did not answer" are
+  // translated; everything else keeps its 500 and its logging, because dressing a bug up as a
+  // dependency outage tells a caller to come back later for a defect that will still be there.
+  app.setErrorHandler(kvAwareErrorHandler);
 
   // SPA deep-link fallback: a browser navigation to a client-side route (/teams, /nexus, /admin …)
   // matches no file and no API route, so it lands here. We hand back index.html and let the client

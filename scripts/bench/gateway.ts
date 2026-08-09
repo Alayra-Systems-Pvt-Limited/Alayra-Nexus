@@ -32,11 +32,46 @@
 // the deliberately absurd ones the e2e suite uses to trip a budget on the first request.
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const ROOT = resolve(__dirname, '..', '..');
+
+/** Newest mtime under `dir`, or 0 if it does not exist. */
+function newestMtime(dir: string): number {
+  let newest = 0;
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return 0; }
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) newest = Math.max(newest, newestMtime(full));
+    else newest = Math.max(newest, statSync(full).mtimeMs);
+  }
+  return newest;
+}
+
+/**
+ * Stop the run if `dist/` predates `src/`.
+ *
+ * Fatal rather than a warning. The whole value of these benchmarks is that a number can be trusted
+ * without re-deriving where it came from, and a warning in a scrollback is not a defence against
+ * publishing one that was measured from code nobody is running any more.
+ */
+function assertBuildIsFresh(): void {
+  const built = newestMtime(join(ROOT, 'dist'));
+  const source = newestMtime(join(ROOT, 'src'));
+  if (built === 0) {
+    throw new Error('No dist/ to measure. Run `npm run build` first — the benchmarks run the compiled server.');
+  }
+  if (source > built) {
+    const behind = Math.round((source - built) / 1000);
+    throw new Error(
+      `dist/ is ${behind}s older than src/, so this run would measure code that is no longer current.\n` +
+      '  Run `npm run build` and try again.',
+    );
+  }
+}
 
 export interface Harness {
   /** e.g. http://127.0.0.1:3401 */
@@ -162,6 +197,14 @@ export async function startHarness(
     if (opts.databaseUrl) env.DATABASE_URL = opts.databaseUrl; else delete env.DATABASE_URL;
     if (opts.redisUrl)    env.REDIS_URL    = opts.redisUrl;    else delete env.REDIS_URL;
     if (opts.workers && opts.workers > 1) env.NEXUS_CLUSTER_WORKERS = String(opts.workers);
+
+    // Refuse to measure a build that is older than the source it came from.
+    //
+    // This is not hypothetical. A benchmark run against a stale dist/ reported the exact behaviour
+    // a change had just removed — the numbers were real, they simply belonged to the previous
+    // version of the code, and nothing in the output said so. A measurement that is confidently
+    // wrong is worse than no measurement, and this one would have been published.
+    assertBuildIsFresh();
 
     // Either the compiled server directly, or the same server hosted inside the profiler wrapper.
     // The wrapper `require`s dist/server.js in its own isolate, so the gateway being measured is

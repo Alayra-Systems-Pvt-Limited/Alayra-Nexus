@@ -35,7 +35,63 @@ const REDIS_URL = process.env.REDIS_URL?.trim();
  * mock it as `vi.mock('../lib/redis', () => ({ redis: { … } }))`; renaming it would touch every one
  * of them for no gain.
  */
-export const redis = (REDIS_URL ? new Redis(REDIS_URL) : new MemoryKv()) as unknown as Redis;
+/**
+ * What a command does when Redis is not answering — measured, not assumed.
+ *
+ * ── What it used to do ────────────────────────────────────────────────────────────────────────
+ *
+ * ioredis retries a command up to `maxRetriesPerRequest` times (default 20) and then rejects it
+ * with `MaxRetriesPerRequestError`. Measured against a stopped Redis, that rejection arrives after
+ * about ten seconds — and it arrives as a REJECTED PROMISE, which is only ever as safe as the
+ * least careful call site in the codebase. One background timer without a `.catch` turned it into
+ * an unhandled rejection, and an unhandled rejection ends the process. A cost-control gateway
+ * exiting because its rate-limit store is unreachable is the failure this pair of options removes.
+ *
+ * ── The three states, and why one option cannot cover them ────────────────────────────────────
+ *
+ * A command can be waiting for three different reasons, and they need different answers:
+ *
+ *   retries exhausted   → `maxRetriesPerRequest: null`. Never manufacture the rejection that ended
+ *                         the process. Retry for as long as the outage lasts.
+ *   disconnected        → the offline queue holds it. `commandTimeout` bounds the wait — measured:
+ *                         a 2000ms timeout rejected a queued command at 2002ms, so the timer does
+ *                         cover the queue and not merely the wire.
+ *   connected but wedged→ same timeout, same bound.
+ *
+ * Without the timeout, `maxRetriesPerRequest: null` on its own is strictly worse than the bug it
+ * fixes: measured, a command issued during an outage never settled at all. That converts a crash
+ * into an unbounded hang, which fills a caller's connection pool instead of answering it.
+ *
+ * ── Why the offline queue stays ON ────────────────────────────────────────────────────────────
+ *
+ * `enableOfflineQueue: false` looks like the tidier answer — reject instantly rather than queue —
+ * and it is a trap. The socket is also not open for the first few milliseconds of the process's
+ * life, so with the queue off, commands issued during boot fail against a Redis that is perfectly
+ * healthy. Measured: 0 of 50 succeeded, including the dependency ping the gateway boots with. That
+ * trades a rare outage bug for a common startup one.
+ *
+ * The cost of keeping it: entries stay in the queue after their own timeout has rejected them, so
+ * a long outage grows the queue and reconnection replays it. The replayed commands have already
+ * been answered — their callers got a 503 — so the results are discarded, and a replayed reservation
+ * expires with the RPM/TPM window it belongs to. Bounded and self-healing, and a great deal better
+ * than exiting. Putting a breaker in front of the KV would remove it properly; that is a change
+ * with its own risks and belongs in its own review, not smuggled in here.
+ */
+const KV_COMMAND_TIMEOUT_MS = parseInt(process.env.NEXUS_KV_COMMAND_TIMEOUT_MS ?? '2000', 10);
+
+export const redis = (REDIS_URL
+  ? new Redis(REDIS_URL, {
+      maxRetriesPerRequest: null,
+      // Two seconds rather than one, deliberately. A healthy command measured p50 0.9ms, p99 1.7ms,
+      // worst 2.45ms — so even one second is six hundred times the observed ceiling, and the choice
+      // is not about Redis. It is about THIS process: the gateway is CPU-bound at saturation, and
+      // this timer fires on its event loop. Too tight a budget starts rejecting commands that Redis
+      // answered perfectly well while the loop was busy — a false timeout, which costs a spurious
+      // 503 and a reservation for a request that never happened. One extra second during a genuine
+      // wedge is the cheaper mistake.
+      commandTimeout: KV_COMMAND_TIMEOUT_MS,
+    })
+  : new MemoryKv()) as unknown as Redis;
 
 /**
  * Every command this codebase actually issues, as a shape MemoryKv must satisfy.

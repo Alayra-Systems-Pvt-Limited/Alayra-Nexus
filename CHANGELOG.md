@@ -64,6 +64,52 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
+- **An unreachable Redis is now a `503` with a `Retry-After`, not a 500, a hang, or a dead
+  process.** This is the other half of the change below, and the more important one: the crash
+  handler makes the gateway *die* well, and this stops it dying at all for something that was never
+  its own fault.
+
+  Three states needed three different answers, which is why one option could not cover it. Each was
+  measured against a stopped Redis rather than read from the documentation:
+
+  | state | before | fix |
+  |---|---|---|
+  | retries exhausted | `MaxRetriesPerRequestError` after ~10s, as a rejected promise that ended the process | `maxRetriesPerRequest: null` |
+  | disconnected | queued indefinitely | `commandTimeout` — measured: a queued command rejected at 2002ms under a 2000ms budget, so the timer does cover the queue |
+  | connected but wedged | waited forever | same timeout |
+
+  `maxRetriesPerRequest: null` on its own is **worse than the bug**: measured, a command issued
+  during an outage never settled at all, which fills a caller's connection pool instead of
+  answering it. `enableOfflineQueue: false` looked tidier still and is a trap — the socket is also
+  not open for the first milliseconds of the process's life, and with the queue off 0 of 50 commands
+  issued at boot succeeded, including the dependency ping the gateway starts with. It stays on.
+
+  Timeout is `NEXUS_KV_COMMAND_TIMEOUT_MS`, default 2000ms. A healthy command measured p50 0.9ms,
+  p99 1.7ms, worst 2.45ms — so the budget is not about Redis. It is about this process: the timer
+  fires on the gateway's own event loop, which is CPU-bound at saturation, and too tight a budget
+  starts rejecting commands Redis answered perfectly well while the loop was busy.
+
+  Fails **closed**, deliberately. A gateway that cannot reach its key-value store cannot enforce a
+  rate limit or a budget, and serving anyway would spend an operator's provider credit with the
+  controls switched off. Measured end to end on a live gateway: 5 of 5 requests refused with 503,
+  0 reached a provider, `/health` still answering, `/ready` correctly 503, and full recovery **0.2s**
+  after Redis returned with no restart and no operator action — against 3 hangs plus 2 × 500 and a
+  1.6s recovery before.
+
+  Known and bounded: entries stay in the offline queue after their own timeout has rejected them, so
+  a long outage grows it and reconnection replays it. Those commands have already been answered, so
+  their results are discarded and a replayed reservation expires with the RPM/TPM window it belongs
+  to. Putting a breaker in front of the KV would remove it properly and is deliberately left to its
+  own review.
+
+- **A key-value failure is no longer reported as a gateway bug.** Without an error handler, an
+  unreachable store reached Fastify's default and became a 500 — "the gateway is broken", with no
+  `Retry-After` and no reason for a client to retry. Wrong twice: the gateway is fine, and the
+  condition is temporary. The predicate is narrow on purpose and matches only failures observed from
+  a real ioredis rejection; a `TypeError` or a `WRONGTYPE` keeps its 500, because dressing a defect
+  up as a dependency outage tells a caller to come back later for something that will still be
+  broken when they do.
+
 - **The gateway now ends deliberately, with the exit code a supervisor needs.** An error reaching
   the top of the process — a background promise nobody caught — got Node's default: terminate,
   print a stack, lose whatever was buffered. That default is right about the terminating part. A
@@ -116,6 +162,25 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   a gateway whose Redis was unreachable it produced a rejected promise with nobody holding it, one
   minute after boot — which, before the change above, ended the process. A housekeeping job is
   best-effort by nature: the rows it did not delete today are still there tomorrow.
+
+### Internal
+
+- **`bench:guard` gained a fourth check: a KV outage must still answer 503, from a process that is
+  still alive.** It guards a production bug rather than a benchmark number, and distinguishes the
+  three regressions that are possible — the process dying, a 500 instead of a 503, and a request
+  that never returns — because they have different fixes. Both directions were verified by breaking
+  the code: removing the command timeout produces "saw hung (5 never returned at all)", removing the
+  error handler produces "saw 500 instead of 503".
+
+  The outage is simulated with a TCP forwarder rather than by stopping a container: no privileges,
+  no container names, identical on a laptop and in CI, and it severs the connection at a moment the
+  test chooses rather than whenever the daemon gets round to it.
+
+- **The benchmarks now refuse to run against a stale build.** They execute the compiled `dist/`, and
+  a run against a build older than its source reported the exact behaviour a change had just
+  removed — real numbers belonging to the previous version of the code, with nothing in the output
+  saying so. That measurement was very nearly published. Fatal rather than a warning: a warning in a
+  scrollback is no defence against a number that is confidently wrong.
 
 ### Changed
 

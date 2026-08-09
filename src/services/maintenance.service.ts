@@ -154,6 +154,17 @@ export async function endMaintenance(): Promise<void> {
   cache = { at: Date.now(), state: null };
 }
 
+// The read is deliberately NOT wrapped. This is the first thing every proxy request touches, so
+// what happens here when the store is unreachable sets the answer for the whole request — and the
+// right answer is to refuse. A gateway that cannot reach its key-value store cannot enforce a rate
+// limit or a budget, and serving anyway would mean spending an operator's provider credit with the
+// controls switched off. The rejection propagates to the error handler in server.ts, which turns
+// it into a 503 with a Retry-After. Failing open here would only postpone the same failure to the
+// next KV touch, having already let the request past the one gate that exists to stop it.
+//
+// A MALFORMED flag is the opposite case and keeps its fail-open below: the store answered, the
+// value is junk, and the worst case is serving during a restore — which is what happens on a
+// gateway that has never used the feature.
 async function load(): Promise<MaintenanceState | null> {
   const raw = await redis.get(MAINTENANCE_KEY);
   if (raw === null) return null;
