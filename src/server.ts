@@ -51,7 +51,13 @@ import { resolveDatabaseUrl } from './lib/mode';
 import { isSpaNavigation } from './lib/spaFallback';
 import { normalizePublicUrl } from './lib/baseUrl';
 import cluster from 'node:cluster';
-import { assertClusterSafe, desiredWorkers, ownsBackgroundJobs, ClusterUnsafeError } from './lib/cluster';
+import { assertClusterSafe, desiredWorkers, ownsBackgroundJobs, ClusterUnsafeError, forkDelayMs, createCrashWindow } from './lib/cluster';
+import { installCrashHandlers, onShutdown, shutdown } from './lib/lifecycle';
+
+// Before anything else can throw. Registered at import time rather than inside `bootstrap`, because
+// the window this closes includes the boot itself — `initOnce` builds a schema and talks to Redis,
+// and an error escaping there deserves the same graceful exit as one escaping later.
+installCrashHandlers();
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -64,6 +70,15 @@ const HOST = process.env.HOST ?? '0.0.0.0';
 // their pool via env; see README "Rate limits, explained".
 const ABUSE_RATE_LIMIT_MAX    = parseInt(process.env.ABUSE_RATE_LIMIT_MAX ?? '12000', 10);
 const ABUSE_RATE_LIMIT_WINDOW = process.env.ABUSE_RATE_LIMIT_WINDOW ?? '1 minute';
+
+/**
+ * How long the cluster primary lingers after signalling its workers.
+ *
+ * Long enough for a worker to close its listener and flush, short enough to stay well inside the
+ * orchestrator's grace period. A worker that needs longer has its own deadline and will be killed
+ * by it, not by this.
+ */
+const PRIMARY_EXIT_GRACE_MS = parseInt(process.env.NEXUS_PRIMARY_EXIT_GRACE_MS ?? '3000', 10);
 
 /**
  * Everything that must happen exactly once per deployment, whatever the worker count.
@@ -242,6 +257,20 @@ async function serve() {
   // before any session exists, so it sits outside the admin router. The write is owner-guarded.
   await app.register(brandingRoutes);
 
+  // The wind-down, in the order it has to happen. Registered here rather than at module scope
+  // because only this function has the server: `app` is built per-worker, and a module-level
+  // handle would be null in the primary and stale after a restart.
+  //
+  // Closing first is what makes the drains worth doing. Fastify's close stops accepting, lets
+  // in-flight requests finish, and only then resolves — so by the time the buffers are flushed
+  // they are no longer being written into, and the flush is complete rather than merely recent.
+  onShutdown('close the listener and finish in-flight requests', () => app.close());
+  onShutdown('flush buffered usage events', () => drainUsage());
+  onShutdown('flush buffered audit entries', () => drainAudit());
+  // No explicit WAL checkpoint here, deliberately — see the note in lib/sqlitePragma.ts.
+  // $disconnect closes the last connection, and SQLite folds the -wal back in as part of that.
+  onShutdown('disconnect the database', () => prisma.$disconnect());
+
   await app.listen({ port: PORT, host: HOST });
   console.log(`\n🚀  Alayra Nexus running on http://${HOST}:${PORT}`);
   console.log(`    OpenAI base URL → http://localhost:${PORT}/v1`);
@@ -262,9 +291,18 @@ function startBackgroundJobs() {
   // daily. Deletion is bounded to whatever the operator set (default 90 days; "Off" keeps
   // everything). The first pass is delayed a minute so it never contends with startup, and
   // the timer is unref'd so it cannot hold the process open on its own.
+  //
+  // The `.catch` is not decoration. `runRetention` guards each of its three deletes but not the
+  // settings read that precedes them, and that read goes to the key-value store — so on a gateway
+  // whose Redis is unreachable this timer produced a rejected promise with nobody holding it, one
+  // minute after boot. An unhandled rejection ends the process (see lib/lifecycle.ts), which is a
+  // remarkable way for a housekeeping job to take a gateway down. Retention is best-effort by
+  // nature: the rows it did not delete today are still there tomorrow.
   const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
-  const firstPass = setTimeout(() => { void runRetention(); }, 60_000);
-  const retentionTimer = setInterval(() => { void runRetention(); }, RETENTION_INTERVAL_MS);
+  const onRetentionError = (err: unknown) =>
+    console.warn('  Retention pass skipped:', err instanceof Error ? err.message : err);
+  const firstPass = setTimeout(() => { void runRetention().catch(onRetentionError); }, 60_000);
+  const retentionTimer = setInterval(() => { void runRetention().catch(onRetentionError); }, RETENTION_INTERVAL_MS);
   if (typeof firstPass.unref === 'function') firstPass.unref();
   if (typeof retentionTimer.unref === 'function') retentionTimer.unref();
 
@@ -304,19 +342,40 @@ async function bootstrap() {
 
     // A worker that dies takes its share of the traffic with it until something replaces it. Not
     // restarted after an explicit shutdown, or the gateway could never be stopped.
+    //
+    // The delay is the difference between supervision and a spin — see the note above
+    // `forkDelayMs`. Zero for the first death in a minute, doubling after that, so a single bad
+    // request recovers instantly while a dependency outage that kills every worker at boot settles
+    // into a probe every thirty seconds instead of pinning a core.
     let stopping = false;
+    const crashes = createCrashWindow();
     cluster.on('exit', (worker, code, signal) => {
       if (stopping) return;
-      console.error(`  worker ${worker.process.pid} exited (${signal ?? code}) — restarting`);
-      cluster.fork();
+      const delay = forkDelayMs(crashes.record(Date.now()));
+      const wait = delay > 0 ? ` — replacing in ${(delay / 1000).toFixed(1)}s` : ' — replacing now';
+      console.error(`  worker ${worker.process.pid} exited (${signal ?? code})${wait}`);
+      if (delay === 0) { cluster.fork(); return; }
+      // Not unref'd: while the gateway is down to fewer workers than it was asked for, this timer
+      // is the only thing that will bring one back, and a process that exited instead would leave
+      // an operator with a supervisor that had silently stopped supervising.
+      setTimeout(() => { if (!stopping) cluster.fork(); }, delay);
     });
 
     // The primary owns no sockets, so the only thing it has to do on the way out is take the
     // workers with it. Without this they are re-parented and keep the port bound.
+    //
+    // It also has nothing to drain — the buffers belong to the workers — so it registers its own
+    // handler and never the shared one. Registering both was a real bug: this function's
+    // synchronous `process.exit(0)` ran while the shared handler was still awaiting its first
+    // flush, so the drain was cut off in the middle by the process it was sharing.
+    //
+    // The workers are given a moment to drain before the primary leaves. Not waited on: a worker
+    // stuck mid-flush must not be able to prevent the gateway from stopping, and each one has its
+    // own deadline for exactly that reason.
     const stop = (): void => {
       stopping = true;
       for (const w of Object.values(cluster.workers ?? {})) w?.kill('SIGTERM');
-      process.exit(0);
+      setTimeout(() => process.exit(0), PRIMARY_EXIT_GRACE_MS);
     };
     process.on('SIGTERM', stop);
     process.on('SIGINT', stop);
@@ -329,6 +388,7 @@ async function bootstrap() {
   if (cluster.isWorker) {
     await assertDependencies();
     await serve();
+    installSignalHandlers();
     if (ownsBackgroundJobs(cluster.worker?.id)) startBackgroundJobs();
     return;
   }
@@ -336,6 +396,7 @@ async function bootstrap() {
   // The ordinary single-process gateway, unchanged.
   await initOnce();
   await serve();
+  installSignalHandlers();
   startBackgroundJobs();
 }
 
@@ -349,16 +410,11 @@ bootstrap().catch((err) => {
   process.exit(1);
 });
 
-async function shutdown() {
-  // Flush any buffered usage events and audit entries before the process exits so nothing
-  // still in an in-process pipeline is lost on restart/redeploy.
-  try { await drainUsage(); } catch { /* best effort */ }
-  try { await drainAudit(); } catch { /* best effort */ }
-  // No explicit WAL checkpoint here, deliberately — see the note in lib/sqlitePragma.ts. $disconnect
-  // closes the last connection, and SQLite folds the -wal back in and removes it as part of that.
-  await prisma.$disconnect();
-  process.exit(0);
+// A signal is a deliberate stop, so it exits 0 — which is also what tells a supervisor configured
+// with `on-failure` to leave the process alone rather than bring it back. The crash path in
+// lib/lifecycle.ts exits 1 for the opposite reason. The steps themselves are registered in
+// `serve()`, where the server instance they close actually exists.
+function installSignalHandlers(): void {
+  process.on('SIGTERM', () => { void shutdown(0); });
+  process.on('SIGINT',  () => { void shutdown(0); });
 }
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
