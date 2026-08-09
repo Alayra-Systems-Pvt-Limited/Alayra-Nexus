@@ -9,7 +9,27 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
-## [1.6.0] - 2026-08-09
+### Internal
+
+- **The release smoke test now checks the API key, not just the database.** It asserted `nexus.db`
+  and nothing else, so it caught the data-directory bug in 1.6.0 only because that bug happened to
+  crash the process. A key written somewhere unexpected *without* crashing would have shipped.
+
+  Both halves of the contract are asserted now, because they fail in ways the other cannot catch: a
+  key in the wrong **directory** is a container that will not start, and a key still on **stdout**
+  is a security regression that starts perfectly. The second is the one 1.6.0 was released to fix,
+  and nothing had ever verified it end to end — the check reads the generated key out of the file
+  and proves that exact string is absent from the container's logs, then proves the logs still say
+  where to find it. A key filed somewhere nobody was told about is the same outage as no key at all.
+
+  The same assertions run in the PR-time container job, where they gate every change rather than
+  only tag builds.
+
+- **The SIGTERM guard has now been seen to fail.** The check added in 1.6.0 had only ever been seen
+  to pass, which says nothing on its own — the unit test for the data directory *asserted the bug*
+  and passed on every run for as long as it existed. Deliberately breaking signal handling produced
+  `exited 137 after 20s`, so Docker had to SIGKILL it and both the exit-code and timing assertions
+  fired. The guard is load-bearing.
 
 ### Security
 

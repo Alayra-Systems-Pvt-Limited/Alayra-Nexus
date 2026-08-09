@@ -228,6 +228,33 @@ jobs:
           # on. A gateway reporting Postgres here would mean it reached something it should not have.
           docker logs vol 2>&1 | grep -q 'Database created' || { docker logs vol; exit 1; }
           docker logs vol 2>&1 | grep -q 'SQLite'           || { docker logs vol; exit 1; }
+
+          # ── The API key: where it went, and where it did NOT go ─────────────────────────────────
+          # Until 1.6.0 the master key was printed to stdout, which put a live credential into
+          # whatever collects stdout. It goes to a 0600 file now and the LOG gets the path. Both
+          # halves of that are asserted here, because each fails in a way the other would not catch:
+          # a key in the wrong DIRECTORY is a container that will not start, and a key still on
+          # STDOUT is a security regression that starts perfectly.
+          #
+          # This step used to check `nexus.db` and nothing else, so it caught the directory bug in
+          # 1.6.0 only because the process happened to crash. A key written somewhere unexpected
+          # WITHOUT crashing would have shipped.
+          docker exec vol test -f /app/.nexus/api-key.txt \
+            || { echo "::error::The API key was not written beside the database."; docker logs vol; exit 1; }
+
+          # Never echoed, only matched. -F because the key is opaque bytes, not a pattern.
+          APIKEY=$(docker exec vol cat /app/.nexus/api-key.txt)
+          [ -n "$APIKEY" ] || { echo "::error::The API key file is empty."; exit 1; }
+          if docker logs vol 2>&1 | grep -qF "$APIKEY"; then
+            echo "::error::The master API key reached stdout. That is the regression 1.6.0 fixed."
+            exit 1
+          fi
+          # And the operator can still find it — a key filed somewhere nobody was told about is the
+          # same outage as no key at all.
+          docker logs vol 2>&1 | grep -q '/app/.nexus/api-key.txt' \
+            || { echo "::error::The log never said where the key was written."; docker logs vol; exit 1; }
+          unset APIKEY
+
           docker rm -f vol >/dev/null
 
           # ── 2. The same volume, a second container ────────────────────────────────────────────────
@@ -251,6 +278,12 @@ jobs:
           start_and_wait bind --user "$(id -u):$(id -g)" -v "$BIND:/app/.nexus"
           docker rm -f bind >/dev/null
           test -f "$BIND/nexus.db" || { echo "::error::No database in the bind mount."; exit 1; }
+          # Both artefacts, in the ONE directory. This is the scenario that failed the 1.6.0 tag:
+          # the key had its own fallback, `homedir()/.alayra-nexus`, and `--user` gives the process
+          # a uid with no passwd entry, so homedir() was `/` and the mkdir was EACCES. Checking the
+          # database alone could not tell that apart from success.
+          test -f "$BIND/api-key.txt" \
+            || { echo "::error::The API key did not land beside the database in the bind mount."; exit 1; }
 
           echo "the ${{ matrix.platform }} image serves with no database, and keeps it"
 
