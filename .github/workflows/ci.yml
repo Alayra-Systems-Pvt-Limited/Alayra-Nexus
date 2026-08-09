@@ -413,6 +413,25 @@ jobs:
           # Both artefacts, in the ONE directory. The key landing anywhere else is the bug.
           test -f "$BIND/nexus.db"    || { echo "::error::no database in the bind mount"; docker logs nexus-bind; exit 1; }
           test -f "$BIND/api-key.txt" || { echo "::error::the API key was not written beside the database"; docker logs nexus-bind; exit 1; }
+
+          # Where the key went is only half the contract. The reason it goes to a file at all is that
+          # it must NOT go to stdout, and that half fails differently: a key in the wrong directory
+          # is a container that will not start, while a key still on stdout starts perfectly and
+          # quietly files a live credential into whatever collects logs.
+          #
+          # Never echoed, only matched. -F because a key is opaque bytes, not a pattern.
+          APIKEY=$(cat "$BIND/api-key.txt")
+          [ -n "$APIKEY" ] || { echo "::error::the API key file is empty"; exit 1; }
+          if docker logs nexus-bind 2>&1 | grep -qF "$APIKEY"; then
+            echo "::error::the master API key reached stdout — that is the regression 1.6.0 fixed"
+            exit 1
+          fi
+          # And it is still findable. A key filed somewhere nobody was told about is the same outage
+          # as no key at all, which is why deleting the message was never an option.
+          docker logs nexus-bind 2>&1 | grep -q '/app/.nexus/api-key.txt' \
+            || { echo "::error::the log never said where the key was written"; docker logs nexus-bind; exit 1; }
+          unset APIKEY
+
           docker rm -f nexus-bind >/dev/null
 
       # What SIGTERM does is on the path of every REDEPLOY, not just of a rare failure — which is
