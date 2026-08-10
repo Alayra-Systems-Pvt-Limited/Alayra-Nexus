@@ -65,6 +65,17 @@ docs/*
 # nobody can check — and this file is written by a script, never by hand, so it cannot drift into
 # marketing. It holds no credentials: account-scoped URLs are recorded with their placeholder.
 !docs/provider-verification/
+# The README's reference chapters, split out of it because npm renders only the first 64 KB of a
+# readme and ours had grown past it. These are linked FROM the README, so leaving them ignored
+# would put five dead links on the project's front page — the exact accident the note at the top of
+# this block warns about, which had already happened once to the verification evidence above.
+# Listed by name rather than as `!docs/*.md` so a future internal plan dropped in here stays
+# internal by default; a public page is a deliberate addition.
+!docs/api.md
+!docs/backup.md
+!docs/routing.md
+!docs/security.md
+!docs/standalone.md
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 .claude/

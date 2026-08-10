@@ -80,7 +80,8 @@
     "bench:failures": "tsx scripts/bench/failure.ts",
     "bench:resources": "tsx scripts/bench/resources.ts",
     "verify:providers": "tsx scripts/verify-providers.ts",
-    "gate:e2e": "tsx scripts/release-gate.ts"
+    "gate:e2e": "tsx scripts/release-gate.ts",
+    "docs:providers": "tsx scripts/docs/providerTable.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",

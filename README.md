@@ -229,31 +229,29 @@ path already filled in. **The list is not a whitelist**: a provider slug is free
 pointed at anything OpenAI-compatible is a first-class pool whether or not it appears below. A
 preset only saves you typing.
 
-| Provider | Verified | Endpoint used | Publishes prices? |
+<!-- BEGIN GENERATED PROVIDER TABLE — npm run docs:providers -->
+
+**6 providers have served a real completion through these presets** — measured 2026-08-10.
+
+| Provider | Verified | Endpoint | Publishes prices? |
 |---|---|---|---|
-| **Groq** | ✅ Completion | `api.groq.com/openai/v1` | ✅ Yes, per model |
-| **OpenRouter** | ✅ Completion | `openrouter.ai/api/v1` | ✅ Yes, per model — 400 models behind one key |
-| **Google** | ✅ Completion | Gemini's OpenAI-compatible API | ❌ Set prices yourself |
-| **Mistral** | ✅ Completion | `api.mistral.ai/v1` | ❌ Set prices yourself |
-| **HuggingFace** | ✅ Completion | `router.huggingface.co/v1` | ❌ Set prices yourself |
-| **Cloudflare Workers AI** | ✅ Completion | account-scoped `/ai/v1` | ❌ Bills in *neurons*, not tokens |
-| **Cerebras** | ⚠️ Model list only | `api.cerebras.ai/v1` | ❌ Completions need a funded account (402) |
-| **Anthropic** | ⚪ Preset only | `api.anthropic.com/v1` | ❌ Set prices yourself |
+| **Groq** | ✅ Completion · 2026-08-10 | `api.groq.com/openai/v1` | ✅ Yes, per model |
+| **OpenRouter** | ✅ Completion · 2026-08-10 | `openrouter.ai/api/v1` | ✅ Yes, per model |
+| **Google** | ✅ Completion · 2026-08-10 | `generativelanguage.googleapis.com/v1beta/openai` | ❌ Set prices yourself |
+| **Mistral** | ✅ Completion · 2026-08-10 | `api.mistral.ai/v1` | ❌ Set prices yourself |
+| **HuggingFace** | ✅ Completion · 2026-08-10 | `router.huggingface.co/v1` | ❌ Set prices yourself |
+| **Cloudflare Workers AI** | ✅ Completion · 2026-08-10 | `api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1` | ❌ Set prices yourself — bills in *neurons*, not tokens |
+| **Cerebras** | ⚠️ Model list only · 2026-08-10 — completions answered 402 until the account is funded | `api.cerebras.ai/v1` | ❌ Set prices yourself |
 | **OpenAI** | ⚪ Preset only | `api.openai.com/v1` | ❌ Set prices yourself |
+| **Anthropic** | ⚪ Preset only | `api.anthropic.com/v1` | ❌ Set prices yourself |
 | **Custom** | ⚪ You configure it | whatever you point it at | Depends on the endpoint |
 | Azure OpenAI · Bedrock · Vertex | ⚪ Via **Custom** | your endpoint | Reachable today through a Custom pool if the endpoint speaks OpenAI's schema; first-class presets are on the [roadmap](#roadmap) |
 
-**What "verified" means here.** ✅ Completion = `npm run verify:providers` listed that provider's
-models, sent it a real request and got usage back, against a live key. ⚪ Preset only = never
-measured — no key, not a claim that it is broken. The dated evidence is committed under
-[`docs/provider-verification/`](docs/provider-verification/) and is written by that script, never by
-hand. Nothing is promoted by editing a table.
+<sub>**Verified** is measured, never asserted. ✅ Completion means `npm run verify:providers` listed that provider's models, sent a real request against a live key and got usage back, on the date shown. ⚪ Preset only means never probed — an absence of evidence, not a claim that it is broken. The dated evidence is committed under [`docs/provider-verification/`](docs/provider-verification/), and this table is generated from it by `npm run docs:providers`. Editing it by hand is undone by the next run, and CI fails if it drifts.</sub>
 
-**"Publishes prices" matters for your bill.** Only Groq and OpenRouter return per-model prices in
-their own API, so only their models can be priced automatically. Everywhere else a model arrives
-with **no price**, Nexus flags it rather than assuming zero, and until you set one its requests
-count as $0 in analytics. The dashboard says so when you add the pool, on the model row, and on the
-Analytics page.
+<sub>**Publishes prices** decides whether Nexus can cost a request without you. Only **Groq** and **OpenRouter** return per-model prices in their own API; everywhere else a model arrives with no price, which Nexus flags rather than assuming zero — on the model row, when you add the pool, and on the Analytics page.</sub>
+
+<!-- END GENERATED PROVIDER TABLE -->
 
 Anthropic additionally gets a native `/v1/messages` endpoint, so Claude Code and the Anthropic SDKs
 work unchanged.
@@ -530,253 +528,17 @@ Dashboard is live at `http://localhost:3000`
 
 ## Standalone mode — no Postgres, no Redis
 
-The easiest way in is [`npx @alayrasystems/nexus`](#option-a--one-command-nothing-to-provision), which does
-all of the below for you. It also runs from the container, with no database alongside it:
+One command and one SQLite file, with no services to provision — the honest list of what you give up by running it that way, where the data lives, how to tell which mode you are actually in, and when to move to server mode.
 
-```bash
-docker run -d --name alayra-nexus -p 3000:3000 \
-  -e MASTER_ENCRYPTION_KEY="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" \
-  -e ADMIN_PASSWORD="change-me" \
-  -v nexus-data:/app/.nexus \
-  alayrasystems/nexus:latest
-```
-
-> [!WARNING]
-> **The `-v` is not optional.** Without it the database lives inside the container's writable layer
-> and disappears the moment the container is removed — along with every provider key in it. The
-> gateway cannot tell the difference, so nothing will warn you.
-
-`nexus-data` there is a **named volume**: Docker creates it, seeds it from the image, and it inherits
-the ownership the gateway needs. There is nothing to prepare.
-
-To keep the database somewhere you can see it instead, own the directory and run as yourself:
-
-```bash
-mkdir -p ./nexus-data
-docker run -d --name alayra-nexus -p 3000:3000 \
-  -e MASTER_ENCRYPTION_KEY="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" \
-  -e ADMIN_PASSWORD="change-me" \
-  --user "$(id -u):$(id -g)" \
-  -v "$PWD/nexus-data:/app/.nexus" \
-  alayrasystems/nexus:latest
-```
-
-> [!NOTE]
-> A bind mount **without** `--user` fails with `unable to open the database file`. Docker creates a
-> missing host directory as root and mounts it exactly as it finds it, while the gateway runs
-> unprivileged — so it cannot write there. Every image that drops privileges behaves this way, and no
-> change to the image can alter it. `--user` is the fix; a named volume avoids the question entirely.
-
-Set neither `DATABASE_URL` nor `REDIS_URL` and the gateway runs on a local **SQLite file** and
-**in-process memory** instead. One process, one directory, nothing to provision — for trying Nexus
-out, for local development against a real gateway, and for CI.
-
-```bash
-# In any empty directory.
-MASTER_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))") \
-ADMIN_PASSWORD=change-me \
-node /path/to/alayra-nexus/dist/server.js
-```
-
-```
-  Database created → 16 tables at ./.nexus/nexus.db
-  Storage → SQLite + in-process memory (data is not durable)
-```
-
-**No feature is disabled by engine.** There is no standalone-only build and no feature flag that
-turns things off — the request path, the router, the breaker and both API surfaces are the same
-code, reading and writing through the same interfaces. What differs is the two stores underneath,
-and the consequences of that are below.
-
-Every release proves it rather than asserting it: CI boots the compiled gateway in an empty
-directory with no `DATABASE_URL` and no `REDIS_URL`, then drives it over HTTP — it builds its own
-database, claims an owner, signs in, serves every dashboard read, writes, and signs out.
-
-### It is not zero-configuration
-
-Two secrets are still required, and they fail differently:
-
-| | If missing |
-|---|---|
-| `MASTER_ENCRYPTION_KEY` | **The process will not start.** It exits with a Node stack trace rather than a guided message — the check runs at module load, before the startup checks that normally explain themselves |
-| `ADMIN_PASSWORD` | Starts, but you cannot claim the owner account. The claim endpoint explains why |
-
-Both are the same requirements server mode has. Keep the encryption key backed up somewhere other
-than the machine — **without it the provider keys in your database can never be decrypted again**,
-and standalone puts that database on one disk.
-
-### What you give up
-
-| | |
-|---|---|
-| **Sessions and rate-limit windows reset on restart** | Counters live in memory. Everyone is signed out, and every RPM window starts over |
-| **One process only** | A second instance keeps its own counters, so an RPM limit would be enforced at roughly 2×. There is no horizontal scaling |
-| **One writer at a time** | SQLite serialises writes. WAL keeps readers from blocking (see below), but concurrent *writers* still queue |
-| **No replication, no managed backups, no failover** | The data is a file on one machine's disk |
-| **Analytics slow down on large tables** | No parallel query and a weaker planner than Postgres |
-| **Some Health readings are absent** | Connection-pool stats, cache hit ratio and deadlock counts are Postgres concepts. The panel shows them as unavailable rather than as zero |
-| **Memory grows with use** | Active keys, tracked users and cached responses all live in the process. There is no eviction to a separate store to fall back on |
-
-**Budgets are the exception** — spend is re-derived from usage history rather than held in a
-counter, so it stays correct across a restart.
-
-### Backups: use the export, not a file copy
-
-Standalone runs SQLite in **WAL** mode, so the live database is **three files** — `nexus.db`, plus
-a `-wal` sidecar holding commits not yet folded in, plus `-shm`.
-
-> [!WARNING]
-> Copying `nexus.db` on its own while the gateway is running produces a backup that restores to an
-> **earlier state while looking complete**.
-
-Use **[Backup & restore](#backup--restore)** instead: it reads a consistent snapshot from the
-running gateway, encrypts it into one file, and restores onto any gateway — including a Postgres
-one. If you would rather copy files, stop the gateway first and copy the whole `.nexus/` directory,
-never the `.db` alone.
-
-WAL is why background writes stay off the dashboard's back. Measured with six concurrent aggregates
-over 120k rows while 60 writes landed underneath them:
-
-| Journal mode | Total | Slowest background write |
-|---|---|---|
-| `delete` (SQLite's default) | ~2100 ms | ~2000 ms |
-| `wal` (what Nexus sets) | ~600 ms | ~260 ms |
-
-Re-run it yourself with `npm run bench:sqlite-journal`.
-
-> [!IMPORTANT]
-> **WAL cannot work on a network filesystem** — NFS, SMB, and some container volume drivers lack the
-> shared memory it needs. SQLite refuses silently and stays in `delete` mode, where a write blocks
-> every read. Nexus detects this, warns at startup, and the Health page shows the mode actually in
-> force. Keep the data directory on local disk.
-
-### Where the data goes
-
-| | |
-|---|---|
-| Default | `./.nexus/` in the working directory the gateway was started from |
-| Override | `NEXUS_DATA_DIR=/var/lib/nexus` |
-
-A dot-directory rather than loose files, so it is one thing to back up and one thing to delete to
-start over. In a container it **must** be a mounted volume, or removing the container destroys the
-gateway.
-
-### Checking what you are actually running
-
-Never assume from the configuration — ask the gateway:
-
-```bash
-curl -s localhost:3000/ready | jq '.checks[].label'
-# "In-process memory read"   ← standalone
-# "SQLite SELECT 1"
-```
-
-**Health → Server** names the store in use, reports the SQLite version, file size, journal mode and
-reclaimable space, and marks the Postgres-only readings as unavailable rather than showing zeros.
-
-### When to move to server mode
-
-Move when any of these becomes true: you need **more than one instance**, you need **rate limits
-enforced accurately** across them, you need **backups and failover you did not build yourself**, or
-your analytics tables have grown enough that the dashboard feels slow.
-
-Point `DATABASE_URL` and `REDIS_URL` at real servers and restart — then carry your data across with
-**[Backup & restore](#backup--restore)**: export from the standalone gateway, restore into the
-Postgres one. Provider keys survive the move, because the restore re-encrypts every secret with the
-target gateway's key rather than copying ciphertext it could not open. The direction works both
-ways, which is also how you take a local copy of production to debug against.
+**→ [docs/standalone.md](docs/standalone.md)**
 
 ---
 
 ## Backup & restore
 
-**Admin → Backup**, owner-only. Export writes the whole gateway to one encrypted file; restore takes
-it back — on this gateway, or on a different one entirely.
+What a backup contains and what it deliberately leaves out, plus exporting and restoring from the dashboard and over the API.
 
-What makes it portable rather than merely restorable: **every encrypted secret is re-keyed in
-transit.** Provider keys, team keys and TOTP secrets are decrypted with the source gateway's
-`MASTER_ENCRYPTION_KEY` and re-sealed with the target's. A file copy cannot do this — restore a
-Postgres dump onto a gateway with a different master key and every credential in it is unreadable.
-
-Which is why the same file moves between engines. Verified end to end: a **22.6 MB** backup taken
-from a PostgreSQL gateway, restored into a standalone SQLite gateway holding a *different* master
-key — **51,033 rows across 16 tables, 18 secrets re-keyed.** The provider key decrypts to identical
-plaintext on both sides, the two ciphertexts differ, and the SQLite row cannot be opened with the
-PostgreSQL key.
-
-### Exporting
-
-Choose a passphrase of **at least 12 characters**. It is the only thing between a stolen backup file
-and every API key in the gateway, and — unless you also wrapped the file for another recipient — the
-only way to open it again.
-
-One file key is wrapped for up to three **recipients**, so a backup can outlive either loss:
-
-| Recipient | What opens it | When to use it |
-|---|---|---|
-| **Passphrase** | Something you know | Always. The default |
-| **Gateway** | A subkey of this deployment's `MASTER_ENCRYPTION_KEY` | Unattended work. Off unless asked — a downloaded file leaves the building, and this recipient only helps someone who already has your `.env` |
-| **Recovery** | The X25519 private key from your Recovery Kit, shown once at install | Disaster recovery. The server holds only the public half, so a stolen gateway yields no way in |
-
-A gateway-only file is **refused at write time**: it would be unopenable the moment the machine it
-came from is gone, which is exactly the disaster this feature exists to prevent.
-
-### Restoring
-
-**Every restore is dry-run first.** There is no path to a destructive one that skips the report. The
-report names the source gateway and engine, the row counts, what would collide, what would be
-dropped, and any environment variables the source had set that this gateway does not.
-
-| Mode | What it does |
-|---|---|
-| **Merge** | Adds new rows and updates matching ones. Everything else is left alone |
-| **Replace everything** | Empties all 16 tables first, then loads the backup. The gateway enters maintenance with a live progress figure and a shared countdown |
-
-The restore **refuses** a backup whose schema this gateway cannot honestly restore, and lists the
-specific differences rather than failing partway through. After a replace, the counter/session store
-is invalidated so no stale rate-limit window survives its own data.
-
-> [!IMPORTANT]
-> A backup contains every provider key, every team key, every TOTP secret and the full audit trail.
-> It is as sensitive as the gateway itself. **`.env` is deliberately not included** — carrying it
-> would mean a stolen backup also handed over your SSO and SMTP credentials.
-
-### Over the API
-
-```bash
-curl -X POST http://localhost:3000/admin/backup/export \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"passphrase":"correct horse battery staple"}' -o backup.nxb
-```
-
-Dry run first — writes nothing, and returns the same report the dashboard shows:
-
-```bash
-curl -X POST http://localhost:3000/admin/backup/restore \
-  -H "Authorization: Bearer $TOKEN" \
-  -F file=@backup.nxb -F passphrase='correct horse battery staple' \
-  -F mode=replace -F dryRun=true
-```
-
-Then the real one. A destructive restore needs two further proofs — the exact phrase, and the
-administrator password from the **server's** environment, which a stolen dashboard session does not
-carry:
-
-```bash
-curl -X POST http://localhost:3000/admin/backup/restore \
-  -H "Authorization: Bearer $TOKEN" \
-  -F file=@backup.nxb -F passphrase='correct horse battery staple' \
-  -F mode=replace -F dryRun=false \
-  -F confirm='REPLACE ALL DATA' -F masterPassword="$ADMIN_PASSWORD"
-```
-
-Owner-only and rate-limited. Audited as `backup.export`, `backup.restore.dryrun` and
-`backup.restore`. Upload size is capped by `NEXUS_MAX_BACKUP_BYTES`.
-
-> [!NOTE]
-> **Scheduled and off-box backups are not built yet.** Today an export is something a person runs.
-> A backup written to the same disk as the gateway is lost to the same accident, so download it
-> somewhere else.
+**→ [docs/backup.md](docs/backup.md)**
 
 ---
 
@@ -903,174 +665,19 @@ curl http://<your-host>:3000/v1/chat/completions \
 
 ## Rate limits, explained
 
-Alayra Nexus has **two independent limits**, and it's important not to confuse them:
+How RPM and TPM are counted, what a request meets at the ceiling, and why the limit belongs to a key rather than a pool.
 
-| Limit | Where | What it does | Who sets it |
-|---|---|---|---|
-| **Per-key RPM / TPM** | Inside the pool, per provider key | The **real** throughput control. Enforced exactly against what each provider allows a given key (e.g. "this key: 60 RPM, 100K TPM"). This is what keeps you inside your providers' contracts. | Set per key in the dashboard |
-| **Abuse guard** | At the server edge, per credential | A generous DoS/abuse backstop, **not** a throughput cap. Sized well above any single credential's legitimate rate so it never interferes with real traffic — it only trips on a runaway or malicious client. | `ABUSE_RATE_LIMIT_MAX` env var |
-
-**Your gateway's real ceiling is the sum of your active keys' RPM limits** — pool more
-keys and that ceiling rises. The abuse guard should always sit comfortably *above* that
-number, never below it.
-
-> [!IMPORTANT]
-> Size `ABUSE_RATE_LIMIT_MAX` above the busiest **single** credential's expected rate,
-> not your whole pool's. Because the guard is keyed per credential (each team key gets
-> its own bucket), a fleet of team keys can collectively far exceed this number — but if
-> you route most traffic through one key, give that key headroom. The default of `12000`
-> per minute (200 req/s) suits most self-hosters; raise it if a single key legitimately
-> drives more.
-
-The guard is Redis-backed, so the limit stays correct even when you run multiple Nexus
-replicas behind a load balancer, and it **fails open** — if Redis is briefly unreachable,
-requests are allowed through rather than blocked.
+**→ [docs/routing.md](docs/routing.md#rate-limits-explained)**
 
 ---
 
 ## Resilience & routing
 
-<details>
-<summary><b>Circuit breaker</b></summary>
+The circuit breaker, cache-aware sticky routing, cost-aware routing, response caching, and what the gateway does — and does not — survive when Redis is unreachable.
 
+**→ [docs/routing.md](docs/routing.md#resilience--routing)**
 
-Every key in the pool sits behind a per-key circuit breaker, so one failing provider
-never keeps taking traffic it can't serve. The breaker state lives in Redis, so it stays
-consistent across every Nexus replica.
-
-| Failure | How the breaker reacts |
-|---|---|
-| **5xx / timeout / hung stream** | Counts as a strike. After **3** consecutive strikes in a 5-minute window the key trips **open** and is skipped by the router. |
-| **Cooldown** | **Escalates** on each successive trip — 10s → 20s → 40s … doubling up to a 10-minute cap — so a key that keeps failing is pushed further away instead of being retried on the same fixed timer forever. |
-| **Half-open recovery** | When the cooldown expires the router lets exactly **one** trial request through. Success closes the breaker and resets the streak; failure re-escalates without dumping full traffic back onto a still-dead provider. |
-| **429 (rate limited)** | Handled **separately** — a flat, non-escalating cooldown. A rate limit is expected back-pressure, not an outage, so it never feeds the strike counter. |
-| **401 / 403 (auth)** | A bad credential won't fix itself. **2** consecutive auth failures **ban** the key outright rather than merely cooling it. |
-
-Any success at any point resets the streak to zero. Cooling and banned keys are reflected
-live in the dashboard; the admin **unban** action clears the breaker state as well.
-
-</details>
-
-<details>
-<summary><b>Cache-aware sticky routing</b></summary>
-
-
-Provider prompt caching only pays off when a conversation's follow-up turns hit the **same**
-upstream key. Naïve round-robin (always pick the least-recently-used key) throws that cache
-away on every turn. Nexus instead pins a conversation to the key that last served it:
-
-- A session is identified by an explicit **`X-Nexus-Session`** header or the OpenAI **`user`**
-  field if you send one, and otherwise by a stable fingerprint of the opening messages.
-- Follow-up turns prefer that key for a short window (matching provider cache lifetimes),
-  falling back to normal tier/LRU selection only for new sessions or when the pinned key is
-  cooling, banned, or out of headroom.
-- Sticky-routed responses carry an **`X-Nexus-Sticky: true`** header.
-
-</details>
-
-<details>
-<summary><b>Cost-aware routing (optional)</b></summary>
-
-
-Within a tier, when several providers are healthy and in-headroom, Nexus can bias toward the
-**cheaper** one using the per-token pricing already in your model registry — so "route to the
-cheapest *capable, healthy, in-headroom* provider" becomes real. It is a **tiebreaker only**,
-controlled by a single weight (*Settings → Cost-aware routing*, or `ROUTING_COST_WEIGHT`):
-
-- `0` (default) — cost is ignored; provider order is unchanged.
-- `1` — strict cheapest-first within a tier.
-- in between — interpolates, biasing toward cheaper without ignoring your configured order.
-
-Cost **never** overrides correctness. It is applied *after* tier priority (capability), the
-circuit breaker and rate/token headroom (an ineligible cheap provider is still skipped), and
-sticky cache affinity (a continuing conversation stays pinned to its cached key even if a
-cheaper provider exists — a cache hit usually wins on total cost anyway). Unpriced providers
-are ranked last but never dropped.
-
-> [!NOTE]
-> **Model exposure:** Nexus deliberately exposes a **single virtual model** — send
-> `model: "alayra-nexus-1"` and the gateway routes across your pool by tier, health, and
-> cache affinity. This keeps the client contract to one stable name; task-class dispatch to
-> named virtual models (`nexus-fast`, `nexus-premium`, …) is intentionally out of scope for
-> now so the routing contract stays simple for early adopters.
-
-</details>
-
-<details>
-<summary><b>Response caching (optional)</b></summary>
-
-
-Distinct from cache-aware *routing* above (which reuses the **provider's** prompt cache),
-this caches the **response itself**. When enabled, an **exact-match** request — same model,
-messages, and generation params — is served straight from Redis, **skipping the provider
-entirely**: a real **$0** call. Off by default; turn it on under *Settings → Response cache*
-(or `CACHE_ENABLED` / `CACHE_TTL_SECONDS`).
-
-- The cache key excludes `stream` and `user`, so a streamed and a non-streamed request with
-  the same content share an entry — and a hit is **replayed in whichever mode the client
-  asked for** (drop-in compatible).
-- Every hit still emits a **$0 usage event** attributed to the team, so your cost and
-  analytics numbers stay honest (it doesn't consume budget). Responses carry
-  `X-Nexus-Cache: hit` / `miss`.
-- Tool-call responses and multi-choice (`n > 1`) requests are not cached. Identical requests
-  return the same cached answer until the TTL expires — enable it where that's what you want
-  (deterministic prompts, repeated evals, shared boilerplate).
-
-> [!NOTE]
-> Semantic caching (nearest-neighbour on prompt embeddings) is a heavier, opt-in
-> extension planned on top of this exact-match layer — not enabled today.
-
-</details>
-
-<details>
-<summary><b>When Redis is unreachable, and how the process is supposed to die</b></summary>
-
-Nexus is **crash-only**: it never tries to nurse itself back to health in place. Failures
-split in two, and they get opposite treatment.
-
-**A dependency is down — never fatal.** Every routing decision (breaker state, rate limits,
-sticky pins, budgets) lives in the key-value store, so a gateway that cannot reach it cannot
-enforce a limit. It **fails closed**: proxy requests are refused with **`503` and a
-`Retry-After`**, no provider is contacted, and no credit is spent with the controls switched
-off. Commands are bounded by `NEXUS_KV_COMMAND_TIMEOUT_MS` (2s), so a caller is answered
-rather than left holding a connection. The gateway stays up throughout and resumes on its own
-within a second of Redis returning — measured, no restart and no operator action.
-
-**A bug reached the top of the process — always fatal.** An escaped rejection means the
-process state is no longer known, and code that continues on unknown state is how a
-cost-control gateway starts double-charging. Nexus logs one line carrying a stable `FATAL`
-token plus the stack, drains its listener and buffers under a 10s deadline
-(`NEXUS_SHUTDOWN_DEADLINE_MS`), and **exits 1**. Alert on `FATAL`.
-
-**The two probes answer different questions, so wire them differently.**
-
-| Probe | Depends on | Use it for |
-|---|---|---|
-| `GET /health` | nothing external | **liveness** — restart the process |
-| `GET /ready` | Redis + Postgres | **readiness** — take it out of rotation |
-
-Pointing a liveness probe at `/ready` turns a Redis blip into a restart of every replica at
-once. The bundled Docker `HEALTHCHECK` uses `/health` for exactly this reason.
-
-**Give it a supervisor.** Exit codes are load-bearing: a signal exits 0, a crash exits 1.
-Nothing in the default single-process deployment restarts the gateway on its own, so:
-
-```bash
-docker run --restart=unless-stopped ...
-```
-
-```ini
-# systemd
-Restart=on-failure
-RestartSec=2s
-```
-
-Kubernetes restarts on a non-zero exit by default; set `terminationGracePeriodSeconds`
-above 10 so the drain finishes before SIGKILL. Running `NEXUS_CLUSTER_WORKERS` > 1 adds a
-second layer — the primary replaces a dead worker immediately, then backs off to a 30s
-ceiling if they keep dying, so a dependency outage cannot become a fork loop.
-
-</details>
+---
 
 ## Teams & budgets
 
@@ -1147,95 +754,11 @@ Watch adoption with the `nexus_byok_requests_total{result}` metric — a sustain
 
 ## API Reference
 
-<details>
-<summary><b>Proxy endpoints</b></summary>
+Every proxy and admin endpoint, with the request and response shapes.
 
+**→ [docs/api.md](docs/api.md)**
 
-```
-POST /v1/chat/completions   OpenAI Chat Completions (streaming + non-streaming)
-POST /v1/messages           Anthropic Messages (streaming + non-streaming)
-POST /v1/embeddings         OpenAI Embeddings — for RAG / vector search
-POST /v1/completions        OpenAI legacy completions — fill-in-the-middle / autocomplete
-POST /v1/images/generations OpenAI Images — billed per image, not per token
-POST /v1/audio/speech       OpenAI TTS — returns audio, billed per character
-POST /v1/audio/transcriptions  OpenAI STT — multipart upload, billed per file
-GET  /v1/models             Model discovery (OpenAI + Anthropic shape)
-```
-
-Every proxy endpoint runs through the same model-first routing, failover, circuit
-breaker, budgets, and analytics — the non-chat endpoints are a thin transport over the
-same core, not a separate path. Each selects a model by **capability**: `/v1/embeddings`
-needs a model with the `embedding` capability, `/v1/completions` one with `completion`,
-and so on. If none is configured the endpoint answers `503` naming the missing
-capability rather than failing obscurely. Authenticate with `Authorization: Bearer
-<key>` or, for Anthropic clients, `x-api-key: <key>`.
-
-```bash
-curl http://localhost:3000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your-team-key>" \
-  -d '{
-    "model": "alayra-nexus-1",
-    "messages": [{ "role": "user", "content": "Hello" }],
-    "stream": true
-  }'
-```
-
-**Choosing a model.** There are two ways to send `model`, and `GET /v1/models` lists both:
-
-| Send | What happens |
-| --- | --- |
-| `alayra-nexus-1`, `auto`, `default`, or nothing | Nexus routes for you — tier, then priority, then cost — and fails over across every configured model and key. This is what the gateway is for. |
-| A model id or model string from `/v1/models` (`gpt-4o`, `claude-sonnet-4-5`, …) | Pinned to that model. Nexus still rotates and fails over across **that provider's keys**, but will not answer with a different model. |
-
-Anything else is a `400` that names the models this gateway does serve. Nexus never
-substitutes a model you did not ask for: a wrong answer that looks like a right one is
-invisible in the response, in your logs, and in the bill.
-
-`GET /v1/models` returns exactly what the caller can reach — your registry, minus models
-you have paused and models whose provider pool is gone. A team isolated from the shared
-pool sees only the providers it brought keys for. The list is derived from the same code
-that routes, so it can never advertise a model the gateway would refuse.
-
-`kinetic-nexus-1` and `nexus` remain accepted aliases for the auto-route entry.
-
-**Streaming** (`"stream": true`) is fully supported — server-sent events pass through from the upstream provider with no buffering.
-
-</details>
-
-<details>
-<summary><b>Admin routes</b></summary>
-
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/admin/nexus/summary` | Provider pool overview (active / cooling / banned counts) |
-| `GET` | `/admin/providers` | Full list of provider pools |
-| `POST` | `/admin/providers` | Create a provider pool |
-| `POST` | `/admin/providers/:providerId/keys` | Add an API key to a pool (`ownerTeamId` makes it private to a team — BYOK) |
-| `POST` | `/admin/keys/:id/test` | Test a key and check latency |
-| `POST` | `/admin/keys/:id/ban` | Ban a key from rotation |
-| `GET` | `/admin/keys/:id/metrics` | Live RPM and status for a key |
-| `GET` | `/admin/models` | List model registry |
-| `PUT` | `/admin/models` | Add or update a model in the registry |
-| `GET` | `/admin/teams` | List teams with key counts and current-period spend |
-| `POST` | `/admin/teams` | Create a team (name, budget cap + period, status) |
-| `PATCH` | `/admin/teams/:id` | Update a team (budget, status, tier, `byokFallback`) |
-| `DELETE` | `/admin/teams/:id` | Delete a team (access keys survive unassigned; **owned provider keys are deleted**) |
-| `GET` | `/admin/team-keys` | List team keys |
-| `POST` | `/admin/team-keys` | Issue a new team key (optionally assigned to a team) |
-| `PATCH` | `/admin/team-keys/:id` | Assign or unassign a key's team |
-| `GET` | `/admin/usage` | Usage totals for a period |
-| `GET` | `/admin/usage/by-team-key` | Usage breakdown by team key |
-| `GET` | `/admin/analytics/timeseries/teams` | Daily time series by team |
-| `GET` | `/admin/analytics/timeseries/models` | Daily time series by model |
-
-All admin routes require `Authorization: Bearer <token>` — a session token from `POST /admin/login`,
-or an admin API token for scripts and CI. On a gateway that has not been claimed yet, the raw
-`ADMIN_PASSWORD` is still accepted, exactly as it was before Phase 7.13a; creating an owner account
-closes that door. See [Accounts and roles](#accounts-and-roles).
-
-</details>
+---
 
 ## Dashboard
 
@@ -1309,7 +832,7 @@ node --require @opentelemetry/auto-instrumentations-node/register dist/server.js
 | Layer | Implementation |
 |---|---|
 | **Key encryption** | AES-256-GCM with a per-deployment `MASTER_ENCRYPTION_KEY`; plaintext keys never touch the database |
-| **Admin authentication** | Per-person accounts; email and password exchanged at `/admin/login` for a short-lived session token; optional per-user TOTP second factor; per-source lockout after repeated failures (see below) |
+| **Admin authentication** | Per-person accounts; email and password exchanged at `/admin/login` for a short-lived session token; optional per-user TOTP second factor; per-source lockout after repeated failures ([details](docs/security.md)) |
 | **Password hashing** | scrypt (memory-hard), per-user salt, cost parameters stored with the digest. The only human-chosen secret the gateway stores |
 | **Constant-time secrets** | The admin password and the metrics token are compared with `crypto.timingSafeEqual` over fixed-width digests, so rejection latency reveals nothing about the secret |
 | **Nexus API key hashing** | SHA-256; shown once when generated or rotated, never stored in the clear and never displayable again |
@@ -1317,176 +840,20 @@ node --require @opentelemetry/auto-instrumentations-node/register dist/server.js
 | **Audit attribution** | Every state-changing admin action records the account that performed it, by name — copied onto the record, so it outlives the account |
 | **HTTP hardening** | Fastify Helmet — `X-Frame-Options`, `X-Content-Type-Options`, HSTS, CSP headers |
 | **CORS** | Configurable origin allowlist |
-| **SSRF protection** | Outbound provider requests are restricted to http(s) **and** blocked from private/loopback/internal hosts by default (see below) |
+| **SSRF protection** | Outbound provider requests are restricted to http(s) **and** blocked from private/loopback/internal hosts by default ([details](docs/security.md)) |
 | **No telemetry** | Zero outbound calls to Alayra Systems or any third party. All data stays in your infrastructure |
 
 ### Accounts and roles
 
-The gateway has **accounts**. Everyone who administers it signs in as themselves, with their own
-email, password and second factor — so the audit trail records **who** did each thing, and one person
-can be removed without disturbing anyone else.
+Accounts, the three roles, invites, single sign-on, recovery, two-factor authentication and lockout — plus SSRF protection and the optional content guardrails.
 
-**First run.** A fresh gateway has no accounts, so the dashboard opens on a setup screen. It asks for
-`ADMIN_PASSWORD` from your server's environment: that is the proof you are the person who installed
-this gateway rather than the first stranger to find the port. You create the owner account, and are
-handed a **recovery key** — shown once, and the way back if you forget your password.
-
-After that, `ADMIN_PASSWORD` is **refused as a sign-in**. It keeps two jobs: claiming a fresh
-gateway, and authorising a full reset. Everything else goes through an account.
-
-> [!NOTE]
-> **Upgrading changes nothing until you choose.** On a gateway that has not been claimed, sign-in
-> behaves exactly as it did before: `ADMIN_PASSWORD`, and the second factor if you enrolled one. When
-> you claim, your existing authenticator and unused recovery codes **carry over** to your new account
-> — nothing to set up again.
-
-**Three roles.**
-
-| Role | Can |
-|---|---|
-| **Owner** | Everything, including managing people, single sign-on, compliance/retention, the master API key, and resetting the gateway. |
-| **Admin** | Run the gateway day to day: provider pools, keys, models, teams, caching, routing, guardrails. Cannot manage people or edit the controls that constrain admins (SSRF policy, arbitrary settings). |
-| **Viewer** | Read-only. Every mutation is refused. |
-
-**Invites** are links, not emails: an owner creates one and hands it over however they like (email
-delivery is optional in this gateway, so an email-only invite would be a flow that silently never
-works for most deployments). Each works once, expires after 7 days, and the invitee chooses their own
-password — the owner never learns it.
-
-**Removing someone** revokes the admin API tokens they created and kills their sessions on the next
-request. What they did stays in the audit trail under their name: a record of who did what has to
-outlive the account.
-
-**Single sign-on** provisions an account from the `email` claim on first sign-in. The claim's role
-applies only to a *new* account — for one that already exists, what an owner set in the Users tab
-wins, so an identity provider's groups cannot silently re-promote someone.
-
-**Locked out?** Your **recovery key** resets a forgotten password. Your **recovery codes** stand in
-for a lost authenticator. Lose both, and the documented way back is a full reset of the gateway,
-which erases everything in it.
-
-<details>
-<summary><b>Admin authentication — sessions, 2FA, lockout</b></summary>
-
-
-Signing in `POST`s your email and password (and, once enrolled, an authenticator code) to
-`/admin/login` and receives a **session token**. The dashboard stores only that token;
-your password is never written to browser storage.
-
-Passwords are stored with **scrypt** — memory-hard, per-user salt, cost parameters kept with the
-digest so they can be raised later without invalidating anyone. It is the only human-chosen secret
-the gateway stores; every other credential here is a high-entropy value the gateway generates and
-keeps only as a hash.
-
-**Two-factor authentication (TOTP)** is optional, off by default, and **each person's own** — it used
-to be a single secret for the whole gateway, shared by everyone who knew the password. Enable it from
-**Security → Sign-in**, or via the API:
-
-```bash
-
-</details>
-
-# 1. Enrol — returns a secret and an otpauth:// URI for your authenticator app
-curl -X POST -H "Authorization: Bearer $TOKEN" http://localhost:3000/admin/auth/totp/enrol
-
-# 2. Confirm with a code from the app — returns 10 single-use recovery codes
-curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"code":"123456"}' http://localhost:3000/admin/auth/totp/confirm
-```
-
-Enrolment does not take effect until a code confirms it, so an abandoned enrolment
-can never lock you out. Recovery codes are shown once and stored only as hashes; any
-one of them may be used in place of an authenticator code.
-
-> [!IMPORTANT]
-> **`ADMIN_PASSWORD` stops working as a bearer token on `/admin/*`** once you claim the gateway, or
-> once 2FA is enabled — whichever comes first. Both have to close that door: a password that still
-> authenticated API calls would bypass the second factor entirely, and would put the audit trail back
-> to saying "password" instead of a name. Use a session token, or an **admin API token** for scripts
-> and CI:
->
-> ```bash
-> curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
->   -d '{"name":"ci"}' http://localhost:3000/admin/tokens
-> ```
->
-> Admin API tokens are hashed, listed, and revocable, and are not subject to the
-> second factor — treat them as the credential they are. Before 2FA is enabled, the
-> password keeps working as a bearer token exactly as before, so upgrading changes
-> nothing.
-
-**Lockout.** After `ADMIN_MAX_LOGIN_ATTEMPTS` (default 5) failed sign-ins, the source
-address is locked out for `ADMIN_LOCKOUT_SECONDS` (default 900) and receives `429`
-with `Retry-After` — including for a correct password. A wrong password and a wrong
-authenticator code are indistinguishable in the response, so the login form cannot be
-used as a password oracle. `nexus_admin_login_total{result}` tracks
-success / invalid / totp_required / locked_out.
-
-<details>
-<summary><b>SSRF protection</b></summary>
-
-
-Because the gateway makes outbound calls to operator-configured provider base URLs, an
-unrestricted URL could be pointed at internal-only addresses — cloud metadata
-(`169.254.169.254`), loopback admin panels, or private LAN hosts — turning Nexus into a
-proxy into your own network. To prevent that, **Nexus blocks private, loopback, and
-link-local hosts by default** on every path that adds or uses a provider URL. A blocked
-URL is rejected when you save the provider, so it never reaches the request path.
-
-Running a **local model** (Ollama, LM Studio, a private gateway)? Allow just that host:
-
-- **In the dashboard:** *Settings → Network security* — tick "Allow private / localhost"
-  to disable blocking on a trusted network, or add specific hosts (e.g. `localhost:11434`)
-  to the allowlist.
-- **Via environment** (baseline the dashboard builds on):
-  ```bash
-  # allow a specific local provider without disabling blocking:
-  SSRF_ALLOWLIST=localhost:11434,127.0.0.1:11434
-  # or, on a fully trusted network, disable private-host blocking entirely:
-  SSRF_ALLOW_PRIVATE=true
-  ```
-
-Allowlist entries are `host` or `host:port` (a bare host permits any port). The env values
-form a read-only baseline; hosts added in the dashboard are merged on top.
-
-</details>
-
-<details>
-<summary><b>Content guardrails (optional)</b></summary>
-
-
-Guardrails are an **opt-in** content filter for prompts and responses — redact PII, or
-block banned content and prompt-injection patterns. They are **off by default**; a fresh
-deployment filters nothing until you enable them under *Settings → Content guardrails* (or
-via `GUARDRAILS_*` env vars). Nexus hard-codes no policy — you bring the rules:
-
-```jsonc
-// each rule: name, pattern (regex), action (block|redact),
-// appliesTo (input|output|both, default both), optional replacement
-[
-  { "name": "email", "pattern": "[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}", "action": "redact", "replacement": "[REDACTED_EMAIL]" },
-  { "name": "injection", "pattern": "ignore (?:all |the )?previous instructions", "action": "block", "appliesTo": "input" }
-]
-```
-
-Named presets you can copy as starting points: `email`, `us-phone`, `credit-card`, `ssn`,
-`api-key`, `prompt-injection`.
-
-- **Input filtering** runs on the admission path *before* the request is forwarded — a
-  `block` rule returns `400`, a `redact` rule masks the match and forwards the cleaned prompt.
-- **Output filtering** applies to **non-streaming** responses (block ⇒ the content is
-  withheld, redact ⇒ matches masked).
-- **Streaming + output rules:** the streaming path is intentionally zero-buffer for
-  latency, so a response can't be inspected mid-stream. By default streamed responses are
-  **input-filtered only** and carry an explicit `X-Nexus-Guardrails-Output: skipped-streaming`
-  header — never silently unfiltered. Enable **buffered-safe mode** to collect the response,
-  filter it, and replay it as a single chunk, trading the streaming latency win for inspection.
+**→ [docs/security.md](docs/security.md)**
 
 > [!WARNING]
 > Your `.env` file contains `MASTER_ENCRYPTION_KEY` and `ADMIN_PASSWORD`.  
 > Never commit it. This repository's `.gitignore` excludes `.env` by default.
 
-</details>
+---
 
 ## Roadmap
 

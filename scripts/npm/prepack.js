@@ -62,3 +62,15 @@ if (missing.length > 0) {
   console.error('\n✖  prepack: the build did not produce:\n   ' + missing.join('\n   ') + '\n');
   process.exit(1);
 }
+
+// The npm registry serves only the first 64 KB of the readme, and truncating it is not an error
+// anywhere — the publish succeeds and the package page simply stops mid-sentence. A unit test
+// guards this too, but this is the gate that matters: it is the last moment before the oversized
+// page becomes the public one.
+var NPM_README_LIMIT = 64 * 1024;
+var readmeBytes = fs.statSync(path.join(ROOT, 'README.md')).size;
+if (readmeBytes > NPM_README_LIMIT) {
+  console.error('\n✖  prepack: README.md is ' + readmeBytes + ' bytes; npm renders only the first '
+    + NPM_README_LIMIT + '.\n   Move a section into docs/ and link to it.\n');
+  process.exit(1);
+}

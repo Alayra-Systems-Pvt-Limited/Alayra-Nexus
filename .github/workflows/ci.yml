@@ -29,6 +29,12 @@ jobs:
       # the first would leave every engine-parity check unable to load its other half.
       - run: npm run db:generate
       - run: npm run lint
+      # The README's provider table is the most load-bearing claim we publish, and it is generated
+      # from the dated evidence in docs/provider-verification/. This cannot re-measure anything —
+      # that needs live keys and money — but it can prove the public table still says what the
+      # evidence says, which is the half that used to be a person remembering to retype a tick.
+      - name: Check the README provider table matches the committed evidence
+        run: npm run docs:providers -- --check
 
   typecheck:
     name: Typecheck

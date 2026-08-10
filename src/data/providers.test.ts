@@ -78,6 +78,37 @@ describe('the preset table', () => {
     }
   });
 
+  it('keeps the table notes short enough to be table cells', () => {
+    // billingNote and verifyNote render inside a README table cell. `note` is the field for prose;
+    // a paragraph in either of these makes a column wide enough to push the others off a phone.
+    for (const p of PROVIDER_PRESETS) {
+      for (const [field, text] of [['billingNote', p.billingNote], ['verifyNote', p.verifyNote]] as const) {
+        if (!text) continue;
+        expect(text.length, `${p.slug}'s ${field} belongs in \`note\` at ${text.length} chars`)
+          .toBeLessThanOrEqual(60);
+        expect(text, `${p.slug}'s ${field} reads as a sentence, not a cell`).not.toMatch(/\.$/);
+      }
+    }
+  });
+
+  it('only explains a verification that is not a completion', () => {
+    // verifyNote is rendered only for providers below 'chat'. Setting one on a chat-verified
+    // provider is dead data that reads, in the source, as though it were being published.
+    for (const p of PROVIDER_PRESETS) {
+      if (p.verified === 'chat') {
+        expect(p.verifyNote, `${p.slug} is chat-verified — its verifyNote is never rendered`).toBeUndefined();
+      }
+    }
+  });
+
+  it('explains Cerebras being models-only where a reader will see it', () => {
+    // "Model list only" says what happened, not whether it is the reader's problem. Cerebras works
+    // the moment the account is funded — very different from an endpoint that has moved.
+    const cerebras = presetFor('cerebras')!;
+    expect(cerebras.verified).toBe('models');
+    expect(cerebras.verifyNote).toMatch(/402|fund/i);
+  });
+
   it('keeps the bare sk- prefix out of the distinctive stamps', () => {
     // Every OpenAI-compatible provider copies `sk-` on purpose. Claiming it for anyone would make
     // the paste-check reject valid keys.
