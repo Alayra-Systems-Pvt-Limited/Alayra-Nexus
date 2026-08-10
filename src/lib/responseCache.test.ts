@@ -60,6 +60,32 @@ describe('responseCacheKey', () => {
     expect(responseCacheKey(base)).not.toBe(responseCacheKey({ ...base, max_tokens: 100 }));
   });
 
+  // The model used to be a constant in the key, which was correct only while there was
+  // exactly one thing a caller could ask for. Now that a request can pin a real model, a
+  // constant would collapse two models onto one entry and replay one's answer as the
+  // other's — the wrong content, with nothing in the response or the logs to show it.
+  describe('a pinned model is part of the identity', () => {
+    it('never lets two pinned models share an entry for an identical prompt', () => {
+      const gpt    = responseCacheKey(base, SHARED_NAMESPACE, 'gpt4o');
+      const sonnet = responseCacheKey(base, SHARED_NAMESPACE, 'sonnet');
+      expect(gpt).not.toBe(sonnet);
+    });
+
+    it('separates a pinned request from an auto-routed one', () => {
+      // "Answer me with gpt-4o" and "answer me with whatever you like" are different
+      // questions, even when the messages match.
+      expect(responseCacheKey(base, SHARED_NAMESPACE, 'gpt4o')).not.toBe(responseCacheKey(base));
+    });
+
+    it('leaves auto-routed keys exactly as they were, so existing entries still hit', () => {
+      expect(responseCacheKey(base, SHARED_NAMESPACE, null)).toBe(responseCacheKey(base));
+    });
+
+    it('keeps a pinned model inside its team namespace', () => {
+      expect(responseCacheKey(base, 'team:a', 'gpt4o')).not.toBe(responseCacheKey(base, 'team:b', 'gpt4o'));
+    });
+  });
+
   it('produces a hex digest and a namespaced Redis key', () => {
     const k = responseCacheKey(base);
     expect(k).toMatch(/^[0-9a-f]{64}$/);

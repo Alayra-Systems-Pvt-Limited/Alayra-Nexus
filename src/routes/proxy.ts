@@ -22,6 +22,8 @@ import type { CompletionsBody } from '../services/completionsProxy.service';
 import { anthropicToOpenAI } from '../lib/anthropic';
 import { createAnthropicReply } from '../lib/anthropicReply';
 import { dispatchProxy, embeddingReserve, completionReserve, imageReserve, imageQuantity, speechReserve, speechCharacters } from '../services/proxyDispatch.service';
+import { listServableModels } from '../services/modelCatalog.service';
+import { resolveRequestScope } from '../services/byok.service';
 
 export default async function proxyRoutes(fastify: FastifyInstance) {
   // Every route below, including any added later. onRequest runs BEFORE the verifyApiKey
@@ -107,14 +109,19 @@ export default async function proxyRoutes(fastify: FastifyInstance) {
     let fileBuf: Buffer | null = null;
     let fileName = 'audio';
     let fileType = 'application/octet-stream';
+    let clientModel = '';
     const fields: Record<string, string> = {};
     for await (const part of request.parts()) {
       if (part.type === 'file') {
         fileBuf  = await part.toBuffer();
         fileName = part.filename || fileName;
         fileType = part.mimetype || fileType;
-      } else if (part.fieldname !== 'model') {
-        // Drop the client's model — Nexus injects the routed one when it rebuilds the form.
+      } else if (part.fieldname === 'model') {
+        // Held back rather than forwarded — Nexus injects the model it ROUTED to when it
+        // rebuilds the form. It is still handed to the dispatcher, so a caller can pin a
+        // transcription model here exactly as they can on every other endpoint.
+        clientModel = String(part.value);
+      } else {
         fields[part.fieldname] = String(part.value);
       }
     }
@@ -122,7 +129,7 @@ export default async function proxyRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'multipart/form-data with a "file" part is required.' });
     }
     const audio = fileBuf;
-    return dispatchProxy({}, reply, {
+    return dispatchProxy({ model: clientModel }, reply, {
       capability: 'transcription', upstreamPath: '/audio/transcriptions', reserveTokens: 1,
       responseMode: 'binary',
       requestBuild: (model) => {
@@ -140,22 +147,36 @@ export default async function proxyRoutes(fastify: FastifyInstance) {
   // Model discovery. Returned as a superset that satisfies both an OpenAI client
   // (reads `object`/`data[].id`) and an Anthropic one such as Claude Code (reads
   // `data[].id`/`display_name` and the pagination fields), so one route serves both.
-  fastify.get('/v1/models', { preHandler: [verifyApiKey] }, async (_request, reply) => {
-    const now = Math.floor(Date.now() / 1000);
+  //
+  // The list is derived from the operator's registry, not hardcoded: the auto-route entry
+  // first, then every model this caller can actually be routed to. See
+  // modelCatalog.service — the same module resolves what a request may pin, so the listing
+  // and the router can never disagree about which models exist.
+  fastify.get('/v1/models', { preHandler: [verifyApiKey] }, async (request, reply) => {
+    const scope   = await resolveRequestScope(request.team);
+    const entries = await listServableModels(scope);
+    const now     = Math.floor(Date.now() / 1000);
+    const created = new Date().toISOString();
+
     return reply.send({
       object: 'list',
-      data: [{
-        id:           'alayra-nexus-1',
+      data: entries.map((m) => ({
+        id:           m.id,
         object:       'model',
         type:         'model',
         created:      now,
-        created_at:   new Date().toISOString(),
-        owned_by:     'alayra-nexus',
-        display_name: 'Alayra Nexus',
-      }],
+        created_at:   created,
+        // Attribution is the provider the model is served from, so a client can see that
+        // two similarly-named entries come from different pools. The auto entry is ours.
+        owned_by:     m.provider,
+        display_name: m.displayName,
+        ...(m.capabilities.length ? { capabilities: m.capabilities } : {}),
+        ...(m.contextWindow       ? { context_window: m.contextWindow } : {}),
+        ...(m.maxTokens           ? { max_tokens: m.maxTokens } : {}),
+      })),
       has_more: false,
-      first_id: 'alayra-nexus-1',
-      last_id:  'alayra-nexus-1',
+      first_id: entries[0]?.id ?? null,
+      last_id:  entries[entries.length - 1]?.id ?? null,
     });
   });
 }

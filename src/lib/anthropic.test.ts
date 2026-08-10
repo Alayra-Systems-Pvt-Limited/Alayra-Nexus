@@ -43,8 +43,17 @@ describe('anthropicToOpenAI — request', () => {
     expect((out.messages as unknown[])[0]).toEqual({ role: 'system', content: 'ab' });
   });
 
-  it('forces the canonical model regardless of what was requested', () => {
-    expect(anthropicToOpenAI({ model: 'claude-opus-4-8', messages: [] }).model).toBe(CANONICAL_MODEL);
+  // This used to assert the opposite — that the requested model was overwritten with the
+  // canonical id — which is why an Anthropic-SDK caller could never reach a specific model
+  // however it was configured. Carrying the value through is the whole point: resolution
+  // happens once, downstream, for every endpoint (see modelCatalog.service).
+  it('carries the requested model through to the OpenAI body', () => {
+    expect(anthropicToOpenAI({ model: 'claude-opus-4-8', messages: [] }).model).toBe('claude-opus-4-8');
+  });
+
+  it('falls back to the auto-route model when the client sent none', () => {
+    expect(anthropicToOpenAI({ messages: [] }).model).toBe(CANONICAL_MODEL);
+    expect(anthropicToOpenAI({ model: '   ', messages: [] }).model).toBe(CANONICAL_MODEL);
   });
 
   it('carries generation params and maps stop_sequences → stop', () => {
@@ -175,6 +184,36 @@ describe('AnthropicStreamTranslator — text', () => {
     expect((events[5].data.delta as Record<string, unknown>).stop_reason).toBe('end_turn');
     // message_start announces an assistant message with the model
     expect((events[0].data.message as Record<string, unknown>).role).toBe('assistant');
+  });
+
+  // Routing happens after the translator is constructed, so the model that actually served
+  // the request is named later, from the response head.
+  describe('setModel', () => {
+    it('names the routed model in message_start', () => {
+      const t = new AnthropicStreamTranslator();
+      t.setModel('claude-sonnet-4-5');
+      const sse = t.push(oaiChunk({ choices: [{ delta: { content: 'hi' } }] }));
+      const start = parseSse(sse).find(e => e.event === 'message_start');
+      expect((start!.data.message as Record<string, unknown>).model).toBe('claude-sonnet-4-5');
+    });
+
+    it('yields to the model the upstream names in its own chunk', () => {
+      // The provider's answer is the accurate one — it knows the dated variant it actually
+      // ran. This is only a fallback for providers that omit `model` from their SSE.
+      const t = new AnthropicStreamTranslator();
+      t.setModel('gpt-4o');
+      const sse = t.push(oaiChunk({ model: 'gpt-4o-2024-08-06', choices: [{ delta: { content: 'hi' } }] }));
+      const start = parseSse(sse).find(e => e.event === 'message_start');
+      expect((start!.data.message as Record<string, unknown>).model).toBe('gpt-4o-2024-08-06');
+    });
+
+    it('ignores an empty model rather than blanking the name', () => {
+      const t = new AnthropicStreamTranslator();
+      t.setModel('');
+      const sse = t.push(oaiChunk({ choices: [{ delta: { content: 'hi' } }] }));
+      const start = parseSse(sse).find(e => e.event === 'message_start');
+      expect((start!.data.message as Record<string, unknown>).model).toBe(CANONICAL_MODEL);
+    });
   });
 
   it('buffers a partial SSE line split across two pushes', () => {

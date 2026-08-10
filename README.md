@@ -786,7 +786,10 @@ claude
 ```
 
 Requests route through the same pool, failover, budgets, and analytics as everything
-else. On startup Claude Code reads `GET /v1/models` to populate its model picker.
+else. On startup Claude Code reads `GET /v1/models` to populate its model picker — which
+now lists **your** configured models alongside the `alayra-nexus-1` auto-route entry, so
+you can pick a specific one from inside the client or leave it on auto and let Nexus
+choose.
 
 ### Cursor
 Settings → **Models** → enable **OpenAI API Key**, paste your team key, tick **Override OpenAI Base URL** and set it to `http://<your-host>:3000/v1`. Add a custom model named `alayra-nexus-1`.
@@ -1157,7 +1160,23 @@ curl http://localhost:3000/v1/chat/completions \
   }'
 ```
 
-`alayra-nexus-1` routes to your highest-priority active pool. You can also specify an exact model string (`claude-3-5-sonnet-20241022`, `gpt-4o`, etc.) to target a specific provider directly.
+**Choosing a model.** There are two ways to send `model`, and `GET /v1/models` lists both:
+
+| Send | What happens |
+| --- | --- |
+| `alayra-nexus-1`, `auto`, `default`, or nothing | Nexus routes for you — tier, then priority, then cost — and fails over across every configured model and key. This is what the gateway is for. |
+| A model id or model string from `/v1/models` (`gpt-4o`, `claude-sonnet-4-5`, …) | Pinned to that model. Nexus still rotates and fails over across **that provider's keys**, but will not answer with a different model. |
+
+Anything else is a `400` that names the models this gateway does serve. Nexus never
+substitutes a model you did not ask for: a wrong answer that looks like a right one is
+invisible in the response, in your logs, and in the bill.
+
+`GET /v1/models` returns exactly what the caller can reach — your registry, minus models
+you have paused and models whose provider pool is gone. A team isolated from the shared
+pool sees only the providers it brought keys for. The list is derived from the same code
+that routes, so it can never advertise a model the gateway would refuse.
+
+`kinetic-nexus-1` and `nexus` remain accepted aliases for the auto-route entry.
 
 **Streaming** (`"stream": true`) is fully supported — server-sent events pass through from the upstream provider with no buffering.
 

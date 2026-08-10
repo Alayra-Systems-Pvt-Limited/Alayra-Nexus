@@ -20,6 +20,10 @@ import type { FastifyReply } from 'fastify';
 const h = vi.hoisted(() => ({
   route: null as null | Record<string, unknown>,
   fetchImpl: null as null | ((url: string, init: Record<string, unknown>) => Promise<unknown>),
+  // What model resolution returns for these tests. Resolution itself reads the registry and
+  // the pool table, and is tested against those in modelCatalog.service.test.ts; here the
+  // subject is dispatch, so the answer is injected rather than derived.
+  resolution: { kind: 'auto' } as Record<string, unknown>,
 }));
 
 vi.mock('./nexus.service', () => ({
@@ -37,6 +41,10 @@ vi.mock('../lib/url',       () => ({ assertSafeUrl: vi.fn(() => {}), stripTraili
 vi.mock('./ssrf.service',   () => ({ getSsrfPolicy: vi.fn(async () => ({})) }));
 vi.mock('./byok.service',   () => ({ resolveRequestScope: vi.fn(async () => ({ ownerTeamId: null, fallbackToShared: true, namespace: 'shared' })) }));
 vi.mock('./budget.service', () => ({ checkTeamBudget: vi.fn(async () => ({ allowed: true })) }));
+vi.mock('./modelCatalog.service', () => ({
+  resolveRequestedModel: vi.fn(async () => h.resolution),
+  unknownModelError: (r: { requested: string; available: string[] }) => ({ error: `Unknown model "${r.requested}".`, available: r.available }),
+}));
 
 import { dispatchProxy, embeddingReserve, completionReserve, extractTokenUsage, imageReserve, imageQuantity, speechReserve, speechCharacters } from './proxyDispatch.service';
 import * as nexus from './nexus.service';
@@ -76,6 +84,9 @@ beforeEach(() => {
   // racy test does not fail with a DIFFERENT wrong answer each time. It fails in ~20ms, so nothing
   // about it was ever a timing problem.
   h.fetchImpl = null;
+  // Same reason as the fetch stub above: the model-pinning cases below assign this, and a
+  // leaked `pinned` would silently change the routing arguments every later test asserts.
+  h.resolution = { kind: 'auto' };
   lastFetch = null;
   globalThis.fetch = vi.fn(async (url: string, init: Record<string, unknown>) => {
     lastFetch = { url, init };
@@ -190,11 +201,11 @@ describe('dispatchProxy — per-image billing (Phase 6.3b)', () => {
 describe('dispatchProxy — success', () => {
   it('forwards to the provider path with the routed model, dropping any stream flag', async () => {
     const { reply, state } = fakeReply();
-    await dispatchProxy({ input: 'hi', model: 'whatever', stream: true }, reply, { capability: 'embedding', upstreamPath: '/embeddings', reserveTokens: 3 });
+    await dispatchProxy({ input: 'hi', model: 'auto', stream: true }, reply, { capability: 'embedding', upstreamPath: '/embeddings', reserveTokens: 3 });
 
     expect(lastFetch!.url).toBe('https://api.example.com/v1/embeddings');
     const body = JSON.parse(lastFetch!.init.body as string);
-    expect(body.model).toBe('text-embed-3');   // routed model, not "whatever"
+    expect(body.model).toBe('text-embed-3');   // routed model, not the caller's "auto"
     expect(body.stream).toBeUndefined();        // one-shot
     expect(state.status).toBe(200);
     expect(state.headers['X-Nexus-Model']).toBe('text-embed-3');
@@ -266,6 +277,39 @@ describe('dispatchProxy — failures feed the breaker', () => {
     });
     expect(state.status).toBe(200); // served, not blocked
     // The team prefers "premium", but being over budget forces the cheapest tier for routing.
-    expect(nexus.discoverBestPool).toHaveBeenLastCalledWith(3, null, expect.anything(), 'embedding', null, 'fast');
+    expect(nexus.discoverBestPool).toHaveBeenLastCalledWith(3, null, expect.anything(), 'embedding', null, 'fast', null);
+  });
+});
+
+describe('dispatchProxy — the caller may name a model', () => {
+  // These endpoints used to discard `model` outright, so an operator with several embedding
+  // models had no way to reach a particular one. Resolution is shared with the chat path.
+  it('routes to the model the caller pinned', async () => {
+    h.resolution = { kind: 'pinned', model: { id: 'embed-large' } };
+    const { reply, state } = fakeReply();
+    await dispatchProxy({ input: 'hi', model: 'embed-large' }, reply, { capability: 'embedding', upstreamPath: '/embeddings', reserveTokens: 3 });
+
+    expect(state.status).toBe(200);
+    expect(nexus.discoverBestPool).toHaveBeenLastCalledWith(3, null, expect.anything(), 'embedding', null, null, 'embed-large');
+  });
+
+  it('400s a model this gateway cannot serve, rather than quietly serving another', async () => {
+    h.resolution = { kind: 'unknown', requested: 'not-a-model', available: ['alayra-nexus-1', 'embed'] };
+    const { reply, state } = fakeReply();
+    await dispatchProxy({ input: 'hi', model: 'not-a-model' }, reply, { capability: 'embedding', upstreamPath: '/embeddings', reserveTokens: 3 });
+
+    expect(state.status).toBe(400);
+    expect((state.sent as { error: string }).error).toContain('not-a-model');
+    expect(nexus.discoverBestPool).not.toHaveBeenCalled();
+  });
+
+  it('names the pinned model in the 503 when its provider has no headroom', async () => {
+    h.resolution = { kind: 'pinned', model: { id: 'embed-large' } };
+    h.route = null;
+    const { reply, state } = fakeReply();
+    await dispatchProxy({ input: 'hi', model: 'embed-large' }, reply, { capability: 'embedding', upstreamPath: '/embeddings', reserveTokens: 3 });
+
+    expect(state.status).toBe(503);
+    expect((state.sent as { error: string }).error).toContain('embed-large');
   });
 });

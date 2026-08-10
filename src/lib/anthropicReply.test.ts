@@ -111,4 +111,31 @@ describe('createAnthropicReply — streaming', () => {
     wrap.raw.end();
     expect(state.head).toMatchObject({ status: 200, headers: { 'X-Nexus-Model': 'alayra-nexus-1' } });
   });
+
+  // When a provider omits `model` from its SSE chunks, a streamed reply used to report
+  // `alayra-nexus-1` — telling a client that pinned a real model nothing about what served
+  // it. Routing runs after the translator is built, so the model arrives with the head.
+  it('reports the routed model when the upstream chunks do not name one', () => {
+    const { reply, state } = fakeReply();
+    const { reply: wrap } = createAnthropicReply(reply);
+    wrap.hijack();
+    wrap.raw.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'X-Nexus-Model': 'claude-sonnet-4-5' });
+    wrap.raw.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Hi' } }] })}\n\n`);
+    wrap.raw.end();
+
+    const start = parseSse(state.raw).find(e => e.event === 'message_start');
+    expect((start!.data.message as Record<string, unknown>).model).toBe('claude-sonnet-4-5');
+  });
+
+  it('still names the auto-route model when no header said otherwise', () => {
+    const { reply, state } = fakeReply();
+    const { reply: wrap } = createAnthropicReply(reply);
+    wrap.hijack();
+    wrap.raw.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
+    wrap.raw.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Hi' } }] })}\n\n`);
+    wrap.raw.end();
+
+    const start = parseSse(state.raw).find(e => e.event === 'message_start');
+    expect((start!.data.message as Record<string, unknown>).model).toBe('alayra-nexus-1');
+  });
 });

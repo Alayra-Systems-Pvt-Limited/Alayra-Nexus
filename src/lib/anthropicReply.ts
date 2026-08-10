@@ -43,7 +43,17 @@ export function createAnthropicReply(real: FastifyReply): AnthropicReply {
 
   const raw: RawSink = {
     // Same SSE headers; the event framing inside is what differs.
-    writeHead(code, headers) { real.raw.writeHead(code, headers); },
+    //
+    // The head is also where the translator learns which model Nexus routed to. handleProxy
+    // writes `X-Nexus-Model` here, before the first chunk, which is the earliest point the
+    // model is known — the translator is built before routing has run. The upstream's own
+    // name still wins when its chunks carry one; this covers the providers that omit it,
+    // where the reply used to name the virtual model and nothing else.
+    writeHead(code, headers) {
+      const served = headers?.['X-Nexus-Model'];
+      if (typeof served === 'string') translator.setModel(served);
+      real.raw.writeHead(code, headers);
+    },
     write(chunk) { real.raw.write(translator.push(chunk.toString())); },
     end() { real.raw.write(translator.end()); real.raw.end(); },
   };
