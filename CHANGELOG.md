@@ -71,6 +71,19 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   human decides whether the table or the world is wrong. Dated evidence is committed under
   `docs/provider-verification/`, with account-scoped URLs recorded as placeholders.
 
+- **Provider pools and teams are tested at the HTTP layer.** Neither route file had a single test,
+  which is exactly how a dependency bump got close to shipping a `PATCH` that reset a pool's
+  `authHeader` and un-suspended a suspended team. 79 tests now drive both files through a real
+  Fastify: who is refused, which fields reach the database, and what comes back.
+
+  Six invariants that were carried only by a comment are now carried by a test — that
+  `/admin/team-keys/:id/reveal` takes the *write* guard despite being a `GET`, because it hands
+  back a live credential; that deleting a provider pool clears its models only when no sibling pool
+  of the same provider is still serving; that the pool row is read before it is deleted, since
+  afterwards its slug is unknowable; that an empty `extraHeaders` object means *clear them* rather
+  than store `"{}"`; that the owned-key count is taken before the team is destroyed; and that the
+  plaintext of a new access key is returned once and never stored.
+
 - **`npm run gate:e2e`** walks the whole path a new operator walks — create a pool from a preset, add
   a real key, fetch models, save one with its provenance, send a request through
   `/v1/chat/completions`, and confirm the cost lands in analytics — against a running gateway. The
