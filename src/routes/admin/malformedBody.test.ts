@@ -33,7 +33,10 @@ import { readFileSync, readdirSync } from 'fs';
 import { join }                      from 'path';
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
 
-/** Who is knocking. Owner throughout — authority is guard.test.ts's subject, not this file's. */
+/**
+ * Who is knocking. Owner for the cases below, and varied by the last describe in this file —
+ * because who may see a validation error is part of what a validation error is allowed to say.
+ */
 let role: string | null = 'owner';
 
 vi.mock('../../middleware/auth.middleware', () => ({
@@ -230,6 +233,48 @@ describe.each(CASES)('$method $url — $what', (c) => {
       expect(res.body).not.toContain(c.secret);
     });
   }
+});
+
+// ── Who is allowed to be told any of this ─────────────────────────────────────────────────────
+//
+// The 400 above is descriptive on purpose: it names fields, and across a handful of bad requests
+// it describes the schema. That is the right answer for someone entitled to send the body, and the
+// wrong answer for anyone else — so the authority check has to come first, and be seen to.
+//
+// Fastify runs `preHandler` before the route handler, so this holds by construction rather than by
+// anyone remembering it. It is asserted anyway, because "by construction" is exactly the kind of
+// claim that stops being true when a route is rewritten to validate in a hook.
+
+describe('a caller who may not send the body at all', () => {
+  const BAD = { method: 'POST' as const, url: '/admin/teams', payload: { budgetPeriod: 'fortnightly' } };
+
+  it('is refused for being unauthenticated, not for the body', async () => {
+    role = null;
+    const res = await app.inject(BAD);
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).not.toHaveProperty('details');
+    expect(writes.teamCreate).not.toHaveBeenCalled();
+  });
+
+  it('is refused for lacking authority, not for the body', async () => {
+    // A viewer must not be able to map the schema by posting rubbish at it and reading the answer.
+    role = 'viewer';
+    const res = await app.inject(BAD);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).not.toHaveProperty('details');
+    expect(writes.teamCreate).not.toHaveBeenCalled();
+  });
+
+  it('is told which fields are wrong once it is an admin', async () => {
+    // The other direction, so the two tests above are about authority and not about the fixture.
+    role = 'admin';
+    const res = await app.inject(BAD);
+
+    expect(res.statusCode).toBe(400);
+    expect((res.json() as { details: unknown[] }).details.length).toBeGreaterThan(0);
+  });
 });
 
 // ── The bodies that are not objects at all ────────────────────────────────────────────────────
