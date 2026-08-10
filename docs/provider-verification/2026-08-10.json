@@ -1,0 +1,285 @@
+{
+  "generatedAt": "2026-08-10T08:05:02.732Z",
+  "note": "Produced by `npm run verify:providers` against live provider APIs. Never edited by hand.",
+  "summary": {
+    "measured": 7,
+    "chatVerified": 6,
+    "drifted": 0
+  },
+  "results": [
+    {
+      "slug": "openai",
+      "label": "OpenAI",
+      "status": "skipped",
+      "claimed": null,
+      "drift": false,
+      "pricingClaimed": false,
+      "notes": [
+        "no PROVIDER_KEY_OPENAI in the environment"
+      ]
+    },
+    {
+      "slug": "anthropic",
+      "label": "Anthropic",
+      "status": "skipped",
+      "claimed": null,
+      "drift": false,
+      "pricingClaimed": false,
+      "notes": [
+        "no PROVIDER_KEY_ANTHROPIC in the environment"
+      ]
+    },
+    {
+      "slug": "google",
+      "label": "Google",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": false,
+      "notes": [],
+      "modelsUrl": "https://generativelanguage.googleapis.com/v1beta/openai/models",
+      "modelCount": 59,
+      "sampleIds": [
+        "models/gemini-2.5-flash",
+        "models/gemini-2.5-pro",
+        "models/gemini-2.0-flash"
+      ],
+      "pricingPublished": false,
+      "chatAttempts": [
+        {
+          "model": "models/gemini-flash-lite-latest",
+          "ok": true
+        }
+      ],
+      "chatModel": "models/gemini-flash-lite-latest",
+      "chatModelEchoed": "models/gemini-flash-lite-latest",
+      "usage": {
+        "completion_tokens": 0,
+        "prompt_tokens": 2,
+        "total_tokens": 2
+      }
+    },
+    {
+      "slug": "groq",
+      "label": "Groq",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": true,
+      "notes": [],
+      "modelsUrl": "https://api.groq.com/openai/v1/models",
+      "modelCount": 15,
+      "sampleIds": [
+        "openai/gpt-oss-safeguard-20b",
+        "whisper-large-v3",
+        "llama-3.1-8b-instant"
+      ],
+      "pricingPublished": true,
+      "chatAttempts": [
+        {
+          "model": "llama-3.1-8b-instant",
+          "ok": true
+        }
+      ],
+      "chatModel": "llama-3.1-8b-instant",
+      "chatModelEchoed": "llama-3.1-8b-instant",
+      "usage": {
+        "queue_time": 0.005656463,
+        "prompt_tokens": 36,
+        "prompt_time": 0.002430081,
+        "completion_tokens": 1,
+        "completion_time": 0.003810484,
+        "total_tokens": 37,
+        "total_time": 0.006240565
+      }
+    },
+    {
+      "slug": "openrouter",
+      "label": "OpenRouter",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": true,
+      "notes": [],
+      "modelsUrl": "https://openrouter.ai/api/v1/models",
+      "modelCount": 400,
+      "sampleIds": [
+        "inclusionai/ling-3.0-tiny:free",
+        "meta/muse-spark-1.2",
+        "qwen/qwen3.8-max"
+      ],
+      "pricingPublished": true,
+      "chatAttempts": [
+        {
+          "model": "inclusionai/ling-3.0-tiny:free",
+          "ok": true
+        }
+      ],
+      "chatModel": "inclusionai/ling-3.0-tiny:free",
+      "chatModelEchoed": "inclusionai/ling-3.0-tiny:free",
+      "usage": {
+        "prompt_tokens": 21,
+        "completion_tokens": 1,
+        "total_tokens": 22,
+        "cost": 0,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0,
+          "upstream_inference_completions_cost": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "slug": "mistral",
+      "label": "Mistral",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": false,
+      "notes": [],
+      "modelsUrl": "https://api.mistral.ai/v1/models",
+      "modelCount": 53,
+      "sampleIds": [
+        "mistral-medium-2505",
+        "mistral-medium-2508",
+        "codestral-2508"
+      ],
+      "pricingPublished": false,
+      "chatAttempts": [
+        {
+          "model": "mistral-small-latest",
+          "ok": true
+        }
+      ],
+      "chatModel": "mistral-small-latest",
+      "chatModelEchoed": "mistral-small-latest",
+      "usage": {
+        "prompt_tokens": 16,
+        "total_tokens": 17,
+        "completion_tokens": 1,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "service_tier": "standard"
+      }
+    },
+    {
+      "slug": "huggingface",
+      "label": "HuggingFace",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": false,
+      "notes": [
+        "asked for \"deepseek-ai/DeepSeek-V4-Flash-0731\" and the response names \"accounts/fireworks/models/deepseek-v4-flash-0731\" — this provider routes to a host of its choosing, so the model that ran is not the model configured"
+      ],
+      "modelsUrl": "https://router.huggingface.co/v1/models",
+      "modelCount": 131,
+      "sampleIds": [
+        "deepseek-ai/DeepSeek-V4-Flash-0731",
+        "moonshotai/Kimi-K3",
+        "zai-org/GLM-5.2"
+      ],
+      "pricingPublished": false,
+      "chatAttempts": [
+        {
+          "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+          "ok": true
+        }
+      ],
+      "chatModel": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "chatModelEchoed": "accounts/fireworks/models/deepseek-v4-flash-0731",
+      "usage": {
+        "prompt_tokens": 5,
+        "total_tokens": 6,
+        "completion_tokens": 1,
+        "prompt_tokens_details": {
+          "cached_tokens": 4
+        }
+      }
+    },
+    {
+      "slug": "cloudflare",
+      "label": "Cloudflare Workers AI",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": false,
+      "notes": [],
+      "modelsUrl": "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/models/search",
+      "modelCount": 61,
+      "sampleIds": [
+        "@cf/pipecat-ai/smart-turn-v2",
+        "@cf/openai/gpt-oss-120b",
+        "@cf/baai/bge-m3"
+      ],
+      "pricingPublished": false,
+      "chatAttempts": [
+        {
+          "model": "@cf/meta/llama-3.2-3b-instruct",
+          "ok": true
+        }
+      ],
+      "chatModel": "@cf/meta/llama-3.2-3b-instruct",
+      "chatModelEchoed": "@cf/meta/llama-3.2-3b-instruct",
+      "usage": {
+        "prompt_tokens": 36,
+        "completion_tokens": 1,
+        "total_tokens": 37,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 0.1969597041606903
+      }
+    },
+    {
+      "slug": "cerebras",
+      "label": "Cerebras",
+      "status": "models",
+      "claimed": "models",
+      "drift": false,
+      "pricingClaimed": false,
+      "notes": [
+        "the model list works; 3 completion attempt(s) did not — see chatAttempts for what each model answered"
+      ],
+      "modelsUrl": "https://api.cerebras.ai/v1/models",
+      "modelCount": 3,
+      "sampleIds": [
+        "gemma-4-31b",
+        "zai-glm-4.7",
+        "gpt-oss-120b"
+      ],
+      "pricingPublished": false,
+      "chatAttempts": [
+        {
+          "model": "gpt-oss-120b",
+          "ok": false,
+          "error": "HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}"
+        },
+        {
+          "model": "gemma-4-31b",
+          "ok": false,
+          "error": "HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}"
+        },
+        {
+          "model": "zai-glm-4.7",
+          "ok": false,
+          "error": "HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}"
+        }
+      ],
+      "error": "HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}"
+    }
+  ]
+}

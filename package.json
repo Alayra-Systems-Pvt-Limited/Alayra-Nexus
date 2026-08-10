@@ -78,7 +78,9 @@
     "bench:cache": "tsx scripts/bench/cache.ts",
     "bench:guard": "tsx scripts/bench/guard.ts",
     "bench:failures": "tsx scripts/bench/failure.ts",
-    "bench:resources": "tsx scripts/bench/resources.ts"
+    "bench:resources": "tsx scripts/bench/resources.ts",
+    "verify:providers": "tsx scripts/verify-providers.ts",
+    "gate:e2e": "tsx scripts/release-gate.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",

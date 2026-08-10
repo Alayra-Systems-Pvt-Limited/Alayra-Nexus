@@ -29,8 +29,15 @@ function scratch(): string {
   return dir;
 }
 
+// The value test/setup.ts installed, captured before any test can overwrite it.
+const SUITE_DATA_DIR = process.env.NEXUS_DATA_DIR;
+
 afterEach(() => {
-  delete process.env.NEXUS_DATA_DIR;
+  // RESTORED, not deleted. Deleting it left every later test in this file writing to the process's
+  // real default data directory — which is how the suite came to overwrite a developer's actual
+  // .nexus/api-key.txt. Undoing a test's override must put back what was there, not nothing.
+  if (SUITE_DATA_DIR === undefined) delete process.env.NEXUS_DATA_DIR;
+  else process.env.NEXUS_DATA_DIR = SUITE_DATA_DIR;
   for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -105,5 +112,23 @@ describe('writeSecretFile', () => {
 
     writeSecretFile('api-key.txt', 'new');
     expect(statSync(path).mode & 0o777).toBe(0o600);
+  });
+});
+
+describe('the test suite cannot write into a real gateway data directory', () => {
+  it('has NEXUS_DATA_DIR pointed somewhere disposable', () => {
+    // The regression guard for real data loss, not a style rule.
+    //
+    // convertLegacyApiKey() writes the gateway's ONE retrievable copy of the master API key to
+    // <data dir>/api-key.txt, and its unit test drives it with a mocked settings store. With no
+    // NEXUS_DATA_DIR set, `npm test` on a machine that also runs a gateway overwrote that machine's
+    // real .nexus/api-key.txt with the fixture string 'legacykey0000…abcd'. The gateway keeps
+    // serving (only a hash is stored), but the operator's single chance to read their own key is
+    // destroyed silently. test/setup.ts now pins this to a temp directory; this fails if that is
+    // ever removed or weakened to a `??` that a developer's shell can win.
+    const dir = process.env.NEXUS_DATA_DIR;
+    expect(dir, 'test/setup.ts must set NEXUS_DATA_DIR').toBeTruthy();
+    expect(resolve(dir as string).startsWith(resolve(tmpdir()))).toBe(true);
+    expect(resolve(dir as string)).not.toBe(resolve(process.cwd(), '.nexus'));
   });
 });

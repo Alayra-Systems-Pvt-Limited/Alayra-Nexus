@@ -57,13 +57,27 @@ export function AddModelsDialog({ pool, existing, onClose, onAdded }: {
   const already   = new Set(existing.map((m) => m.modelString));
   const available = fetched.filter((m) => !already.has(m.id));
 
+  // How many of the CURRENT selection will land with no price at all.
+  //
+  // A model arrives priced only if its provider published a figure — OpenRouter and Groq do, most
+  // do not — and an unpriced model reports $0 for every request forever. The operator has to be
+  // told, but not one dialog at a time: selecting 40 OpenRouter models would mean 40 interruptions,
+  // and a prompt that fires that often stops being read. So it is one running count, shown while
+  // the selection can still be changed, and the per-model nag lives in the editor instead.
+  //
+  // `!== undefined`, not truthiness: a published 0 is a real price (OpenRouter's `:free` models).
+  const byId = new Map(fetched.map((m) => [m.id, m]));
+  const unpricedSelected = selected.filter((id) => {
+    const m = byId.get(id);
+    return m?.inputCostPer1M === undefined && m?.outputCostPer1M === undefined;
+  }).length;
+
   const submit = async (e: Event) => {
     e.preventDefault();
     if (!selected.length || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const byId = new Map(fetched.map((m) => [m.id, m]));
       const inputs: RegistryModelInput[] = selected.map((id) => {
         const m = byId.get(id);
         return {
@@ -119,6 +133,15 @@ export function AddModelsDialog({ pool, existing, onClose, onAdded }: {
             >
               <ModelPicker models={available} selected={selected} onChange={setSelected} />
             </Field>
+
+            {unpricedSelected > 0 && (
+              <FormNote>
+                <b>{unpricedSelected} of the {selected.length} selected</b> {unpricedSelected === 1 ? 'has' : 'have'} no
+                price from {pool.provider}. {unpricedSelected === 1 ? 'It' : 'They'} will route normally, but
+                report <b>$0</b> in Analytics until you set a price — each model row has a “No price” badge and an
+                editor for it.
+              </FormNote>
+            )}
           </>
         )}
 

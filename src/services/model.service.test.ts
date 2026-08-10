@@ -128,3 +128,55 @@ describe('removeModelsForProvider (Phase 7.17b)', () => {
     expect((await getModelRegistry())).toHaveLength(1);
   });
 });
+
+// ── Pricing provenance ────────────────────────────────────────────────────────
+describe('pricingSource inference (registry migration)', () => {
+  it('calls a model with no price anywhere unset', () => {
+    expect(normalizeModel({ id: 'a', modelString: 'a', provider: 'mistral' }).pricingSource).toBe('unset');
+  });
+
+  it('calls a pre-existing PRICED model manual, not unset', () => {
+    // The upgrade case. Guessing 'unset' here would make a model the operator priced months ago
+    // start warning, and drop it to last under cost-based routing — a silent routing change from
+    // a field addition.
+    expect(normalizeModel({ id: 'a', modelString: 'a', provider: 'openai', inputCostPer1M: 2.5 }).pricingSource).toBe('manual');
+    expect(normalizeModel({ id: 'b', modelString: 'b', provider: 'openai', imagePrice: 0.04 }).pricingSource).toBe('manual');
+    // The pre-per-1M format the cost helpers still tolerate counts too.
+    expect(normalizeModel({ id: 'c', modelString: 'c', provider: 'openai', inputPricePer1k: 0.003 }).pricingSource).toBe('manual');
+  });
+
+  it('keeps an explicitly stated source', () => {
+    expect(normalizeModel({ id: 'a', modelString: 'a', provider: 'openrouter', pricingSource: 'harvested' }).pricingSource).toBe('harvested');
+    expect(normalizeModel({ id: 'b', modelString: 'b', provider: 'openai', inputCostPer1M: 5, pricingSource: 'catalog' }).pricingSource).toBe('catalog');
+  });
+
+  it('ignores a bogus stated source and infers instead', () => {
+    expect(normalizeModel({ id: 'a', modelString: 'a', provider: 'x', pricingSource: 'nonsense' }).pricingSource).toBe('unset');
+  });
+});
+
+describe('getModelRegistry normalizes the cached copy too', () => {
+  it('fills in fields missing from a cache entry written by an older release', async () => {
+    // The cached value is whatever some process serialized earlier — possibly one running the
+    // PREVIOUS release, which had no pricingSource. Returned raw, an unpriced model would go on
+    // being treated as free by cost routing until the 60s TTL expired.
+    const { redis } = await import('../lib/redis');
+    (redis.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce(JSON.stringify([
+      { id: 'legacy', modelString: 'legacy', provider: 'mistral', displayName: 'Legacy', capabilities: ['chat'] },
+    ]));
+    clearRegistryMemo();
+
+    const models = await getModelRegistry();
+    expect(models[0].pricingSource).toBe('unset');
+    expect(models[0].tier).toBe('standard');   // every other normalized default landed too
+  });
+
+  it('falls through to the store when the cached value is not an array', async () => {
+    const { redis } = await import('../lib/redis');
+    (redis.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce('{"not":"an array"}');
+    seed([model('from-store', 'openai')]);
+
+    const models = await getModelRegistry();
+    expect(models.map((m) => m.id)).toEqual(['from-store']);
+  });
+});

@@ -66,12 +66,25 @@ export interface FetchedModel {
   contextWindow?: number;
 }
 
-/** Per-token price (string or number) → USD per 1M tokens, rounded to 6 decimals so
- *  `0.0000025 → 2.5` exactly rather than trailing float residue. Rejects the `-1` "dynamic
- *  pricing" and `0` "free" sentinels — the registry's unpriced default represents both. */
+/**
+ * Per-token price (string or number) → USD per 1M tokens, rounded to 6 decimals so
+ * `0.0000025 → 2.5` exactly rather than trailing float residue.
+ *
+ * A published `0` is KEPT, and that distinction matters. OpenRouter's `:free` models publish
+ * `pricing: { prompt: "0", completion: "0" }` — they are genuinely free, and that is a known
+ * price, not a missing one. This used to drop them alongside the `-1` "dynamic pricing" sentinel,
+ * on the reasoning that the registry's zero default represented both. It no longer does: a model
+ * now carries `pricingSource`, so a harvested 0 records as `harvested` (free, priced, routed
+ * normally) while an absent price records as `unset` (unknown, flagged, ranked last). Collapsing
+ * the two would have every free model on OpenRouter warn the operator forever and sink to the
+ * bottom of cost-based routing — and a warning that fires on healthy config is a warning people
+ * learn to ignore.
+ *
+ * `-1` still yields undefined: dynamic pricing is genuinely not a number we know.
+ */
 function per1M(raw: unknown): number | undefined {
   const n = typeof raw === 'string' || typeof raw === 'number' ? Number(raw) : NaN;
-  if (!Number.isFinite(n) || n <= 0) return undefined;
+  if (!Number.isFinite(n) || n < 0) return undefined;
   return Math.round(n * 1e6 * 1e6) / 1e6;
 }
 

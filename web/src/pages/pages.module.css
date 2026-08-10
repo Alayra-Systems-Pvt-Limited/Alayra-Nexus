@@ -99,7 +99,10 @@
 .modelList { display: flex; flex-direction: column; gap: 6px; }
 .modelItem { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); }
 .modelItemMain { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
-.modelItemName { font-family: var(--font-mono); font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Flex so a provenance badge can sit beside the id without breaking its ellipsis truncation:
+   the id itself takes the slack and shrinks, the badge keeps its size. */
+.modelItemName { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--text); min-width: 0; white-space: nowrap; }
+.modelItemName > :first-child { overflow: hidden; text-overflow: ellipsis; }
 .modelItemMeta { font-size: 11px; color: var(--subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modelItemActions { display: flex; gap: 4px; flex-shrink: 0; }
 .modelItemBtn { display: inline-flex; padding: 5px; border-radius: 6px; background: none; border: 1px solid transparent; color: var(--muted); cursor: pointer; }
@@ -149,6 +152,43 @@
 /* ── Edit-model dialog ── */
 .editAutofill { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .editAutofillNote { font-size: 11.5px; color: var(--muted); }
+/* A cross-provider fill: the number is real, but it is another vendor's number. */
+.editAutofillWarn { font-size: 11.5px; line-height: 1.5; color: var(--yellow); flex: 1 1 220px; }
+
+/* Save-time confirmation for a model nobody has priced. Deliberately not a nested modal — it sits
+   in the form, above the fields it is asking about, so "Set pricing" lands the operator on them. */
+.unpricedConfirm {
+  display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 14px; padding: 11px 12px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--yellow) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yellow) 35%, transparent);
+}
+.unpricedIcon { color: var(--yellow); flex: none; margin-top: 1px; }
+.unpricedBody { display: flex; flex-direction: column; gap: 3px; flex: 1 1 240px; font-size: 12.5px; line-height: 1.55; }
+.unpricedBody strong { color: var(--text); font-weight: 600; }
+.unpricedBody span { color: var(--muted); }
+.unpricedActions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+/* Analytics footnote: the totals above are a floor because some models contribute $0 by default. */
+.unpricedNotice {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin-top: 14px; padding: 11px 13px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--yellow) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yellow) 30%, transparent);
+  font-size: 12.5px; line-height: 1.6; color: var(--muted);
+}
+.unpricedNotice b { color: var(--text); }
+.unpricedNames { font-family: var(--font-mono); font-size: 11.5px; color: var(--subtle); }
+
+/* "No price" on a model row. Distinct from a model priced at zero, which is a fact, not a gap. */
+.unpricedBadge {
+  font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 20px;
+  background: var(--yellow-bg); color: var(--yellow); white-space: nowrap;
+}
+.estBadge {
+  font-size: 10.5px; padding: 1px 6px; border-radius: 20px;
+  background: var(--surface-2); color: var(--subtle); white-space: nowrap;
+}
 .capToggles { display: flex; flex-wrap: wrap; gap: 6px; }
 .capToggle { font-size: 11.5px; padding: 4px 10px; border-radius: 20px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); cursor: pointer; text-transform: capitalize; transition: all .12s var(--ease); }
 .capToggle:hover { border-color: var(--border-strong); color: var(--text); }

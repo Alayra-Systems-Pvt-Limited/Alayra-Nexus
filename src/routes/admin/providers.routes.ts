@@ -40,7 +40,13 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
   const providerSchema = z.object({
     name:           z.string().min(1),
     slug:           z.string().min(1).regex(/^[a-z0-9-]+$/),
-    provider:       z.enum(['anthropic', 'openai', 'google', 'groq', 'openrouter', 'custom']),
+    // A slug, not a member of a fixed list. The column is free text (schema.prisma), the transport
+    // is generic, and nothing downstream branches on the value — so the six-value enum this
+    // replaced was not protecting an invariant, it was a hardcoded guest list. It refused to create
+    // a Mistral or Cloudflare pool that the gateway can route perfectly well, with a 400 naming six
+    // providers and no way to proceed. The shape is still checked, because the slug reaches URLs
+    // and error strings.
+    provider:       z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, 'lowercase letters, digits and hyphens only'),
     tier:           z.enum(['premium', 'standard', 'fast']).default('standard'),
     preferredModel: z.string().optional(),
     baseUrl:        z.string().url().optional(),

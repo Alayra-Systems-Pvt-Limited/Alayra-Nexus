@@ -29,9 +29,21 @@
  * figure). Tolerates both the per-1k and per-1M registry formats. Returns null
  * when the model carries no pricing, so unpriced providers can be ranked last
  * without being treated as free.
+ *
+ * `pricingSource: 'unset'` is what actually carries "no pricing" for a registry
+ * model, and it has to be checked FIRST. normalizeModel writes every price field
+ * as a number defaulting to 0, so a stored model always has `inputCostPer1M`, and
+ * the field-presence test below can never fail for one — it would report an
+ * unpriced model as costing 0, i.e. the cheapest thing available, and cost-aware
+ * routing would try it before everything else. That was the behaviour until this
+ * check existed; the field-presence test only ever returned null for hand-built
+ * objects, which is why the unit tests covering it passed while production did
+ * the opposite. Objects with no `pricingSource` at all keep the old semantics, so
+ * callers passing a bare `{ inputCostPer1M }` are unaffected.
  */
 export function effectivePrice(model: Record<string, unknown> | undefined | null): number | null {
   if (!model) return null;
+  if (model.pricingSource === 'unset') return null;
   const i1k = model.inputPricePer1k  as number | undefined;
   const o1k = model.outputPricePer1k as number | undefined;
   const i1m = model.inputCostPer1M   as number | undefined;

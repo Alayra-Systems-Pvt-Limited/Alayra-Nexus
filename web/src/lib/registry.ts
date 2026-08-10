@@ -51,9 +51,22 @@ export async function addModelsToRegistry(
     const existing = mine.get(modelString);
     if (existing) {
       let changed = false;
-      if (priceWins(input.inputCostPer1M, existing.inputCostPer1M))  { existing.inputCostPer1M  = input.inputCostPer1M;  changed = true; }
-      if (priceWins(input.outputCostPer1M, existing.outputCostPer1M)) { existing.outputCostPer1M = input.outputCostPer1M; changed = true; }
+      let repriced = false;
+      if (priceWins(input.inputCostPer1M, existing.inputCostPer1M))  { existing.inputCostPer1M  = input.inputCostPer1M;  changed = true; repriced = true; }
+      if (priceWins(input.outputCostPer1M, existing.outputCostPer1M)) { existing.outputCostPer1M = input.outputCostPer1M; changed = true; repriced = true; }
       if (priceWins(input.contextWindow, existing.contextWindow))     { existing.contextWindow   = input.contextWindow;   changed = true; }
+      // Provenance, never downgrading 'manual': a refetch must not turn a figure the operator
+      // entered by hand into a harvested guess.
+      //
+      // The second clause matters on its own. `priceWins` only accepts a value ABOVE zero, so a
+      // model the provider publishes as free (price 0) never trips `repriced` — its stored 0 and
+      // its incoming 0 are equal. Without this, a free model added before provenance existed would
+      // stay flagged "No price" forever, and refetching, the obvious remedy, would not clear it.
+      const published = input.inputCostPer1M !== undefined || input.outputCostPer1M !== undefined;
+      if (existing.pricingSource !== 'manual' && (repriced || (published && existing.pricingSource === 'unset'))) {
+        if (existing.pricingSource !== 'harvested') changed = true;
+        existing.pricingSource = 'harvested';
+      }
       if (changed) updated += 1;
       continue;
     }
@@ -73,6 +86,16 @@ export async function addModelsToRegistry(
     if (input.inputCostPer1M !== undefined)  entry.inputCostPer1M  = input.inputCostPer1M;
     if (input.outputCostPer1M !== undefined) entry.outputCostPer1M = input.outputCostPer1M;
     if (input.contextWindow !== undefined)   entry.contextWindow   = input.contextWindow;
+    // Provenance, recorded at the only moment it is knowable. A provider that published a price
+    // (OpenRouter, Groq) leaves 'harvested'; one that published none leaves 'unset', which is what
+    // makes the model surface as unpriced instead of silently costing $0 for the rest of its life.
+    //
+    // The test is `!== undefined`, NOT truthiness: a published 0 is a real price. OpenRouter's
+    // `:free` models publish `{prompt:"0"}`, and treating that as missing would flag every one of
+    // them as unpriced and sink it in cost-based routing.
+    entry.pricingSource = (input.inputCostPer1M !== undefined || input.outputCostPer1M !== undefined)
+      ? 'harvested'
+      : 'unset';
     additions.push(entry);
     mine.set(modelString, entry as AiModel);
   }

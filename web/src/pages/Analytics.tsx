@@ -7,6 +7,7 @@ import type { AnalyticsOverview, AnalyticsPeriod } from '../api';
 import { CacheSavings } from './analytics/CacheSavings';
 import { ByModel, ByProvider, ByModality, ByOutcome } from './analytics/Breakdowns';
 import { DayTip, DAY_ACCENTS, type DayMetric } from './analytics/DayTip';
+import { UnpricedNotice } from './analytics/UnpricedNotice';
 import s from './pages.module.css';
 
 // P7.5: Analytics, live. One aggregate read per window (`/admin/analytics/overview?period=`) feeds
@@ -89,6 +90,8 @@ export function Analytics() {
         <StatCard label="Cache saved"  value={currency(totals.cacheSavedUsd)}     icon={<PiggyBank size={14} />}     tone="var(--green)"         sub={`${pct(totals.cacheHitRate)} hit rate`} />
         <StatCard label="Tokens"       value={compactNumber(totals.totalTokens)}  icon={<Coins size={14} />}         tone="var(--accent)"        sub="input + output" />
       </div>
+
+      <UnpricedNotice />
 
       <p class={s.dataNote}>
         Success, failure and latency are recorded from release v1.2.0 onward. Requests served before

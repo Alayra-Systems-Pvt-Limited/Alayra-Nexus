@@ -31,6 +31,52 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   A pin never falls through to the legacy pool-tier path, because that path substitutes each pool's
   own preferred model — which is precisely what a pin exists to forbid.
 
+- **A model now records where its price came from.** Every model carries `pricingSource`: `harvested`
+  from the provider's own model list, `catalog` from the bundled reference, `manual` if you typed it,
+  or `unset` when nobody knows. Until now a price of `0` meant both "free" and "unknown", and nothing
+  downstream could tell the two apart. Existing models keep working — a stored price is read as
+  `manual`, no migration required, since the registry is a JSON blob normalised on read.
+
+- **Unpriced models are visible instead of silent.** A "No price" badge on the model row; a two-line
+  confirmation before saving one, naming the provider and saying that its requests will report `$0`;
+  a running count when adding models in bulk instead of one dialog per model; and a banner on
+  Analytics when an active model has no price, so a total that is lower than the truth says so. All
+  of it warns and allows — a gateway that refuses to save until you invent a number is worse than one
+  that tells you what the number will cost you.
+
+- **Any provider is a first-class provider.** The six-value enum on `POST /admin/providers` and
+  `PUT /admin/models` is gone; a provider slug is validated for shape, not membership. It was never
+  protecting an invariant — the column is free text, the transport is generic, and nothing downstream
+  branches on the value — so all it did was refuse to create Mistral, HuggingFace, Cloudflare or
+  Cerebras pools that the gateway routes perfectly well, with a `400` naming six providers and no way
+  forward.
+
+- **Presets for ten providers, in one table.** `src/data/providers.ts` holds the base URL, auth
+  header and prefix, model-list endpoint, model-id path, extra headers, key prefixes and whether the
+  provider publishes prices — read by the gateway and imported directly by the dashboard. This
+  replaces four separate lists that each knew a different subset: the dashboard could seed a pool the
+  router had no default URL for, and the key-format check knew a provider the dashboard could not
+  offer. Presets are defaults, not a whitelist; a provider absent from the table is still first-class,
+  it just does not pre-fill.
+
+- **Cloudflare Workers AI works out of the box.** Its OpenAI-compatible base answers `/models` with a
+  `405` and its catalogue lives at a different endpoint shaped `result[].name`, which is what the
+  separate model-fetch URL and model-id path fields are for. Its URLs are account-scoped, so the
+  add-provider dialog asks for the account ID and substitutes it into both URLs, and refuses to save
+  a URL with the placeholder still in it — that pool would look configured and `404` on every request.
+
+- **`npm run verify:providers`** re-measures every preset against the live provider APIs using the
+  gateway's own header-building and response-parsing code, reports anything that contradicts the
+  preset table, and exits non-zero. Opt-in — it needs real keys — and it never edits the table: a
+  human decides whether the table or the world is wrong. Dated evidence is committed under
+  `docs/provider-verification/`, with account-scoped URLs recorded as placeholders.
+
+- **`npm run gate:e2e`** walks the whole path a new operator walks — create a pool from a preset, add
+  a real key, fetch models, save one with its provenance, send a request through
+  `/v1/chat/completions`, and confirm the cost lands in analytics — against a running gateway. The
+  cost step is the gate: a `200` proves routing, and a `$0` bill is indistinguishable from a cheap
+  one. Measured six providers end to end, including two the old enum would have refused.
+
 ### Fixed
 
 - **`"model": "auto"` works.** The dashboard's Quick Start has always told operators to send it, and
@@ -59,6 +105,51 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   client that had pinned a real model nothing about what served it. The routed model is now supplied
   as the fallback; a provider that names its own model still wins, since it knows the dated variant
   it actually ran.
+
+- **Cost-aware routing preferred the models whose price was unknown.** `effectivePrice` returned `0`
+  for a model with no price rather than "unknown", so the cheapest-first ordering put unpriced models
+  *first* — the exact opposite of what any operator would expect. Traffic was steered toward the
+  models that then reported nothing, which compounds: the spend most likely to be misrouted was also
+  the spend least likely to appear in the bill. Anyone running with `costWeight > 0` was affected.
+  An unknown price now sorts last.
+
+- **The bundled pricing catalog could never match a namespaced model.** Matching was anchored to the
+  start of the model string, so `deepseek/deepseek-chat` and `@cf/meta/llama-3.1-8b` matched nothing —
+  529 reachable models, every one of OpenRouter's and HuggingFace's, could not be auto-priced. The
+  matcher now also tries the segment after the last slash, folds `.` to `-` so `gpt-4.1` matches
+  `gpt-4-1`, and checks a token boundary so `gpt-4o` cannot claim `gpt-4o-mini`. A price borrowed from
+  a different provider is offered but flagged, because a model resold by OpenRouter is not necessarily
+  the upstream vendor's price. Server and dashboard run the same cases from one shared fixture.
+
+- **A published price of zero was thrown away.** `0` was treated as a "no data" sentinel, so
+  OpenRouter's `:free` models — the ones you can actually test with on no budget — were recorded as
+  unpriced, sank to the bottom of cost routing and would have worn a permanent "No price" badge with
+  no way to clear it. Zero is a price; `-1` (dynamic) is what is unknown.
+
+- **A refetch could not clear a stale "No price".** The price-comparison required a value above zero,
+  so a model whose provider publishes `0` never registered as a change, and the obvious remedy —
+  fetch the models again — silently did nothing.
+
+- **The registry cache returned unnormalised models.** `getModelRegistry` parsed its Redis entry and
+  returned it directly, bypassing the normaliser. Bounded by a 60-second TTL, but it meant the
+  invariant "a registry model has every field" was untrue on that path, and the next field added
+  would have reopened it. It now normalises on both paths.
+
+- **The dashboard and the gateway disagreed about the same model.** The gateway infers `manual` for a
+  priced model written before `pricingSource` existed; the dashboard inferred `unset`. The published
+  demo is served from a fixture that predates the field with no gateway in the path, so every priced
+  model on it would have carried a "No price" badge while Analytics announced that ten unpriced models
+  had no price — directly above their prices. One shared inference now, guarded by a test pinned to
+  that fixture.
+
+- **`npm test` overwrote a real gateway's API key file.** `convertLegacyApiKey()` writes the one
+  retrievable copy of the master key to `<data dir>/api-key.txt`, and its unit test drives it with a
+  mocked settings store — so running the suite on a machine that also runs a gateway replaced that
+  machine's `.nexus/api-key.txt` with the test's fixture. The gateway keeps serving, because only a
+  hash is stored, but the operator's single chance to read their own key was destroyed with nothing
+  said. Every test now writes to a throwaway directory, and a guard fails if that protection is ever
+  removed — which immediately caught a second case, where a test file's own cleanup deleted the
+  protection instead of restoring it.
 
 ### Changed
 

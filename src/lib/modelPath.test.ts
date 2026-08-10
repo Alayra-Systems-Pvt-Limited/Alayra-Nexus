@@ -57,11 +57,24 @@ describe('extractModelMeta', () => {
     }]);
   });
 
-  it('rejects the -1 dynamic-pricing and 0 free sentinels, keeping the other side', () => {
+  it('rejects the -1 dynamic-pricing sentinel, keeping the other side', () => {
     const json = { data: [{ id: 'm', pricing: { prompt: '-1', completion: '0.000001' } }] };
     expect(extractModelMeta(json, 'data[].id')).toEqual([{ id: 'm', outputCostPer1M: 1 }]);
-    const free = { data: [{ id: 'f', pricing: { prompt: '0', completion: '0' } }] };
-    expect(extractModelMeta(free, 'data[].id')).toEqual([{ id: 'f' }]);
+  });
+
+  it('KEEPS a published 0 — a free model is priced, not unpriced', () => {
+    // OpenRouter's `:free` models publish exactly this. Dropping it (which this code used to do)
+    // made every free model indistinguishable from one nobody has priced: flagged as unpriced in
+    // the dashboard and ranked last by cost-based routing, forever. See per1M in modelPath.ts.
+    const free = { data: [{ id: 'inclusionai/ling-3.0-tiny:free', pricing: { prompt: '0', completion: '0' } }] };
+    expect(extractModelMeta(free, 'data[].id')).toEqual([
+      { id: 'inclusionai/ling-3.0-tiny:free', inputCostPer1M: 0, outputCostPer1M: 0 },
+    ]);
+  });
+
+  it('still distinguishes a free price from an absent one', () => {
+    const absent = { data: [{ id: 'plain', object: 'model' }] };
+    expect(extractModelMeta(absent, 'data[].id')).toEqual([{ id: 'plain' }]);
   });
 
   it('accepts numeric (not just string) pricing and ignores NaN garbage', () => {

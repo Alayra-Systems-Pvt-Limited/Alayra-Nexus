@@ -1,33 +1,35 @@
 import { useState } from 'preact/hooks';
 import { POST, ApiError } from '../../api';
-import { Modal, Field, Input, Select, FieldRow, Button, FormError } from '../../ui';
+import { Modal, Field, Input, Select, FieldRow, Button, FormError, FormNote } from '../../ui';
 import { ProviderFields, type ProviderConn } from './ProviderFields';
+import { PROVIDER_PRESETS, presetFor, type ProviderPreset } from '../../lib/providers';
 
 // Create a provider pool. Mirrors POST /admin/providers (providers.routes.ts). Every pool carries
 // how to reach the provider AND how to read its model list (Model Fetch URL + Model ID Path), so the
 // add-key "Fetch Models" step works for any provider — not just the built-in ones.
-const PROVIDERS = ['openai', 'anthropic', 'google', 'groq', 'openrouter', 'custom'] as const;
-const TIERS     = ['premium', 'standard', 'fast'] as const;
-
-// Sensible starting points per provider; the operator can still override any of them. Anthropic's
-// /models list requires the `anthropic-version` header, so that pool is seeded with it out of the box.
-const DEFAULTS: Record<string, { baseUrl: string; authHeader: string; authPrefix: string; modelIdPath: string; extraHeaders: Record<string, string> }> = {
-  openai:     { baseUrl: 'https://api.openai.com/v1',                              authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {} },
-  anthropic:  { baseUrl: 'https://api.anthropic.com/v1',                           authHeader: 'x-api-key',     authPrefix: '',       modelIdPath: 'data[].id', extraHeaders: { 'anthropic-version': '2023-06-01' } },
-  google:     { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {} },
-  groq:       { baseUrl: 'https://api.groq.com/openai/v1',                         authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {} },
-  openrouter: { baseUrl: 'https://openrouter.ai/api/v1',                           authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {} },
-  custom:     { baseUrl: '',                                                        authHeader: 'Authorization', authPrefix: 'Bearer', modelIdPath: 'data[].id', extraHeaders: {} },
-};
+//
+// The provider list and its per-provider defaults come from src/data/providers.ts, which the
+// gateway reads too. They used to be a separate literal here, which is how this dialog came to
+// offer six providers while the routing layer had default URLs for five and the key-format check
+// knew a seventh.
+const TIERS = ['premium', 'standard', 'fast'] as const;
 
 const slugify = (v: string) => v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
-// A fresh connection block seeded from a provider's defaults (model-fetch URL is left blank — it
-// falls back to base + /models).
-const connFromDefaults = (p: string): ProviderConn => {
-  const d = DEFAULTS[p] ?? DEFAULTS.custom;
-  return { preferredModel: '', baseUrl: d.baseUrl, modelFetchUrl: '', authHeader: d.authHeader, authPrefix: d.authPrefix, modelIdPath: d.modelIdPath, extraHeaders: { ...d.extraHeaders } };
-};
+const CUSTOM = presetFor('custom')!;
+
+// A fresh connection block seeded from a provider's preset. The model-fetch URL is normally left
+// blank — it falls back to base + /models — and carried explicitly only where that fallback is
+// wrong, which today is Cloudflare, whose /v1/models answers 405.
+const connFromPreset = (preset: ProviderPreset): ProviderConn => ({
+  preferredModel: '',
+  baseUrl:        preset.baseUrl,
+  modelFetchUrl:  preset.modelFetchUrl ?? '',
+  authHeader:     preset.authHeader,
+  authPrefix:     preset.authPrefix,
+  modelIdPath:    preset.modelIdPath,
+  extraHeaders:   { ...preset.extraHeaders },
+});
 
 export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName]           = useState('');
@@ -35,19 +37,34 @@ export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void;
   const [slugEdited, setSlugEd]   = useState(false);
   const [provider, setProvider]   = useState<string>('openai');
   const [tier, setTier]           = useState<string>('standard');
-  const [conn, setConn]           = useState<ProviderConn>(connFromDefaults('openai'));
+  const [conn, setConn]           = useState<ProviderConn>(connFromPreset(presetFor('openai') ?? CUSTOM));
+  const [account, setAccount]     = useState('');
   const [busy, setBusy]           = useState(false);
   const [error, setError]         = useState<string | null>(null);
+
+  const preset = presetFor(provider);
 
   // Switching provider re-seeds the connection fields to that provider's defaults — the operator
   // picks the provider first, then tweaks.
   const onProvider = (value: string) => {
     setProvider(value);
-    setConn(connFromDefaults(value));
+    setConn(connFromPreset(presetFor(value) ?? CUSTOM));
+    setAccount('');
   };
 
+  // Some providers route per account, so their URL cannot be known in advance — Cloudflare's base
+  // and catalogue URLs both contain the account id. The preset carries the placeholder token, this
+  // fills it in, and `pending` is true while the token is still sitting in a URL unresolved.
+  //
+  // Substituting at submit rather than as-you-type keeps the token in the editable field, so the
+  // operator can still see and change the URL shape; typing into the account box then keeps
+  // working instead of having nothing left to replace after the first keystroke.
+  const token   = preset?.accountPlaceholder?.token;
+  const resolve = (url: string) => (token && account.trim() ? url.split(token).join(account.trim()) : url);
+  const pending = !!token && [conn.baseUrl, conn.modelFetchUrl].some((u) => u.includes(token)) && !account.trim();
+
   const effectiveSlug = slugEdited ? slug : slugify(name);
-  const canSubmit = name.trim().length > 0 && effectiveSlug.length > 0 && !busy;
+  const canSubmit = name.trim().length > 0 && effectiveSlug.length > 0 && !pending && !busy;
 
   const submit = async (e: Event) => {
     e.preventDefault();
@@ -61,8 +78,8 @@ export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void;
         provider,
         tier,
         ...(conn.preferredModel.trim() ? { preferredModel: conn.preferredModel.trim() } : {}),
-        ...(conn.baseUrl.trim() ? { baseUrl: conn.baseUrl.trim() } : {}),
-        ...(conn.modelFetchUrl.trim() ? { modelFetchUrl: conn.modelFetchUrl.trim() } : {}),
+        ...(conn.baseUrl.trim() ? { baseUrl: resolve(conn.baseUrl.trim()) } : {}),
+        ...(conn.modelFetchUrl.trim() ? { modelFetchUrl: resolve(conn.modelFetchUrl.trim()) } : {}),
         ...(conn.authHeader.trim() ? { authHeader: conn.authHeader.trim() } : {}),
         ...(conn.authPrefix.trim() ? { authPrefix: conn.authPrefix.trim() } : {}),
         ...(conn.modelIdPath.trim() ? { modelIdPath: conn.modelIdPath.trim() } : {}),
@@ -107,7 +124,7 @@ export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void;
         <FieldRow>
           <Field label="Upstream provider">
             <Select value={provider} onChange={(e) => onProvider((e.target as HTMLSelectElement).value)}>
-              {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+              {PROVIDER_PRESETS.map((p) => <option key={p.slug} value={p.slug}>{p.label}</option>)}
             </Select>
           </Field>
           <Field label="Routing tier">
@@ -117,7 +134,42 @@ export function AddProviderDialog({ onClose, onCreated }: { onClose: () => void;
           </Field>
         </FieldRow>
 
+        {/* What this provider will and will not do, said before the pool exists rather than
+            discovered later from a $0 line on the analytics page. */}
+        {preset?.note && <FormNote>{preset.note}</FormNote>}
+        {preset && !preset.publishesPricing && preset.slug !== 'custom' && (
+          <FormNote>
+            {preset.label} does not publish per-model prices, so models fetched from it arrive
+            unpriced — set a price on each one, or its requests count as $0 in cost analytics.
+          </FormNote>
+        )}
+
+        {preset?.accountPlaceholder && (
+          <Field label={preset.accountPlaceholder.label} hint={preset.accountPlaceholder.hint}>
+            <Input
+              value={account}
+              // A shape, not a real id. The first draft used a live account id copied from a
+              // working config, which would have shipped one operator's account to every install.
+              placeholder="0123456789abcdef0123456789abcdef"
+              onInput={(e) => setAccount((e.target as HTMLInputElement).value)}
+            />
+          </Field>
+        )}
+
         <ProviderFields conn={conn} onChange={(patch) => setConn((c) => ({ ...c, ...patch }))} />
+
+        {/* The URL that will actually be saved, once the placeholder is filled. Shown because the
+            field above still holds the token, and an operator should not have to do the
+            substitution in their head to check it. */}
+        {token && !pending && conn.baseUrl.includes(token) && (
+          <FormNote>Base URL will be saved as <code>{resolve(conn.baseUrl)}</code></FormNote>
+        )}
+        {pending && (
+          <FormNote>
+            Fill in the {preset!.accountPlaceholder!.label.toLowerCase()} above — saving a URL with{' '}
+            <code>{token}</code> still in it would fail on every request.
+          </FormNote>
+        )}
 
         <button type="submit" style={{ display: 'none' }} aria-hidden="true" tabIndex={-1} />
       </form>
