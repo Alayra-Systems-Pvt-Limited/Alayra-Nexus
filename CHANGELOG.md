@@ -175,6 +175,36 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Changed
 
+- **Four dependency majors: zod 3 → 4, jose 5 → 6, @fastify/multipart 9 → 10, dotenv 16 → 17.** All
+  four had been open and green for a week. Green was not the answer: two of them carried a real
+  break that no existing test could see.
+
+  **`PATCH` no longer overwrites fields the caller did not send.** Zod 4 changed `.partial()` to
+  keep `.default()`, so a partial body came back carrying defaults for every omitted field — and
+  both PATCH routes forward the parsed body straight to `prisma.update()`. Renaming a **suspended**
+  team would have set `status` back to `active` and put it back to work; editing an Anthropic
+  provider pool would have reset `authHeader` from `x-api-key` to `Authorization` and stopped it
+  authenticating. The request still returns `200` in both cases, which is why nothing caught it.
+  Patch bodies are now parsed through `patchSchema()`, which strips defaults first — a default
+  answers "what should this be when created?", a question a PATCH is not asking.
+
+  **Node 22.12 is now the floor** (`engines`), because jose 6 is ESM-only and the gateway compiles
+  to CommonJS: it loads only through Node's `require(esm)`, default-on from 22.12.0. Measured
+  against the older behaviour it is `ERR_REQUIRE_ESM` at boot, before a route is registered.
+
+  Two libraries the suite was not really testing now are. The SSO test mocks `jose` wholesale, so
+  every green tick on that bump was earned against a stub — there is now a test that generates a
+  keypair, serves it as a JWKS over real HTTP, and verifies tokens through the same two calls SSO
+  makes, including forged, expired, wrong-issuer, wrong-audience and `alg: none`. And
+  `/v1/audio/transcriptions`, the gateway's only upload route, had no test at all — its multipart
+  contract is now covered, including that `limits.fileSize` still refuses an oversized upload
+  rather than buffering it into memory.
+
+  dotenv needed no change: `import 'dotenv/config'` defaults `quiet` to true itself, so v17's new
+  `◇ injected env (N) from .env` banner never reaches the gateway's output. Recorded because the
+  programmatic `dotenv.config()` does print it, and because only `/config` reads
+  `DOTENV_CONFIG_PATH` — which is how `--env-file` works.
+
 - **An unknown model is a `400`, on every endpoint.** It names the models this gateway does serve, so
   the caller can correct it without reading the docs. The non-chat endpoints previously ignored
   `model` outright and routed by capability alone, which meant an operator with three embedding

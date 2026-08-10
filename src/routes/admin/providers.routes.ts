@@ -24,6 +24,7 @@ import { validateProviderCredentials, validateModel, fetchProviderModels } from 
 import { removeModelsForProvider } from '../../services/model.service';
 import { invalidateProviderCache } from '../../services/providerCache.service';
 import { z }                   from 'zod';
+import { patchSchema }        from '../../lib/patchSchema';
 import { adminGuard, adminWriteGuard } from './guard';
 
 export default async function adminProvidersRoutes(fastify: FastifyInstance) {
@@ -55,7 +56,10 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
     authPrefix:     z.string().optional(),
     modelIdPath:    z.string().default('data[].id'),
     // Extra request headers as an object; persisted as a JSON string. An empty object clears them.
-    extraHeaders:   z.record(z.string()).optional(),
+    // Both halves stated: zod 4 requires the key type, where zod 3 inferred `string` from the one
+    // argument. Passing only the value type there silently made this `Record<string, unknown>`,
+    // which is how one missing argument produced four errors in this file.
+    extraHeaders:   z.record(z.string(), z.string()).optional(),
   });
 
   // Turn a validated provider body into a Prisma-ready row: the object-form extraHeaders is
@@ -91,7 +95,9 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
 
   fastify.patch('/admin/providers/:id', adminWriteGuard, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body   = providerSchema.partial().parse(request.body);
+    // patchSchema, not `.partial()`: under zod 4 a bare partial keeps every `.default()`, so a
+    // rename would also write tier, authHeader and modelIdPath back to their creation values.
+    const body   = patchSchema(providerSchema).parse(request.body);
     const urlErr = await assertProviderUrlsSafe(body);
     if (urlErr) return reply.code(400).send({ error: urlErr });
     const provider = await prisma.nexusProvider.update({ where: { id }, data: toProviderData(body) });
