@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { candidates, resolveUrls, redact, NOT_CHAT } from './verify-providers';
+import { candidates, resolveUrls, redact, shouldWriteRecord, NOT_CHAT } from './verify-providers';
 import { presetFor, type ProviderPreset } from '../src/data/providers';
 import type { FetchedModel } from '../src/lib/modelPath';
 
@@ -108,6 +108,36 @@ describe('account-scoped URLs', () => {
     const { base, models } = resolveUrls(presetFor('groq') as ProviderPreset);
     expect(base).toBe('https://api.groq.com/openai/v1');
     expect(models).toBe('https://api.groq.com/openai/v1/models');
+  });
+});
+
+describe('when the evidence record may be replaced', () => {
+  // The record's filename is its date, so writing is always an overwrite. These two cases are the
+  // ones where overwriting destroys evidence that cannot be re-gathered without keys and money.
+
+  it('writes a full run that measured something', () => {
+    expect(shouldWriteRecord([], 7).write).toBe(true);
+  });
+
+  it('refuses a filtered run, because it would drop every provider it did not probe', () => {
+    // `npm run verify:providers groq` after a full run the same morning: one provider in the file,
+    // eight silently deleted. The file still parses and still looks authoritative.
+    const { write, reason } = shouldWriteRecord(['groq'], 1);
+    expect(write).toBe(false);
+    expect(reason).toMatch(/no arguments/);
+  });
+
+  it('refuses a run with no keys, which measured nothing at all', () => {
+    // Every provider comes back `skipped`. Generating the public table from that would demote all
+    // of them to unverified on the authority of someone who ran no probes.
+    const { write, reason } = shouldWriteRecord([], 0);
+    expect(write).toBe(false);
+    expect(reason).toMatch(/PROVIDER_KEY/);
+  });
+
+  it('refuses a filtered run even when that one provider answered', () => {
+    // The count is not what makes it unsafe — the missing providers are.
+    expect(shouldWriteRecord(['groq'], 1).write).toBe(false);
   });
 });
 

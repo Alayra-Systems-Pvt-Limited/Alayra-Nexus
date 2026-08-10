@@ -84,6 +84,22 @@ export interface ProviderPreset {
    */
   publishesPricing: boolean;
   /**
+   * A few words qualifying `publishesPricing` where the boolean is true but incomplete.
+   *
+   * Table-cell length, not prose — `note` is for prose. Cloudflare is the case that needs it: "does
+   * not publish prices" is accurate and still leaves an operator thinking a per-token price would
+   * reconcile, when Cloudflare does not bill per token at all.
+   */
+  billingNote?: string;
+  /**
+   * A few words explaining a `verified` value that is not 'chat'.
+   *
+   * "Model list only" tells a reader what happened and not why, and why is the part that decides
+   * whether it is their problem. Cerebras works the moment the account is funded; that is a very
+   * different thing from an endpoint that has moved.
+   */
+  verifyNote?: string;
+  /**
    * A token inside baseUrl/modelFetchUrl the operator must replace before the pool can work.
    *
    * Cloudflare routes per account, so its URLs are not knowable in advance. Modelled as data so
@@ -171,6 +187,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     modelFetchUrl: 'https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/models/search',
     modelIdPath: 'result[].name', extraHeaders: {},
     keyPrefixes: [], publishesPricing: false, verified: 'chat',
+    billingNote: 'bills in *neurons*, not tokens',
     accountPlaceholder: {
       token: '{account_id}',
       label: 'Cloudflare account ID',
@@ -185,6 +202,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     authHeader: 'Authorization', authPrefix: 'Bearer',
     modelIdPath: 'data[].id', extraHeaders: {},
     keyPrefixes: [], publishesPricing: false, verified: 'models',
+    verifyNote: 'completions answered 402 until the account is funded',
     note: 'Model list works on a free key; every completion answered 402 (payment required) until '
         + 'the account is funded. Listed as models-only rather than chat-verified for that reason.',
   },

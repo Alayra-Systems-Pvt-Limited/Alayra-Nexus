@@ -77,6 +77,21 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   cost step is the gate: a `200` proves routing, and a `$0` bill is indistinguishable from a cheap
   one. Measured six providers end to end, including two the old enum would have refused.
 
+- **The README's provider table is generated from the measurements, not typed.** `npm run
+  docs:providers` builds it by joining what Nexus ships with the dated evidence in
+  `docs/provider-verification/`, and CI fails when the published table and the evidence disagree.
+  Every row carries the date it was measured, so a claim that has quietly not been re-checked says so
+  on the page. Evidence is chosen per provider rather than per file, because a run only probes the
+  providers whose key is on that machine — reading the newest file alone would let a contributor
+  holding two keys retract seven verifications they never tested.
+
+- **Reference chapters moved to `docs/`.** Standalone mode, backup and restore, rate limits and
+  routing, the API reference, and the accounts/SSRF/guardrails half of the security model are now
+  their own pages, linked from short summaries that keep every existing anchor working. The README
+  was 81,843 bytes and the npm registry renders only the first 65,536, so the package page had been
+  silently cut off — a failure with no error anywhere. It is now 47 KB, with a test and a `prepack`
+  check to keep it there.
+
 ### Fixed
 
 - **`"model": "auto"` works.** The dashboard's Quick Start has always told operators to send it, and
@@ -150,6 +165,13 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   said. Every test now writes to a throwaway directory, and a guard fails if that protection is ever
   removed — which immediately caught a second case, where a test file's own cleanup deleted the
   protection instead of restoring it.
+
+- **`npm run verify:providers` could destroy its own evidence.** The record's filename is its date,
+  so re-verifying one provider (`verify:providers -- groq`) overwrote that day's full snapshot with a
+  single result, and a run on a machine with no keys overwrote it with nothing but "skipped". Neither
+  looked like a failure: the file still parsed and still read as authoritative. A record is a full
+  snapshot or it is not written; a filtered or empty run now probes and prints without touching the
+  committed evidence.
 
 ### Changed
 

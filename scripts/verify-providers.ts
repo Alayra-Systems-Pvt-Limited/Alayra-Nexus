@@ -114,9 +114,9 @@ export function candidates(slug: string, models: FetchedModel[]): string[] {
   return [...new Set([...hits, ...rest])].slice(0, MAX_CHAT_ATTEMPTS);
 }
 
-type Status = 'chat' | 'models' | 'unreachable' | 'skipped';
+export type Status = 'chat' | 'models' | 'unreachable' | 'skipped';
 
-interface Result {
+export interface Result {
   slug: string;
   label: string;
   status: Status;
@@ -302,6 +302,37 @@ async function verify(preset: ProviderPreset): Promise<Result> {
 
 const ICON: Record<Status, string> = { chat: 'OK  ', models: 'LIST', unreachable: 'FAIL', skipped: 'skip' };
 
+/**
+ * May this run replace the committed evidence for today?
+ *
+ * The filename is the date, so a second run on the same day overwrites the first. That is correct
+ * for two full runs and destructive for anything else — and both destructive cases are one command
+ * away:
+ *
+ *   `verify:providers groq` probes one provider and drops the other eight from the file. The day's
+ *   full record is gone, and the loss is invisible: the file still parses, still looks
+ *   authoritative, and now simply says nothing about Cloudflare.
+ *
+ *   A run with no keys marks every provider `skipped`, which reads as "none of this is verified".
+ *   Someone with an empty .env could regenerate the public provider table into claiming nothing
+ *   works, having measured nothing.
+ *
+ * A record is a full snapshot or it is not a record. Re-verifying one provider is a legitimate
+ * thing to want, so the probe still runs and still prints — it just does not overwrite evidence it
+ * did not gather.
+ */
+export function shouldWriteRecord(only: string[], measuredCount: number): { write: boolean; reason?: string } {
+  if (only.length) {
+    return { write: false, reason: 'a filtered run is not a snapshot, and would replace today\'s '
+      + 'full record with just these providers. Run with no arguments to write the record.' };
+  }
+  if (measuredCount === 0) {
+    return { write: false, reason: 'nothing was measured — no PROVIDER_KEY_* in the environment. A '
+      + 'record of all-skipped is not evidence, and would erase a day that had some.' };
+  }
+  return { write: true };
+}
+
 async function main() {
   const only     = process.argv.slice(2).filter((a) => !a.startsWith('-'));
   const targets  = PROVIDER_PRESETS.filter((p) => p.slug !== 'custom' && (!only.length || only.includes(p.slug)));
@@ -329,19 +360,25 @@ async function main() {
   const chat     = measured.filter((r) => r.status === 'chat');
   const drifted  = results.filter((r) => r.drift);
 
-  // Written even when something drifted: the record of a bad day is the useful one.
-  const stamp = new Date().toISOString();
-  const out   = resolve(__dirname, `../docs/provider-verification/${stamp.slice(0, 10)}.json`);
-  mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, `${JSON.stringify({
-    generatedAt: stamp,
-    note: 'Produced by `npm run verify:providers` against live provider APIs. Never edited by hand.',
-    summary: { measured: measured.length, chatVerified: chat.length, drifted: drifted.length },
-    results,
-  }, null, 2)}\n`);
-
   console.log(`\n  ${chat.length}/${measured.length} measured providers served a real completion.`);
-  console.log(`  Written to ${out}\n`);
+
+  const decision = shouldWriteRecord(only, measured.length);
+  if (!decision.write) {
+    console.log(`  Not written: ${decision.reason}\n`);
+  } else {
+    // Written even when something drifted: the record of a bad day is the useful one.
+    const stamp = new Date().toISOString();
+    const out   = resolve(__dirname, `../docs/provider-verification/${stamp.slice(0, 10)}.json`);
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, `${JSON.stringify({
+      generatedAt: stamp,
+      note: 'Produced by `npm run verify:providers` against live provider APIs. Never edited by hand.',
+      summary: { measured: measured.length, chatVerified: chat.length, drifted: drifted.length },
+      results,
+    }, null, 2)}\n`);
+    console.log(`  Written to ${out}`);
+    console.log('  Now run `npm run docs:providers` to bring the README table in line.\n');
+  }
 
   if (drifted.length) {
     console.error(`  ${drifted.length} provider(s) no longer match src/data/providers.ts: `
