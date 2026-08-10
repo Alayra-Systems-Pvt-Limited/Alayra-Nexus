@@ -58,9 +58,33 @@ export interface AiModel {
   // distinct from classic TTS (per input character) and STT (per file). 0 when not an audio model.
   audioInputPer1M:       number;
   audioOutputPer1M:      number;
+  // Where the prices above came from. A price of 0 is ambiguous on its own — OpenRouter's
+  // `:free` models really do cost nothing, while a model nobody has priced also reads 0 — and
+  // that ambiguity is not cosmetic: cost-aware routing treated "unknown" as "free" and sent
+  // traffic to it FIRST, and cost analytics reported $0 for it with no indication anything was
+  // missing. This field is what separates the two, so `unset` can be ranked and reported
+  // honestly. Read by effectivePrice() in lib/routing.ts, and by the dashboard's model rows,
+  // model editor and Analytics banner.
+  pricingSource:         PricingSource;
   contextWindow:   number;
   maxTokens:       number;
 }
+
+/**
+ * Provenance of a model's prices.
+ *   unset      — nobody has ever priced this model. NOT the same as free.
+ *   harvested  — read from the provider's own /models response (OpenRouter, Groq publish it).
+ *   catalog    — filled from the bundled pricing catalog, indicative until the operator confirms.
+ *   manual     — entered or confirmed by the operator. Includes a deliberate 0.
+ */
+export const PRICING_SOURCES = ['unset', 'harvested', 'catalog', 'manual'] as const;
+export type PricingSource = (typeof PRICING_SOURCES)[number];
+
+/** Every per-unit price on a model. Any one of them being non-zero means somebody priced it. */
+const PRICE_FIELDS = [
+  'inputCostPer1M', 'outputCostPer1M', 'imagePrice', 'speechPricePer1MChars',
+  'transcriptionPrice', 'audioInputPer1M', 'audioOutputPer1M',
+] as const;
 
 export class ModelNotFoundError extends Error {
   constructor(id: string) { super(`Model not found: ${id}`); this.name = 'ModelNotFoundError'; }
@@ -109,9 +133,33 @@ export function normalizeModel(raw: Record<string, unknown>): AiModel {
     transcriptionPrice:    num(raw.transcriptionPrice),
     audioInputPer1M:       num(raw.audioInputPer1M),
     audioOutputPer1M:      num(raw.audioOutputPer1M),
+    pricingSource:   inferPricingSource(raw, num),
     contextWindow:   num(raw.contextWindow),
     maxTokens:       num(raw.maxTokens),
   };
+}
+
+/**
+ * Provenance for an entry that predates the field. Registries written before this existed carry
+ * prices with no record of where they came from, and guessing `unset` for all of them would be a
+ * regression: a model the operator priced by hand months ago would start warning and, worse, drop
+ * to last under cost routing. So a stored non-zero price is taken as evidence someone set it —
+ * `manual` — and only an entry with no price anywhere is called `unset`.
+ *
+ * The one entry this labels imprecisely is a legacy model deliberately priced at 0. It becomes
+ * `unset` rather than `manual`, because a 0 with no provenance is genuinely indistinguishable from
+ * never-priced. That errs toward warning about a free model rather than staying silent about an
+ * unpriced one — the safe direction, and one click on the row clears it for good.
+ */
+function inferPricingSource(raw: Record<string, unknown>, num: (v: unknown, d?: number) => number): PricingSource {
+  const stated = raw.pricingSource;
+  if (typeof stated === 'string' && (PRICING_SOURCES as readonly string[]).includes(stated)) {
+    return stated as PricingSource;
+  }
+  const priced = PRICE_FIELDS.some((f) => num(raw[f]) > 0)
+    // The pre-per-1M format, still tolerated by the cost helpers.
+    || num(raw.inputPricePer1k) > 0 || num(raw.outputPricePer1k) > 0;
+  return priced ? 'manual' : 'unset';
 }
 
 /**
@@ -134,9 +182,21 @@ export async function getModelRegistry(): Promise<AiModel[]> {
   const cached = await redis.get(REGISTRY_CACHE_KEY);
   if (cached) {
     try {
-      const models = JSON.parse(cached) as AiModel[];
-      registryMemo.set(REGISTRY_CACHE_KEY, models);
-      return models;
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        // Normalized here too, not just on the database path. The cached copy is whatever some
+        // process serialized earlier — including a process running the PREVIOUS release, which
+        // knew nothing about fields added since. Returning it raw silently breaks the invariant
+        // every caller relies on ("a registry model has every field"): after this upgrade, a
+        // pre-upgrade cache entry has no `pricingSource`, so unpriced models would go on being
+        // treated as free by cost routing until the key expired. The 60s TTL bounds that to a
+        // minute, but a minute of wrong routing is still wrong, and the next field added would
+        // reopen the same hole. Normalizing costs one pass over a few dozen objects, at most
+        // once per memo window.
+        const models = parsed.map((m) => normalizeModel(m as Record<string, unknown>));
+        registryMemo.set(REGISTRY_CACHE_KEY, models);
+        return models;
+      }
     } catch { /* fall through */ }
   }
   const raw = await getSetting('AI_MODEL_REGISTRY');

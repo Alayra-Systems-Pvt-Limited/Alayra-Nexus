@@ -228,6 +228,9 @@ export async function resolveRequestedModel(
         capabilities: ['chat'], hasVision: false, hasFIM: false, hasToolCalling: false,
         inputCostPer1M: 0, outputCostPer1M: 0, imagePrice: 0, speechPricePer1MChars: 0,
         transcriptionPrice: 0, audioInputPer1M: 0, audioOutputPer1M: 0,
+        // A legacy pool carries a preferredModel and no registry entry, so there is genuinely
+        // nowhere a price could have come from. `unset` rather than a zero that reads as free.
+        pricingSource: 'unset',
         contextWindow: 0, maxTokens: 0,
       } };
     }

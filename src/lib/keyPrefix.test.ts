@@ -96,7 +96,23 @@ describe('providerLabel', () => {
   });
 
   it('falls back to the slug for a provider it has no name for', () => {
-    expect(providerLabel('mistral')).toBe('mistral');
+    // Deliberately a slug no preset will ever claim. This case used `mistral`, which stopped being
+    // unknown the day the preset table landed — an example that is only unknown by accident stops
+    // testing the fallback and starts testing the table's contents.
+    expect(providerLabel('acme-internal-llm')).toBe('acme-internal-llm');
+  });
+});
+
+describe('a provider with no preset', () => {
+  // Provider slugs are free text, so this is the ordinary case for anyone self-hosting, not an
+  // edge one. None of these checks may invent a rule about a provider it has never heard of.
+  it('never rejects a key, whatever stamp the key carries', () => {
+    expect(keyProviderMismatch('acme-internal-llm', 'sk-ant-abc123')).toBeNull();
+    expect(keyProviderMismatch('acme-internal-llm', 'gsk_abc123')).toBeNull();
+  });
+
+  it('still rejects a positive mismatch between two providers it does know', () => {
+    expect(keyProviderMismatch('anthropic', 'sk-or-v1-abc')).not.toBeNull();
   });
 });
 

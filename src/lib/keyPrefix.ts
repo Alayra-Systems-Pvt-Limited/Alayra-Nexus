@@ -46,28 +46,23 @@
 // stamp. Unrecognised is not wrong, and is allowed through — the live credential check is what
 // catches those.
 
-/** Prefixes that identify an issuer beyond reasonable doubt. Bare `sk-` is deliberately absent. */
-const DISTINCTIVE: Record<string, string[]> = {
-  anthropic:  ['sk-ant-'],
-  openrouter: ['sk-or-'],
-  google:     ['AIza'],
-  groq:       ['gsk_'],
-  huggingface: ['hf_'],
-};
+import { PROVIDER_PRESETS, presetFor, providerLabel } from '../data/providers';
 
-/** How to name a provider in an error an operator has to act on. */
-const LABEL: Record<string, string> = {
-  anthropic:   'Anthropic',
-  openrouter:  'OpenRouter',
-  google:      'Google',
-  groq:        'Groq',
-  huggingface: 'HuggingFace',
-  openai:      'OpenAI',
-};
+export { providerLabel };
 
-export function providerLabel(slug: string): string {
-  return LABEL[slug] ?? slug;
-}
+/**
+ * Prefixes that identify an issuer beyond reasonable doubt, read off the preset table.
+ *
+ * Derived rather than kept here so a provider added to that table is understood by this check on
+ * the same commit. The previous hand-maintained copy knew `hf_` for a HuggingFace pool the
+ * dashboard could not even offer, and knew nothing about Mistral or Cloudflare — the two states a
+ * second copy of a list always ends up in.
+ *
+ * Bare `sk-` is absent by construction: no preset declares it, because OpenAI-compatible providers
+ * copy it deliberately and it would convict the innocent.
+ */
+const DISTINCTIVE: [slug: string, prefix: string][] =
+  PROVIDER_PRESETS.flatMap((p) => p.keyPrefixes.map((prefix) => [p.slug, prefix] as [string, string]));
 
 /**
  * `a` or `an` for a provider's display name.
@@ -90,11 +85,9 @@ export function issuerOf(apiKey: string): string | null {
   const key = apiKey.trim();
   let best: { slug: string; length: number } | null = null;
 
-  for (const [slug, prefixes] of Object.entries(DISTINCTIVE)) {
-    for (const prefix of prefixes) {
-      if (key.startsWith(prefix) && (best === null || prefix.length > best.length)) {
-        best = { slug, length: prefix.length };
-      }
+  for (const [slug, prefix] of DISTINCTIVE) {
+    if (key.startsWith(prefix) && (best === null || prefix.length > best.length)) {
+      best = { slug, length: prefix.length };
     }
   }
   return best?.slug ?? null;
@@ -103,15 +96,20 @@ export function issuerOf(apiKey: string): string | null {
 /**
  * An error message when this key unmistakably belongs to a different provider, else null.
  *
- * Null covers three different situations on purpose, because none of them is evidence of a mistake:
- * the key matches, the key carries no recognisable stamp, or the pool is a `custom` one whose keys
- * can look like anything.
+ * Null covers four different situations on purpose, because none of them is evidence of a mistake:
+ * the key matches, the key carries no recognisable stamp, the pool is a `custom` one, or the pool
+ * runs a provider this build ships no preset for.
  */
 export function keyProviderMismatch(providerSlug: string, apiKey: string): string | null {
   if (!apiKey?.trim()) return null;
   // A custom pool points at an arbitrary base URL — a local llama.cpp, a corporate proxy, another
   // Nexus. Its keys have no format we could be right about.
-  if (providerSlug === 'custom') return null;
+  //
+  // The same is true of any slug with no preset. Provider slugs are free text, so this is a real
+  // case and not a defensive one: an operator running a gateway of their own under the slug
+  // `internal` may perfectly legitimately hold an `sk-ant-` key for it, and refusing that paste
+  // would be this check inventing a rule about a provider it has never heard of.
+  if (providerSlug === 'custom' || !presetFor(providerSlug)) return null;
 
   const issuer = issuerOf(apiKey);
   if (issuer === null || issuer === providerSlug) return null;

@@ -16,6 +16,64 @@
 
 import { describe, it, expect } from 'vitest';
 import { effectivePrice, clampCostWeight, costOrder } from './routing';
+import { normalizeModel } from '../services/model.service';
+
+// Regression guard, and a lesson about how the original bug hid.
+//
+// The `effectivePrice` cases below this block assert the null path using hand-written literals
+// like `{ displayName: 'mystery' }`. Those pass, and always did — but normalizeModel writes every
+// price field as a number defaulting to 0, so a model that reaches routing NEVER looks like that.
+// A stored unpriced model produced 0, not null, which under cheapest-first ordering made it the
+// most attractive candidate in the registry: Nexus preferentially routed to the models whose cost
+// it could not account for. The unit tests were green throughout.
+//
+// So these cases go through the real normalizer. Anything asserting routing behaviour on a model
+// must, or it is testing a shape production cannot produce.
+describe('effectivePrice on real registry models (not literals)', () => {
+  const unpriced = normalizeModel({ id: 'm-unpriced', modelString: 'mistral-small-latest', provider: 'mistral' });
+  const priced   = normalizeModel({ id: 'm-priced',   modelString: 'gpt-4o', provider: 'openai', inputCostPer1M: 2.5, outputCostPer1M: 10 });
+  const free     = normalizeModel({ id: 'm-free',     modelString: 'ling-3.0-tiny:free', provider: 'openrouter', pricingSource: 'harvested' });
+
+  const price = (m: unknown) => effectivePrice(m as Record<string, unknown>);
+
+  it('is null for a model nobody has priced', () => {
+    expect(unpriced.pricingSource).toBe('unset');
+    expect(price(unpriced)).toBeNull();
+  });
+
+  it('is 0 — not null — for a model the provider published as free', () => {
+    // OpenRouter's `:free` models publish pricing {prompt:"0"}. Genuinely free, genuinely known.
+    // Collapsing this into "unpriced" would rank real free capacity last and nag about it forever.
+    expect(price(free)).toBe(0);
+  });
+
+  it('is the real figure for a priced model', () => {
+    expect(price(priced)).toBeCloseTo(0.0125);
+  });
+
+  it('ranks an unpriced model LAST under cheapest-first, not first', () => {
+    const order = costOrder([priced, unpriced], price, 1).map((m) => m.id);
+    expect(order).toEqual(['m-priced', 'm-unpriced']);
+  });
+
+  it('still ranks a genuinely free model first', () => {
+    const order = costOrder([priced, free], price, 1).map((m) => m.id);
+    expect(order).toEqual(['m-free', 'm-priced']);
+  });
+
+  it('puts free ahead of priced ahead of unknown, all three together', () => {
+    const order = costOrder([unpriced, priced, free], price, 1).map((m) => m.id);
+    expect(order).toEqual(['m-free', 'm-priced', 'm-unpriced']);
+  });
+
+  it('preserves a hand-priced legacy entry that predates pricingSource', () => {
+    // Migration guard: an operator's existing priced model must not become "unpriced" on upgrade
+    // and silently drop to last.
+    const legacy = normalizeModel({ id: 'legacy', modelString: 'gpt-4o', provider: 'openai', inputPricePer1k: 0.003, outputPricePer1k: 0.015 });
+    expect(legacy.pricingSource).toBe('manual');
+    expect(price(legacy)).toBeCloseTo(0.018);
+  });
+});
 
 describe('effectivePrice', () => {
   it('sums input + output per-1k pricing', () => {

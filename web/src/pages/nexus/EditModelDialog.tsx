@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'preact/hooks';
-import { Wand2 } from 'lucide-preact';
-import { ApiError, type AiModel, type PricingCatalogEntry } from '../../api';
+import { Wand2, AlertTriangle } from 'lucide-preact';
+import { ApiError, type AiModel, type PricingCatalogEntry, type PricingSource } from '../../api';
 import { updateModelInRegistry } from '../../lib/registry';
-import { loadPricingCatalog, matchCatalog } from '../../lib/catalog';
+import { loadPricingCatalog, matchPricing } from '../../lib/catalog';
+import { pricingSourceOf } from '../../lib/pricing';
 import { Modal, Field, Input, Select, FieldRow, Button, FormError, FormNote } from '../../ui';
 import s from '../pages.module.css';
 
 const CAPS = ['chat', 'completion', 'embedding', 'image', 'speech', 'transcription'] as const;
 const TIERS = ['premium', 'standard', 'fast'] as const;
 const STATUSES = ['active', 'paused', 'retired'] as const;
+
+// Every field that is a price. Editing one of these by hand is what makes a model's pricing
+// `manual` — the operator's own figure, which nothing else may later overwrite.
+const PRICE_KEYS = [
+  'inputCostPer1M', 'outputCostPer1M', 'imagePrice', 'speechPricePer1MChars',
+  'transcriptionPrice', 'audioInputPer1M', 'audioOutputPer1M',
+] as const;
 
 // Editable model detail. Reuses the validated PUT /admin/models registry write. The pricing boxes
 // shown are driven by the model's capabilities — you only ever see prices that apply — and
@@ -36,17 +44,38 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const [filled, setFilled]   = useState<string | null>(null);
+  // Provenance of the prices currently in the form, carried through the edit so saving cannot
+  // silently launder a catalog guess into an operator-confirmed figure (or the reverse).
+  const [source, setSource]   = useState<PricingSource>(pricingSourceOf(model));
+  const [borrowed, setBorrowed] = useState<string | null>(null);
+  const [confirmUnpriced, setConfirmUnpriced] = useState(false);
 
   useEffect(() => { loadPricingCatalog().then(setCatalog).catch(() => {}); }, []);
 
-  const setN = (k: string, v: string) => setNum((p) => ({ ...p, [k]: v }));
+  const setN = (k: string, v: string) => {
+    setNum((p) => ({ ...p, [k]: v }));
+    // Typing in a price box is the operator taking ownership of the number.
+    if ((PRICE_KEYS as readonly string[]).includes(k)) {
+      setSource('manual');
+      setBorrowed(null);
+      setFilled(null);
+      setConfirmUnpriced(false);
+    }
+  };
   const toggleCap = (c: string) => setCaps((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]));
   const has = (c: string) => caps.includes(c);
   const hasText = has('chat') || has('completion') || has('embedding');
 
   const autofill = () => {
-    const e = matchCatalog(catalog, model.modelString);
-    if (!e) { setFilled('none'); return; }
+    // Matched against this pool's own provider: a catalog entry from a DIFFERENT provider is still
+    // offered (a nearby figure beats an empty box) but is reported as borrowed, because providers
+    // charge differently for the same model and a silent fill would look authoritative.
+    const hit = matchPricing(catalog, model.modelString, model.provider);
+    if (!hit) { setFilled('none'); return; }
+    const e = hit.entry;
+    setSource('catalog');
+    setBorrowed(hit.crossProvider ? e.provider : null);
+    setConfirmUnpriced(false);
     if (e.capabilities?.length) setCaps(e.capabilities);
     if (e.hasVision !== undefined) setVision(e.hasVision);
     if (e.hasToolCalling !== undefined) setTools(e.hasToolCalling);
@@ -62,26 +91,33 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
     setFilled(e.displayName);
   };
 
-  const submit = async (ev: Event) => {
-    ev.preventDefault();
+  const n = (k: string) => { const v = parseFloat(num[k]); return Number.isFinite(v) && v >= 0 ? v : 0; };
+
+  /** The provenance this save should record. A price typed into the form always wins, even if the
+   *  edit began from a catalog fill — the operator looked at it and kept it. */
+  const resolvedSource = (): PricingSource =>
+    (source === 'unset' && PRICE_KEYS.some((k) => n(k) > 0)) ? 'manual' : source;
+
+  const build = (): AiModel => ({
+    ...model,
+    displayName: displayName.trim() || model.modelString,
+    tier, status,
+    priority: Math.max(1, parseInt(priority, 10) || 1),
+    capabilities: caps.length ? caps : ['chat'],
+    hasVision: vision, hasToolCalling: tools,
+    inputCostPer1M: n('inputCostPer1M'), outputCostPer1M: n('outputCostPer1M'),
+    imagePrice: n('imagePrice'), speechPricePer1MChars: n('speechPricePer1MChars'),
+    transcriptionPrice: n('transcriptionPrice'),
+    audioInputPer1M: n('audioInputPer1M'), audioOutputPer1M: n('audioOutputPer1M'),
+    pricingSource: resolvedSource(),
+    contextWindow: Math.round(n('contextWindow')), maxTokens: Math.round(n('maxTokens')),
+  });
+
+  const persist = async () => {
     setBusy(true);
     setError(null);
-    const n = (k: string) => { const v = parseFloat(num[k]); return Number.isFinite(v) && v >= 0 ? v : 0; };
-    const edited: AiModel = {
-      ...model,
-      displayName: displayName.trim() || model.modelString,
-      tier, status,
-      priority: Math.max(1, parseInt(priority, 10) || 1),
-      capabilities: caps.length ? caps : ['chat'],
-      hasVision: vision, hasToolCalling: tools,
-      inputCostPer1M: n('inputCostPer1M'), outputCostPer1M: n('outputCostPer1M'),
-      imagePrice: n('imagePrice'), speechPricePer1MChars: n('speechPricePer1MChars'),
-      transcriptionPrice: n('transcriptionPrice'),
-      audioInputPer1M: n('audioInputPer1M'), audioOutputPer1M: n('audioOutputPer1M'),
-      contextWindow: Math.round(n('contextWindow')), maxTokens: Math.round(n('maxTokens')),
-    };
     try {
-      await updateModelInRegistry(edited);
+      await updateModelInRegistry(build());
       onSaved();
       onClose();
     } catch (err) {
@@ -89,6 +125,15 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
     } finally {
       setBusy(false);
     }
+  };
+
+  const submit = async (ev: Event) => {
+    ev.preventDefault();
+    // Saving a model nobody has priced is allowed — a free endpoint or a local runtime has no
+    // price to give — but it is never allowed to happen silently, because the consequence lands
+    // somewhere the operator is not looking: every request through this model reports $0.
+    if (resolvedSource() === 'unset' && !confirmUnpriced) { setConfirmUnpriced(true); return; }
+    await persist();
   };
 
   return (
@@ -109,8 +154,29 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
           <Button variant="secondary" onClick={autofill}><Wand2 size={13} /> Auto-fill pricing</Button>
           {filled === 'none'
             ? <span class={s.editAutofillNote}>No catalog match — enter values manually.</span>
-            : filled && <span class={s.editAutofillNote}>Filled from “{filled}”. Review before saving.</span>}
+            : filled && (
+              borrowed
+                ? <span class={s.editAutofillWarn}>
+                    Filled from {borrowed}&rsquo;s price for &ldquo;{filled}&rdquo;. {model.provider} may charge
+                    a different rate — confirm before saving.
+                  </span>
+                : <span class={s.editAutofillNote}>Filled from &ldquo;{filled}&rdquo;. Review before saving.</span>
+            )}
         </div>
+
+        {confirmUnpriced && (
+          <div class={s.unpricedConfirm} role="alert">
+            <AlertTriangle size={15} class={s.unpricedIcon} />
+            <div class={s.unpricedBody}>
+              <strong>{model.provider} doesn&rsquo;t publish a price for this model.</strong>
+              <span>Without one, every request through it reports $0 and your cost analytics under-report.</span>
+            </div>
+            <div class={s.unpricedActions}>
+              <Button variant="ghost" onClick={() => setConfirmUnpriced(false)} disabled={busy}>Set pricing</Button>
+              <Button variant="secondary" onClick={persist} disabled={busy}>{busy ? 'Saving…' : 'Save anyway'}</Button>
+            </div>
+          </div>
+        )}
 
         <FieldRow>
           <Field label="Display name"><Input value={displayName} onInput={(e) => setDisplayName((e.target as HTMLInputElement).value)} /></Field>

@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { Pencil, X, Plus } from 'lucide-preact';
 import { removeModelFromRegistry } from '../../lib/registry';
+import { isUnpriced, pricingSourceOf } from '../../lib/pricing';
 import { canWrite } from '../../lib/access';
 import type { AiModel, NexusPool } from '../../api';
 import { EditModelDialog } from './EditModelDialog';
@@ -20,7 +21,9 @@ function priceSummary(m: AiModel): string {
   if (m.speechPricePer1MChars) return `$${m.speechPricePer1MChars} / 1M chars`;
   if (m.transcriptionPrice) return `$${m.transcriptionPrice} / file`;
   if (m.imagePrice) return `$${m.imagePrice} / image`;
-  return 'Unpriced';
+  // Every price is zero. Whether that means "free" or "nobody knows" is exactly what this row must
+  // not guess — a free OpenRouter model and an unpriced one used to read identically here.
+  return isUnpriced(m) ? 'No price set' : 'Free';
 }
 
 export function PoolModels({ pool, models, onChanged }: { pool: NexusPool; models: AiModel[]; onChanged: () => void }) {
@@ -52,7 +55,15 @@ export function PoolModels({ pool, models, onChanged }: { pool: NexusPool; model
             {models.map((m) => (
               <div key={m.id} class={s.modelItem}>
                 <div class={s.modelItemMain}>
-                  <span class={s.modelItemName}>{m.modelString}</span>
+                  <span class={s.modelItemName}>
+                    <span>{m.modelString}</span>
+                    {isUnpriced(m) && (
+                      <span class={s.unpricedBadge} title="This model's cost cannot be calculated, so its usage reports $0. Edit it to set a price.">No price</span>
+                    )}
+                    {pricingSourceOf(m) === 'catalog' && (
+                      <span class={s.estBadge} title="Filled from the bundled pricing catalog — indicative until you confirm it against your invoice.">est.</span>
+                    )}
+                  </span>
                   <span class={s.modelItemMeta}>{m.capabilities.join(' · ')} · {priceSummary(m)}</span>
                 </div>
                 {canWrite() && (

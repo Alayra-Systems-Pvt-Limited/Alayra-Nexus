@@ -17,7 +17,7 @@
 // The model registry.
 import { FastifyInstance }      from 'fastify';
 import { z }                    from 'zod';
-import { getModelRegistry, updateModelRegistry, normalizeModel, removeModelById } from '../../services/model.service';
+import { getModelRegistry, updateModelRegistry, normalizeModel, removeModelById, PRICING_SOURCES } from '../../services/model.service';
 import { getPricingCatalog }    from '../../services/pricingCatalog.service';
 import { CAPABILITIES }         from '../../lib/modelSelect';
 import { adminGuard, adminWriteGuard } from './guard';
@@ -27,7 +27,10 @@ import { adminGuard, adminWriteGuard } from './guard';
 const modelSchema = z.object({
   id:              z.string().min(1),
   displayName:     z.string().default(''),
-  provider:        z.enum(['anthropic', 'openai', 'google', 'groq', 'openrouter', 'custom']),
+  // Free-form to match the provider pool it belongs to — see providers.routes.ts. A registry model
+  // whose provider had no pool was already inert (activeProviderSlugs filters it out of routing),
+  // so the enum bought nothing here beyond forbidding half the providers Nexus can talk to.
+  provider:        z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, 'lowercase letters, digits and hyphens only'),
   modelString:     z.string().min(1),
   tier:            z.enum(['premium', 'standard', 'fast']).default('standard'),
   status:          z.enum(['active', 'paused', 'retired']).default('active'),
@@ -43,6 +46,11 @@ const modelSchema = z.object({
   transcriptionPrice:    z.number().min(0).default(0),
   audioInputPer1M:       z.number().min(0).default(0),
   audioOutputPer1M:      z.number().min(0).default(0),
+  // Deliberately optional with no default. Defaulting to 'unset' would let a client that simply
+  // does not send the field erase the provenance of a model the operator priced by hand — and an
+  // explicit 'unset' means "unknown", which drops the model to last under cost routing. Left
+  // absent, normalizeModel infers it from the stored prices instead. A bogus value is a 400.
+  pricingSource:   z.enum(PRICING_SOURCES).optional(),
   contextWindow:   z.number().int().min(0).default(0),
   maxTokens:       z.number().int().min(0).default(0),
 }).passthrough();

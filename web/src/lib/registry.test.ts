@@ -19,6 +19,7 @@ const stored = (over: Partial<AiModel>): AiModel => ({
   hasVision: true, hasFIM: false, hasToolCalling: true,
   inputCostPer1M: 3, outputCostPer1M: 15,
   imagePrice: 0, speechPricePer1MChars: 0, transcriptionPrice: 0, audioInputPer1M: 0, audioOutputPer1M: 0,
+  pricingSource: 'manual',
   contextWindow: 200000, maxTokens: 8192,
   ...over,
 });
@@ -92,6 +93,74 @@ describe('addModelsToRegistry', () => {
     ]);
     expect(res).toEqual({ added: 0, updated: 0 });
     expect(put).not.toHaveBeenCalled();
+  });
+
+  // ── Pricing provenance ──────────────────────────────────────────────────────
+  // A price of 0 means two different things and must not be allowed to mean both. These record
+  // which one each path produces, because getting it wrong is invisible: the model still routes,
+  // still answers, and still reports $0.
+  describe('pricingSource', () => {
+    it('marks a new model harvested when the provider published a price', async () => {
+      get.mockResolvedValue({ models: [] });
+      await addModelsToRegistry('groq', 'fast', [{ modelString: 'llama-3.1-8b-instant', inputCostPer1M: 0.05, outputCostPer1M: 0.08 }]);
+      expect((put.mock.calls[0][1] as { models: Partial<AiModel>[] }).models[0].pricingSource).toBe('harvested');
+    });
+
+    it('marks a new model harvested when the published price is a genuine ZERO', async () => {
+      // OpenRouter's `:free` models. Free is a price. Calling this "unset" would flag every free
+      // model as a problem and rank it last under cost routing.
+      get.mockResolvedValue({ models: [] });
+      await addModelsToRegistry('openrouter', 'fast', [
+        { modelString: 'inclusionai/ling-3.0-tiny:free', inputCostPer1M: 0, outputCostPer1M: 0 },
+      ]);
+      const sent = (put.mock.calls[0][1] as { models: Partial<AiModel>[] }).models[0];
+      expect(sent.pricingSource).toBe('harvested');
+      expect(sent.inputCostPer1M).toBe(0);
+    });
+
+    it('marks a new model unset when the provider published nothing', async () => {
+      get.mockResolvedValue({ models: [] });
+      await addModelsToRegistry('mistral', 'standard', [{ modelString: 'mistral-small-latest' }]);
+      expect((put.mock.calls[0][1] as { models: Partial<AiModel>[] }).models[0].pricingSource).toBe('unset');
+    });
+
+    it('never downgrades an operator-entered price to harvested', async () => {
+      get.mockResolvedValue({ models: [stored({ pricingSource: 'manual' })] });
+      await addModelsToRegistry('openrouter', 'premium', [
+        { modelString: 'anthropic/claude', inputCostPer1M: 9, outputCostPer1M: 20 },
+      ]);
+      expect((put.mock.calls[0][1] as { models: AiModel[] }).models[0].pricingSource).toBe('manual');
+    });
+
+    it('promotes an unset model to harvested when a refetch publishes a price', async () => {
+      get.mockResolvedValue({ models: [stored({ pricingSource: 'unset', inputCostPer1M: 0, outputCostPer1M: 0 })] });
+      const res = await addModelsToRegistry('openrouter', 'premium', [
+        { modelString: 'anthropic/claude', inputCostPer1M: 3, outputCostPer1M: 15 },
+      ]);
+      expect(res.updated).toBe(1);
+      expect((put.mock.calls[0][1] as { models: AiModel[] }).models[0].pricingSource).toBe('harvested');
+    });
+
+    it('clears "unset" on a refetch that publishes ZERO, where no value changes', async () => {
+      // The narrow case that would otherwise be unfixable from the UI: the stored price is 0, the
+      // published price is 0, so nothing about the numbers changes and the old code wrote nothing
+      // — leaving a free model wearing a "No price" badge with no way to remove it.
+      get.mockResolvedValue({ models: [stored({ pricingSource: 'unset', inputCostPer1M: 0, outputCostPer1M: 0 })] });
+      const res = await addModelsToRegistry('openrouter', 'premium', [
+        { modelString: 'anthropic/claude', inputCostPer1M: 0, outputCostPer1M: 0 },
+      ]);
+      expect(res.updated).toBe(1);
+      expect((put.mock.calls[0][1] as { models: AiModel[] }).models[0].pricingSource).toBe('harvested');
+    });
+
+    it('still writes nothing when an already-harvested model refetches unchanged', async () => {
+      get.mockResolvedValue({ models: [stored({ pricingSource: 'harvested' })] });
+      const res = await addModelsToRegistry('openrouter', 'premium', [
+        { modelString: 'anthropic/claude', inputCostPer1M: 3, outputCostPer1M: 15, contextWindow: 200000 },
+      ]);
+      expect(res).toEqual({ added: 0, updated: 0 });
+      expect(put).not.toHaveBeenCalled();
+    });
   });
 
   it('suffixes a colliding sanitized id instead of overwriting', async () => {

@@ -59,6 +59,12 @@ docs/*
 # branch, so the artefact has to be in the tree — and keeping it here means a fork gets the demo
 # without running a build. Rebuilt by `npm run build:demo` in web/.
 !docs/demo/
+# Dated output of `npm run verify:providers`, measured against live provider APIs. Committed
+# because it is the EVIDENCE for the provider claims in src/data/providers.ts and in anything we
+# say publicly about how many providers are verified. A claim whose proof is gitignored is a claim
+# nobody can check — and this file is written by a script, never by hand, so it cannot drift into
+# marketing. It holds no credentials: account-scoped URLs are recorded with their placeholder.
+!docs/provider-verification/
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 .claude/

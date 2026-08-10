@@ -1,0 +1,51 @@
+{
+  "note": [
+    "Model-string to pricing-catalog matching, asserted identically by the server and the dashboard.",
+    "The server matches in src/services/pricingCatalog.service.ts; the dashboard fetches the catalog",
+    "once and matches locally in web/src/lib/catalog.ts. Two implementations of one rule drift, and",
+    "the drift is invisible: the editor would auto-fill a price the gateway would never have chosen.",
+    "",
+    "Both suites run `cases` against `catalog` below. This file is the contract: an implementation",
+    "that stops satisfying it fails on its own side, and changing the rule means editing these",
+    "cases, which immediately fails the other side until it agrees.",
+    "",
+    "The server suite additionally asserts every entry in `catalog` still",
+    "exists in the real src/data/pricingCatalog.ts with the same provider, so this snapshot cannot",
+    "quietly go stale and start certifying a rule against models that no longer ship.",
+    "",
+    "`expect` is the `match` field of the entry that should win, or null for no match."
+  ],
+
+  "catalog": [
+    { "match": "gpt-4o-mini",              "provider": "openai",    "displayName": "GPT-4o mini",               "capabilities": ["chat"] },
+    { "match": "gpt-4o",                   "provider": "openai",    "displayName": "GPT-4o",                    "capabilities": ["chat"] },
+    { "match": "tts-1",                    "provider": "openai",    "displayName": "TTS-1",                     "capabilities": ["speech"] },
+    { "match": "claude-3-5-sonnet",        "provider": "anthropic", "displayName": "Claude 3.5 Sonnet",         "capabilities": ["chat"] },
+    { "match": "gemini-2.0-flash",         "provider": "google",    "displayName": "Gemini 2.0 Flash",          "capabilities": ["chat"] },
+    { "match": "gemini-flash-lite-latest", "provider": "google",    "displayName": "Gemini Flash-Lite (latest)", "capabilities": ["chat"] },
+    { "match": "mistral-small",            "provider": "mistral",   "displayName": "Mistral Small",             "capabilities": ["chat"] }
+  ],
+
+  "cases": [
+    { "why": "exact id", "modelString": "gpt-4o", "expect": "gpt-4o" },
+    { "why": "longest prefix wins, so mini never falls through to the base model", "modelString": "gpt-4o-mini", "expect": "gpt-4o-mini" },
+    { "why": "a dated variant inherits its base entry", "modelString": "claude-3-5-sonnet-20241022", "expect": "claude-3-5-sonnet" },
+    { "why": "a per-modality entry still resolves", "modelString": "tts-1", "expect": "tts-1" },
+
+    { "why": "OpenRouter namespaces by vendor: matching only from position 0 missed all 400 of its models", "modelString": "openai/gpt-4o", "expect": "gpt-4o" },
+    { "why": "namespaced AND longest-prefix at once", "modelString": "openai/gpt-4o-mini", "expect": "gpt-4o-mini" },
+    { "why": "OpenRouter writes dots where the catalog writes dashes", "modelString": "anthropic/claude-3.5-sonnet", "expect": "claude-3-5-sonnet" },
+    { "why": "dot-folding plus a dated suffix, namespaced", "modelString": "google/gemini-2.0-flash-001", "expect": "gemini-2.0-flash" },
+
+    { "why": "Hugging Face namespaces too, and has no catalog entry: stays honestly unpriced", "modelString": "deepseek-ai/DeepSeek-V4-Flash-0731", "expect": null },
+    { "why": "a prefix may not stop in the middle of a token", "modelString": "gpt-4omni", "expect": null },
+    { "why": "unknown model", "modelString": "totally-made-up-model", "expect": null },
+    { "why": "blank input", "modelString": "", "expect": null },
+    { "why": "whitespace only", "modelString": "   ", "expect": null },
+
+    { "why": "with a provider, a same-provider entry is a clean hit", "modelString": "mistral-small-latest", "provider": "mistral", "expect": "mistral-small", "crossProvider": false },
+    { "why": "a Google alias id that only the alias entry covers", "modelString": "gemini-flash-lite-latest", "provider": "google", "expect": "gemini-flash-lite-latest", "crossProvider": false },
+    { "why": "gpt-4o via OpenRouter is NOT priced like gpt-4o from OpenAI: matched, but flagged", "modelString": "openai/gpt-4o", "provider": "openrouter", "expect": "gpt-4o", "crossProvider": true },
+    { "why": "a provider with no entry at all still gets a flagged fallback", "modelString": "gpt-4o", "provider": "cerebras", "expect": "gpt-4o", "crossProvider": true }
+  ]
+}

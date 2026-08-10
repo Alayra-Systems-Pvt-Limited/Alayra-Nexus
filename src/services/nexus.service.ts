@@ -29,6 +29,7 @@ import { selectModels, type SelectableModel, type Capability } from '../lib/mode
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
 import { safeFetch }        from '../lib/safeFetch';
 import { extractModelMeta, type FetchedModel } from '../lib/modelPath';
+import { providerDefaultUrl } from '../data/providers';
 import { withExtraHeaders, providerAuthHeader } from '../lib/providerHeaders';
 import { getSsrfPolicy }     from './ssrf.service';
 import { SHARED_NAMESPACE, type RoutingScope } from '../lib/scope';
@@ -115,16 +116,11 @@ function buildRoute(
   };
 }
 
-export function providerDefaultUrl(provider: string): string {
-  switch (provider) {
-    case 'openai':     return 'https://api.openai.com/v1';
-    case 'anthropic':  return 'https://api.anthropic.com/v1';
-    case 'google':     return 'https://generativelanguage.googleapis.com/v1beta/openai';
-    case 'groq':       return 'https://api.groq.com/openai/v1';
-    case 'openrouter': return 'https://openrouter.ai/api/v1';
-    default:           return '';
-  }
-}
+// Re-exported rather than re-implemented: this used to be a switch that knew five providers while
+// the dashboard's own defaults map knew six and the key-prefix map knew a seventh set. See
+// src/data/providers.ts for why they are now one table. Kept exported from here because callers
+// (and their tests) import it from this module.
+export { providerDefaultUrl };
 
 async function tryPickKey(
   providerRow: ProviderRow,

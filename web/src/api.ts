@@ -301,12 +301,18 @@ export interface NexusOverview {
 }
 
 // Mirrors GET /admin/models (models.routes.ts) — one registry entry.
+// Where a model's prices came from. Mirrors PricingSource in src/services/model.service.ts.
+// A price of 0 alone is ambiguous — OpenRouter's `:free` models genuinely cost nothing, a model
+// nobody has priced also reads 0 — and the two must not be shown, warned about, or routed alike.
+export type PricingSource = 'unset' | 'harvested' | 'catalog' | 'manual';
+
 export interface AiModel {
   id: string; displayName: string; provider: string; modelString: string; tier: string; status: string;
   priority: number; capabilities: string[]; hasVision: boolean; hasFIM: boolean; hasToolCalling: boolean;
   inputCostPer1M: number; outputCostPer1M: number;
   imagePrice: number; speechPricePer1MChars: number; transcriptionPrice: number;
   audioInputPer1M: number; audioOutputPer1M: number;
+  pricingSource: PricingSource;
   contextWindow: number; maxTokens: number;
 }
 export interface ModelsResponse { models: AiModel[]; capabilities: string[]; }

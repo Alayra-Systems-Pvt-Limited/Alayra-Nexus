@@ -25,7 +25,8 @@
 
 <br>
 
-Route **Anthropic Claude**, **OpenAI GPT**, **Google Gemini**, **Groq**, and **OpenRouter**  
+Route **Anthropic**, **OpenAI**, **Google Gemini**, **Groq**, **OpenRouter**, **Mistral**,
+**HuggingFace**, **Cloudflare Workers AI** — or anything OpenAI-compatible —  
 through a single hardened proxy. Pool multiple API keys per provider, load-balance  
 across them, auto-failover between tiers, and give every team their own scoped key —  
 with full usage analytics and cost tracking built in.
@@ -223,19 +224,39 @@ gone out of date, please open an issue — we would rather fix it than win on a 
 
 ## Supported Providers
 
-| Provider | Status | Endpoint used | Models |
-|---|---|---|---|
-| **Anthropic** | ✅ Stable | `api.anthropic.com/v1` | Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku, and all Claude variants |
-| **OpenAI** | ✅ Stable | `api.openai.com/v1` | GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo, o1, o3-mini |
-| **Google** | ✅ Stable | Gemini's OpenAI-compatible API | Gemini 1.5 Pro, Gemini 1.5 Flash, Gemini 2.0 Flash |
-| **Groq** | ✅ Stable | `api.groq.com/openai/v1` | Llama 3.3 70B, Llama 3.1 405B / 70B, Mixtral 8x7B, Gemma |
-| **OpenRouter** | ✅ Stable | `openrouter.ai/api/v1` | Every model in OpenRouter's catalogue — 340+ behind one key |
-| **Custom** | ✅ Stable | Whatever you configure | Any OpenAI-compatible endpoint: base URL, auth header, and model-id path are all settable |
-| Azure OpenAI · Bedrock · Vertex | ⚪ Via **Custom** | your endpoint | Reachable today through the Custom provider if the endpoint speaks OpenAI's schema; first-class adapters are on the [roadmap](#roadmap) |
+Nexus ships a preset for each of these — base URL, auth header, model-list endpoint and model-id
+path already filled in. **The list is not a whitelist**: a provider slug is free text, so a pool
+pointed at anything OpenAI-compatible is a first-class pool whether or not it appears below. A
+preset only saves you typing.
 
-**"Stable" means a default base URL ships for it and its keys route, pool, fail over and cost-track
-like any other.** Anthropic additionally gets a native `/v1/messages` endpoint, so Claude Code and
-the Anthropic SDKs work unchanged.
+| Provider | Verified | Endpoint used | Publishes prices? |
+|---|---|---|---|
+| **Groq** | ✅ Completion | `api.groq.com/openai/v1` | ✅ Yes, per model |
+| **OpenRouter** | ✅ Completion | `openrouter.ai/api/v1` | ✅ Yes, per model — 400 models behind one key |
+| **Google** | ✅ Completion | Gemini's OpenAI-compatible API | ❌ Set prices yourself |
+| **Mistral** | ✅ Completion | `api.mistral.ai/v1` | ❌ Set prices yourself |
+| **HuggingFace** | ✅ Completion | `router.huggingface.co/v1` | ❌ Set prices yourself |
+| **Cloudflare Workers AI** | ✅ Completion | account-scoped `/ai/v1` | ❌ Bills in *neurons*, not tokens |
+| **Cerebras** | ⚠️ Model list only | `api.cerebras.ai/v1` | ❌ Completions need a funded account (402) |
+| **Anthropic** | ⚪ Preset only | `api.anthropic.com/v1` | ❌ Set prices yourself |
+| **OpenAI** | ⚪ Preset only | `api.openai.com/v1` | ❌ Set prices yourself |
+| **Custom** | ⚪ You configure it | whatever you point it at | Depends on the endpoint |
+| Azure OpenAI · Bedrock · Vertex | ⚪ Via **Custom** | your endpoint | Reachable today through a Custom pool if the endpoint speaks OpenAI's schema; first-class presets are on the [roadmap](#roadmap) |
+
+**What "verified" means here.** ✅ Completion = `npm run verify:providers` listed that provider's
+models, sent it a real request and got usage back, against a live key. ⚪ Preset only = never
+measured — no key, not a claim that it is broken. The dated evidence is committed under
+[`docs/provider-verification/`](docs/provider-verification/) and is written by that script, never by
+hand. Nothing is promoted by editing a table.
+
+**"Publishes prices" matters for your bill.** Only Groq and OpenRouter return per-model prices in
+their own API, so only their models can be priced automatically. Everywhere else a model arrives
+with **no price**, Nexus flags it rather than assuming zero, and until you set one its requests
+count as $0 in analytics. The dashboard says so when you add the pool, on the model row, and on the
+Analytics page.
+
+Anthropic additionally gets a native `/v1/messages` endpoint, so Claude Code and the Anthropic SDKs
+work unchanged.
 
 ---
 
@@ -283,7 +304,7 @@ providers is identical either way.
   │        ┌────────────────┼──────────────┬──────────────┐  │
   │        ▼                ▼              ▼              ▼  │
   │    Anthropic          OpenAI        Google           Groq │
-  │    (Claude)           (GPT)        (Gemini)      OpenRouter│
+  │   …and any other OpenAI-compatible endpoint you point at  │
   └──────────────────────────────────────────────────────────┘
            │
            ▼
