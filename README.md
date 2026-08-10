@@ -19,7 +19,7 @@
 [![Container](https://img.shields.io/badge/ghcr.io-alayra--nexus-2496ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/pkgs/container/alayra-nexus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3b82f6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-v5-22c55e.svg?style=for-the-badge)](https://fastify.dev/)
-[![Node.js](https://img.shields.io/badge/Node.js-22+-f59e0b.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22.12+-f59e0b.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Prisma-0ea5e9.svg?style=for-the-badge&logo=postgresql&logoColor=white)](https://prisma.io/)
 [![CLI](https://img.shields.io/badge/CLI-coming_soon-64748b.svg?style=for-the-badge&logo=gnubash&logoColor=white)](#contents)
 
@@ -477,7 +477,7 @@ the domain and it greets you with the owner-account setup screen.
 <summary><b>Option D — Manual setup (from source)</b></summary>
 
 
-**Prerequisites:** Node.js 20+, PostgreSQL 15+, Redis 7+
+**Prerequisites:** Node.js 22.12+, PostgreSQL 15+, Redis 7+
 
 ```bash
 git clone https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus.git

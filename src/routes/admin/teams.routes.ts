@@ -22,6 +22,7 @@ import { getTeamStats, type TeamStatsPeriod } from '../../services/teamStats.ser
 import { prisma }              from '../../lib/prisma';
 import { randomUUID, createHash, randomBytes } from 'crypto';
 import { z }                   from 'zod';
+import { patchSchema }        from '../../lib/patchSchema';
 import { adminGuard, adminWriteGuard } from './guard';
 import { ADMIN_WRITE_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
 
@@ -89,7 +90,9 @@ export default async function adminTeamsRoutes(fastify: FastifyInstance) {
 
   fastify.patch('/admin/teams/:id', adminWriteGuard, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body   = teamSchema.partial().parse(request.body);
+    // patchSchema, not `.partial()`: under zod 4 a bare partial keeps every `.default()`, so
+    // renaming a suspended team would also set status back to 'active' and un-suspend it.
+    const body   = patchSchema(teamSchema).parse(request.body);
     const team   = await prisma.team.update({ where: { id }, data: body });
     return reply.send({ team });
   });
