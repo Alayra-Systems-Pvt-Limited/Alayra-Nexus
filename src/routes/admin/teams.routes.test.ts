@@ -158,11 +158,11 @@ describe('editing a team writes only what was sent', () => {
   });
 
   it('refuses a status the schema does not know, and writes nothing', async () => {
-    // Status not pinned: this route lets the ZodError escape `.parse()`, so Fastify answers 500
-    // where every sibling admin route answers 400. A real defect, spanning eleven call sites in
-    // four files — its own change. What must hold either way is that nothing is written.
+    // This asserted `>= 400` when it was written, because the route let the ZodError escape
+    // `.parse()` and Fastify answered 500. Now pinned. The full contract for a malformed body
+    // lives in malformedBody.test.ts; what belongs here is that nothing is written.
     const res = await app.inject({ method: 'PATCH', url: '/admin/teams/t1', payload: { status: 'deleted' } });
-    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    expect(res.statusCode).toBe(400);
     expect(db.teamUpdate).not.toHaveBeenCalled();
   });
 });

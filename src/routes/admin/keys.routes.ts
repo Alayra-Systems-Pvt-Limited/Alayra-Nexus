@@ -26,6 +26,7 @@ import { keyProviderMismatch, providerLabel } from '../../lib/keyPrefix';
 import { forgetLastUsed }     from '../../lib/lastUsed';
 import { forgetKeyRow }       from '../../lib/keyRowCache';
 import { z }                   from 'zod';
+import { invalidBody }        from '../../lib/invalidBody';
 import { adminGuard, adminWriteGuard } from './guard';
 import { ADMIN_READ_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
 
@@ -107,7 +108,11 @@ export default async function adminKeysRoutes(fastify: FastifyInstance) {
 
   fastify.post('/admin/providers/:providerId/keys', adminWriteGuard, async (request, reply) => {
     const { providerId } = request.params as { providerId: string };
-    const body = keySchema.parse(request.body);
+    const parsed = keySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid provider key.'));
+    }
+    const body = parsed.data;
     // Reject an unknown owner up front: the FK would throw a 500, and silently
     // dropping the owner would publish a private credential to the shared pool.
     if (body.ownerTeamId) {
@@ -164,7 +169,11 @@ export default async function adminKeysRoutes(fastify: FastifyInstance) {
 
   fastify.patch('/admin/keys/:id', adminWriteGuard, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body   = keyEditSchema.parse(request.body);
+    const parsed = keyEditSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid change to a provider key.'));
+    }
+    const body   = parsed.data;
     // Reject an unknown owner up front (same reasoning as create): the FK would 500, and a silent
     // drop would leak a private credential into the shared pool.
     if (body.ownerTeamId) {

@@ -25,6 +25,7 @@ import { getSsrfConfig, setSsrfConfig } from '../../services/ssrf.service';
 import { getNotificationConfigForUI, setNotificationConfig } from '../../services/notifications.service';
 import { prisma }              from '../../lib/prisma';
 import { z }                   from 'zod';
+import { invalidBody }        from '../../lib/invalidBody';
 import { adminGuard, adminOwnerGuard, adminWriteGuard } from './guard';
 
 export default async function adminSettingsRoutes(fastify: FastifyInstance) {
@@ -45,7 +46,11 @@ export default async function adminSettingsRoutes(fastify: FastifyInstance) {
   // — so an admin who could also edit the policy that constrains those URLs would be editing their
   // own leash. A control is only a control if the party it constrains cannot change it.
   fastify.put('/admin/settings/ssrf', adminOwnerGuard, async (request, reply) => {
-    const body = ssrfSchema.parse(request.body);
+    const parsed = ssrfSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid network policy.'));
+    }
+    const body = parsed.data;
     await setSsrfConfig(body.allowPrivate, body.allowList);
     return reply.send(await getSsrfConfig());
   });
@@ -70,7 +75,11 @@ export default async function adminSettingsRoutes(fastify: FastifyInstance) {
   });
 
   fastify.put('/admin/settings/guardrails', adminWriteGuard, async (request, reply) => {
-    const body = guardrailSchema.parse(request.body);
+    const parsed = guardrailSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid guardrail configuration.'));
+    }
+    const body = parsed.data;
     // Reject rules whose regex will not compile, so a bad pattern is caught at
     // save time rather than silently skipped on the request path.
     for (const r of body.rules) {
@@ -90,8 +99,11 @@ export default async function adminSettingsRoutes(fastify: FastifyInstance) {
   const routingSchema = z.object({ costWeight: z.number().min(0).max(1) });
 
   fastify.put('/admin/settings/routing', adminWriteGuard, async (request, reply) => {
-    const body = routingSchema.parse(request.body);
-    await setCostWeight(body.costWeight);
+    const parsed = routingSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid routing setting.'));
+    }
+    await setCostWeight(parsed.data.costWeight);
     return reply.send(await getRoutingConfigForUI());
   });
 
@@ -107,8 +119,11 @@ export default async function adminSettingsRoutes(fastify: FastifyInstance) {
   });
 
   fastify.put('/admin/settings/cache', adminWriteGuard, async (request, reply) => {
-    const body = cacheSchema.parse(request.body);
-    await setCacheConfig(body.enabled, body.ttlSeconds);
+    const parsed = cacheSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid cache setting.'));
+    }
+    await setCacheConfig(parsed.data.enabled, parsed.data.ttlSeconds);
     return reply.send(await getCacheConfigForUI());
   });
 
@@ -136,8 +151,11 @@ export default async function adminSettingsRoutes(fastify: FastifyInstance) {
   });
 
   fastify.put('/admin/settings/notifications', adminWriteGuard, async (request, reply) => {
-    const body = notificationsSchema.parse(request.body);
-    await setNotificationConfig(body);
+    const parsed = notificationsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid notification setting.'));
+    }
+    await setNotificationConfig(parsed.data);
     return reply.send(await getNotificationConfigForUI());
   });
 

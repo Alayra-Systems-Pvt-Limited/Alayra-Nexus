@@ -17,6 +17,7 @@
 // The model registry.
 import { FastifyInstance }      from 'fastify';
 import { z }                    from 'zod';
+import { invalidBody }          from '../../lib/invalidBody';
 import { getModelRegistry, updateModelRegistry, normalizeModel, removeModelById, PRICING_SOURCES } from '../../services/model.service';
 import { getPricingCatalog }    from '../../services/pricingCatalog.service';
 import { CAPABILITIES }         from '../../lib/modelSelect';
@@ -74,7 +75,9 @@ export default async function adminModelsRoutes(fastify: FastifyInstance) {
   fastify.put('/admin/models', adminWriteGuard, async (request, reply) => {
     const parsed = registrySchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: 'Invalid model registry', details: parsed.error.issues.slice(0, 5) });
+      // Was `details: parsed.error.issues.slice(0, 5)` — the only route returning detail, and it
+      // returned raw zod issues with a silent cap. Same key, one shape, and the cap now says so.
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid model registry.'));
     }
     // Reject duplicate ids and duplicate provider+modelString pairs — either would make
     // selection non-deterministic.
