@@ -472,3 +472,63 @@ describe('discoverBestPool — model-first (registry drives the model)', () => {
     expect(route?.modelId).toBe('m');
   });
 });
+
+// A caller may now name one model instead of asking Nexus to choose. The contract is narrow
+// on purpose: the pin decides WHICH MODEL, and nothing else about routing changes — the same
+// key rotation, breaker, admission and BYOK scoping still apply underneath it.
+describe('discoverBestPool — a pinned model', () => {
+  it('serves the pinned model even when a better-tier one is available', async () => {
+    state.providers = [provider('p1', 'standard')];
+    state.keys = [key('k', null, 'p1')];
+    state.registry = [
+      rmodel({ id: 'premium-one', modelString: 'the-expensive-one', tier: 'premium' }),
+      rmodel({ id: 'pinned',      modelString: 'the-asked-for-one', tier: 'fast' }),
+    ];
+    const route = await discoverBestPool(10, null, SHARED_SCOPE, 'chat', null, null, 'pinned');
+    expect(route?.modelId).toBe('pinned');
+    expect(route?.modelString).toBe('the-asked-for-one');
+  });
+
+  it('returns null rather than answering with a different model', async () => {
+    // The whole reason a pin exists. Silently serving `active` here would be a wrong answer
+    // that looks exactly like a right one.
+    state.providers = [provider('p1', 'standard')];
+    state.keys = [key('k', null, 'p1')];
+    state.registry = [rmodel({ id: 'active' })];
+
+    expect(await discoverBestPool(10, null, SHARED_SCOPE, 'chat', null, null, 'not-in-registry')).toBeNull();
+  });
+
+  it('will not fall back to a pool\'s own preferred model', async () => {
+    // The legacy chat path exists for an empty registry, and it substitutes the pool's model.
+    // That substitution is precisely what a pin forbids.
+    state.providers = [provider('p1', 'premium')]; // pool.preferredModel = "model-p1"
+    state.keys = [key('k', null, 'p1')];
+    state.registry = [];
+
+    expect(await discoverBestPool(10, null, SHARED_SCOPE, 'chat', null, null, 'gpt4o')).toBeNull();
+    // …while the same gateway still serves an auto-routed request from that pool.
+    expect((await discoverBestPool(10, null, SHARED_SCOPE))?.modelString).toBe('model-p1');
+  });
+
+  it('still rotates across the pinned provider\'s keys', async () => {
+    // A pin gives up failover BETWEEN models. It does not give up failover between the keys
+    // of the model's own provider, which is where most rate limiting actually bites.
+    state.providers = [provider('p1', 'standard')];
+    state.keys = [key('exhausted', null, 'p1'), key('healthy', null, 'p1')];
+    state.registry = [rmodel({ id: 'pinned', modelString: 'the-model' })];
+    admission.admits = (id) => id !== 'exhausted';
+
+    const route = await discoverBestPool(10, null, SHARED_SCOPE, 'chat', null, null, 'pinned');
+    expect(route?.keyId).toBe('healthy');
+    expect(route?.modelId).toBe('pinned');
+  });
+
+  it('still refuses a pinned model an isolated team has no key for', async () => {
+    state.providers = [provider('p1', 'standard')];
+    state.keys = [key('shared', null, 'p1')]; // the team owns none
+    state.registry = [rmodel({ id: 'pinned', provider: 'openai' })];
+
+    expect(await discoverBestPool(10, null, scopeFor('team-a', false), 'chat', null, null, 'pinned')).toBeNull();
+  });
+});

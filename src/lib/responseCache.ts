@@ -36,7 +36,9 @@ export interface CachedCompletion {
   completionTokens: number;
 }
 
-// The single virtual model — alias forms normalize to this so they share a cache.
+// The auto-route model — every alias form normalizes to this so they share a cache entry.
+// A request that PINS a real model passes that model's id instead (see responseCacheKey),
+// because two different models answering the same prompt are two different responses.
 const CANONICAL_MODEL = 'alayra-nexus-1';
 
 // Generation params that change the response and therefore the cache identity.
@@ -63,12 +65,24 @@ export function isCacheable(body: { messages?: unknown[]; n?: unknown }): boolea
  * to the shared pool, or to another team — an isolated team must only ever receive
  * responses its own keys paid for. Shared-pool callers use `shared` (the default),
  * which reproduces the pre-BYOK key exactly.
+ *
+ * `pinnedModelId` is the model the caller named, or null when they asked Nexus to route.
+ * It MUST be part of the key. The model used to be a constant here, which was correct
+ * only for as long as there was exactly one thing a caller could ask for; once a request
+ * can pin `gpt-4o` or `claude-sonnet-4-5`, a constant would collapse both onto one entry
+ * and replay one model's answer as the other's — wrong content, no error, nothing in the
+ * logs to show it happened. Auto-routed requests keep the canonical identity, so their
+ * existing entries and hit rate are unchanged.
  */
-export function responseCacheKey(body: Record<string, unknown>, namespace: string = SHARED_NAMESPACE): string {
+export function responseCacheKey(
+  body: Record<string, unknown>,
+  namespace: string = SHARED_NAMESPACE,
+  pinnedModelId: string | null = null,
+): string {
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const params: Record<string, unknown> = {};
   for (const p of CACHEABLE_PARAMS) if (body[p] !== undefined) params[p] = body[p];
-  const canonical = JSON.stringify({ ns: namespace, model: CANONICAL_MODEL, messages, params });
+  const canonical = JSON.stringify({ ns: namespace, model: pinnedModelId ?? CANONICAL_MODEL, messages, params });
   return createHash('sha256').update(canonical).digest('hex');
 }
 

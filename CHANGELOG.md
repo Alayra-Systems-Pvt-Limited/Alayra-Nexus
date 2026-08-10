@@ -9,6 +9,76 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+
+- **`GET /v1/models` serves your models.** It returned one hardcoded entry, `alayra-nexus-1`, and
+  read nothing. An operator could curate ten models in the Models tab and every client still saw
+  exactly one — including Claude Code, which builds its model picker from this endpoint.
+
+  The listing is now derived from the registry, and from the same filters routing applies: models
+  you have paused are hidden, models whose provider pool no longer exists are hidden, and a team
+  isolated from the shared pool sees only the providers it brought keys for. Both the listing and
+  request-time resolution are built from one module, so the list can never advertise a model the
+  gateway would then refuse. `alayra-nexus-1` is always listed first as the auto-route entry, and is
+  still the only entry on a gateway with nothing configured yet.
+
+- **A caller may pin a model.** Send an id or model string from `/v1/models` and the request is
+  routed to that model only — still rotating and failing over across that provider's keys, but never
+  answered by a different model. This works on every endpoint, including `/v1/messages` and the
+  multipart transcription route. Omit the model, or send `alayra-nexus-1`, `auto`, `default`,
+  `kinetic-nexus-1` or `nexus`, and Nexus routes as it always has.
+
+  A pin never falls through to the legacy pool-tier path, because that path substitutes each pool's
+  own preferred model — which is precisely what a pin exists to forbid.
+
+### Fixed
+
+- **`"model": "auto"` works.** The dashboard's Quick Start has always told operators to send it, and
+  the gateway answered with a `400`. The first request most people ever made to this gateway failed,
+  in all three copy-paste snippets. It is now an accepted auto-route alias.
+
+- **A request that named a real model was refused.** `gpt-4o` or `claude-sonnet-4-5` returned
+  `400 Invalid model … Alayra Nexus routes automatically`, while the README documented the opposite —
+  that an exact model string could be used to target a provider. The documentation described the
+  feature; the code refused it. The code now does what was written.
+
+- **An Anthropic client's model choice was discarded.** `/v1/messages` overwrote `model` with the
+  canonical id before the request was routed, so an Anthropic-SDK caller could never reach a specific
+  model however it was configured — and had no way to discover one, since the listing showed a single
+  virtual entry. Both halves are fixed together.
+
+- **Routing failures said "rate-limited" when nothing was configured.** Every failure to find a route
+  read `All API keys are currently rate-limited. Retry in Ns or add more provider keys.` — including
+  on a gateway with no pools at all, and one whose pools hold no keys. Neither is rate limiting and
+  neither is fixed by waiting, so the advice sent operators to watch a cooldown that was never going
+  to arrive. A gateway with no pools, a gateway with no keys, and a pinned model whose provider is
+  saturated now each say what is actually wrong.
+
+- **A streamed Anthropic reply named the virtual model when the provider omitted one.** Providers
+  that leave `model` out of their SSE chunks left the reply reporting `alayra-nexus-1`, telling a
+  client that had pinned a real model nothing about what served it. The routed model is now supplied
+  as the fallback; a provider that names its own model still wins, since it knows the dated variant
+  it actually ran.
+
+### Changed
+
+- **An unknown model is a `400`, on every endpoint.** It names the models this gateway does serve, so
+  the caller can correct it without reading the docs. The non-chat endpoints previously ignored
+  `model` outright and routed by capability alone, which meant an operator with three embedding
+  models had no way to choose between them — and a client asking for one it did not have was
+  answered by another with no indication anything had been substituted.
+
+  Upgrade note: a client sending a model id this gateway does not serve now receives a `400` where it
+  previously received an answer from whichever model routing picked. Send `auto`, or register the
+  model. This is the point of the change — a gateway that quietly answers with a model you did not
+  ask for is wrong in a way that is invisible in the response, in the logs, and in the bill.
+
+- **The response cache keys on the pinned model.** The model was a constant in the cache key, which
+  was correct only while there was exactly one thing a caller could ask for. Once a request can pin
+  `gpt-4o` or `claude-sonnet-4-5`, a constant would collapse both onto one entry and replay one
+  model's answer as the other's. Auto-routed requests keep the canonical identity, so entries written
+  before this release still hit.
+
 ### Internal
 
 - **The release smoke test now checks the API key, not just the database.** It asserted `nexus.db`

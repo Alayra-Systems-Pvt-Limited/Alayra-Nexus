@@ -33,6 +33,7 @@ import { getCacheConfig }              from './cache.service';
 import { isCacheable, responseCacheKey, getCached, setCached, toCompletionJson, buildFromCompletion, buildFromStream } from '../lib/responseCache';
 import { resolveRequestScope }         from './byok.service';
 import { isByok, isIsolated }          from '../lib/scope';
+import { resolveRequestedModel, unknownModelError, noCapacityMessage } from './modelCatalog.service';
 
 export interface TeamContext {
   id:           string;
@@ -184,15 +185,21 @@ export async function handleProxy(
     }
   };
 
-  const modelField = (body.model ?? '').trim().toLowerCase();
-  // Canonical id is `alayra-nexus-1`; `kinetic-nexus-1` and `nexus` stay as silent
-  // backward-compatible aliases so existing integrations keep routing.
-  if (modelField && modelField !== 'alayra-nexus-1' && modelField !== 'kinetic-nexus-1' && modelField !== 'nexus') {
+  // ── BYOK scope (Phase 5.5) — resolved once, then threaded into model resolution, the
+  // response cache namespace, and pool discovery. Deriving them from one value is what
+  // keeps a response paid for by one team's private key out of another scope's cache, and
+  // what stops an isolated team being offered a model it can never reach.
+  const scope = await resolveRequestScope(team);
+
+  // What the caller asked for: auto-route (no model, or an alias), or a pinned model from
+  // the operator's registry. An unknown id is a 400 that names the alternatives rather
+  // than a silent substitution — see modelCatalog.service.
+  const requestedModel = await resolveRequestedModel(body.model, 'chat', scope);
+  if (requestedModel.kind === 'unknown') {
     observe('client_error');
-    return reply.code(400).send({
-      error: `Invalid model "${body.model}". Use model: "alayra-nexus-1" — Alayra Nexus routes automatically.`,
-    });
+    return reply.code(400).send(unknownModelError(requestedModel));
   }
+  const pinnedModelId = requestedModel.kind === 'pinned' ? requestedModel.model.id : null;
 
   // ── Team budget gate — enforced before any provider work happens. Requests
   // already in flight when the cap is crossed may overshoot by their own cost
@@ -248,18 +255,15 @@ export async function handleProxy(
     guardHeaders['X-Nexus-Guardrails-Output'] = 'skipped-streaming';
   }
 
-  // ── BYOK scope (Phase 5.5) — resolved once, then threaded into BOTH the response
-  // cache namespace and pool discovery. Deriving them from one value is what keeps a
-  // response paid for by one team's private key out of another scope's cache.
-  const scope = await resolveRequestScope(team);
-
   // ── Response cache (Phase 4.5) — exact-match, checked BEFORE routing. A hit is
   // replayed straight from Redis (streamed if the client asked), skipping the
   // provider entirely; only a miss falls through to routing.
   const cacheCfg    = await getCacheConfig();
   let cacheStoreKey: string | null = null;
   if (cacheCfg.enabled && isCacheable(body)) {
-    const key = responseCacheKey(body, scope.namespace);
+    // The pinned model is part of the identity: two models answering one prompt are two
+    // responses, and sharing an entry between them would replay the wrong one silently.
+    const key = responseCacheKey(body, scope.namespace, pinnedModelId);
     const hit = await getCached(key);
     if (hit) {
       metrics.responseCache('hit');
@@ -304,7 +308,7 @@ export async function handleProxy(
   // An over-budget team on the "downgrade" action is routed to the fast (cheapest) tier regardless of
   // its normal preference, so it keeps working at the lowest cost rather than being cut off.
   const preferredTier = overBudgetDowngrade ? 'fast' : (team?.assignedTier ?? null);
-  const route = await discoverBestPool(reserve, session, scope, 'chat', userId, preferredTier);
+  const route = await discoverBestPool(reserve, session, scope, 'chat', userId, preferredTier, pinnedModelId);
   if (!route) {
     observe('no_capacity');
     const isolated = isIsolated(scope);
@@ -317,11 +321,7 @@ export async function handleProxy(
       .code(503)
       .header('Retry-After', String(retryAfter))
       .send({
-        // An isolated team must be told the truth: the shared pool was never an
-        // option, so "add more provider keys" would be misleading advice.
-        error: isolated
-          ? `Your team's own provider keys are all rate-limited or unavailable, and fall-back to the shared pool is disabled for this team. Retry in ${retryAfter}s or add more keys to your team.`
-          : `All API keys are currently rate-limited. Retry in ${retryAfter}s or add more provider keys.`,
+        error: await noCapacityMessage({ isolated, pinnedModelId, retryAfter }),
         retryAfter,
       });
   }

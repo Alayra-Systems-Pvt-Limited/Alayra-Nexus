@@ -106,8 +106,14 @@ function translateMessage(msg: Json): Json[] {
 
 /**
  * Translate an Anthropic Messages request body into an OpenAI chat-completions body.
- * The model is forced to the canonical id — Nexus routes by capability, so whatever
- * the client asked for is advisory only.
+ *
+ * The model the client sent is CARRIED THROUGH, not overwritten. It used to be forced to
+ * the canonical id here, which meant an Anthropic-SDK caller — Claude Code above all —
+ * could never reach a specific model no matter what it asked for, and could not have
+ * discovered one anyway, since `/v1/models` advertised a single virtual entry. Both halves
+ * are fixed together: the listing now names the operator's real models, and this passes the
+ * client's choice on to the same resolution the OpenAI path uses. An empty model still
+ * means auto-route.
  */
 export function anthropicToOpenAI(body: Json): Json {
   const messages: Json[] = [];
@@ -117,7 +123,8 @@ export function anthropicToOpenAI(body: Json): Json {
     if (m && typeof m === 'object') messages.push(...translateMessage(m as Json));
   }
 
-  const out: Json = { model: CANONICAL_MODEL, messages, stream: body.stream === true };
+  const requested = typeof body.model === 'string' ? body.model.trim() : '';
+  const out: Json = { model: requested || CANONICAL_MODEL, messages, stream: body.stream === true };
   if (typeof body.max_tokens === 'number')  out.max_tokens = body.max_tokens;
   if (typeof body.temperature === 'number') out.temperature = body.temperature;
   if (typeof body.top_p === 'number')       out.top_p = body.top_p;
@@ -234,6 +241,25 @@ export class AnthropicStreamTranslator {
   constructor(model = CANONICAL_MODEL) {
     this.model = model;
     this.id = newMessageId();
+  }
+
+  /**
+   * Name the model Nexus routed to, as a better default than the canonical id.
+   *
+   * `begin()` prefers the model the upstream names in its own first chunk, which is the
+   * most accurate answer available — a provider often returns a dated variant
+   * (`gpt-4o-2024-08-06`) that Nexus has no way to know. This only fills the gap when a
+   * provider omits `model` from its SSE chunks, where the reply used to fall back to
+   * `alayra-nexus-1` and tell a client that pinned a real model nothing about what served
+   * it. Routing runs after the translator is constructed, so the value arrives here rather
+   * than through the constructor — see anthropicReply, which reads it off the
+   * `X-Nexus-Model` header written with the response head.
+   *
+   * An empty value is ignored, so a missing header leaves the name intact rather than
+   * blanking it.
+   */
+  setModel(model: string): void {
+    if (model) this.model = model;
   }
 
   /** Feed raw bytes from the OpenAI SSE stream; return Anthropic SSE bytes to write. */

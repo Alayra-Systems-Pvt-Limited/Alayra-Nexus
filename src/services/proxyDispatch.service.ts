@@ -30,6 +30,7 @@ import { checkTeamBudget, type BudgetPeriod, type OverBudgetAction } from './bud
 import { resolveRequestScope }   from './byok.service';
 import { isByok, isIsolated }    from '../lib/scope';
 import type { Capability }       from '../lib/modelSelect';
+import { resolveRequestedModel, unknownModelError } from './modelCatalog.service';
 import type { TeamContext }      from './completionsProxy.service';
 import * as metrics              from '../lib/metrics';
 
@@ -163,11 +164,23 @@ export async function dispatchProxy(
   }
 
   const scope = await resolveRequestScope(team);
+
+  // These endpoints used to discard the caller's `model` silently and route by capability
+  // alone, so an operator with three embedding models had no way to choose between them.
+  // Resolution is shared with the chat path, which is what keeps one rule across every
+  // endpoint: an alias (or nothing) auto-routes, a real id pins, anything else is a 400.
+  const requestedModel = await resolveRequestedModel(body.model as string | undefined, capability, scope);
+  if (requestedModel.kind === 'unknown') {
+    observe('client_error');
+    return reply.code(400).send(unknownModelError(requestedModel));
+  }
+  const pinnedModelId = requestedModel.kind === 'pinned' ? requestedModel.model.id : null;
+
   // OpenAI-standard end-user id (when the caller sends one), for per-key Max Users enforcement.
   const userId = typeof body.user === 'string' ? body.user : null;
   // A downgraded (over-budget) team is pinned to the fast/cheapest tier regardless of its preference.
   const preferredTier = overBudgetDowngrade ? 'fast' : (team?.assignedTier ?? null);
-  const route = await discoverBestPool(reserveTokens, null, scope, capability, userId, preferredTier);
+  const route = await discoverBestPool(reserveTokens, null, scope, capability, userId, preferredTier, pinnedModelId);
   if (!route) {
     observe('no_capacity');
     const isolated = isIsolated(scope);
@@ -177,7 +190,9 @@ export async function dispatchProxy(
     void reportTierExhausted(capability, isolated).catch(() => {});
     const retryAfter = await getNextCooldownSeconds();
     return reply.code(503).header('Retry-After', String(retryAfter)).send({
-      error: `No available model for "${capability}". Add a ${capability}-capable model in the Models tab, or all matching keys are rate-limited (retry in ${retryAfter}s).`,
+      error: pinnedModelId
+        ? `Model "${pinnedModelId}" is configured for "${capability}", but every API key for its provider is rate-limited or cooling. Retry in ${retryAfter}s, or omit the model to let Alayra Nexus route.`
+        : `No available model for "${capability}". Add a ${capability}-capable model in the Models tab, or all matching keys are rate-limited (retry in ${retryAfter}s).`,
       retryAfter,
     });
   }

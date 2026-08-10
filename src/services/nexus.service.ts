@@ -359,6 +359,7 @@ export async function discoverBestPool(
   capability: Capability = 'chat',
   userId: string | null = null,
   preferredTier: string | null = null,
+  pinnedModelId: string | null = null,
 ): Promise<NexusRoute | null> {
   const costWeight = await getCostWeight();
   const registry   = await getModelRegistry();
@@ -368,7 +369,7 @@ export async function discoverBestPool(
   // caller is a team with an assigned tier (Phase 8), that tier leads the ordering.
   const priceById = new Map<string, number | null>();
   for (const m of registry) priceById.set(m.id, effectivePrice(m as unknown as Record<string, unknown>));
-  const candidates = selectModels(registry as unknown as SelectableModel[], {
+  const ordered = selectModels(registry as unknown as SelectableModel[], {
     capability,
     activeProviderSlugs: await activeProviderSlugs(),
     priceOf: (m) => priceById.get(m.id) ?? null,
@@ -376,8 +377,16 @@ export async function discoverBestPool(
     preferredTier,
   });
 
-  // The legacy pool-tier path is used only for chat when no registry model qualifies.
-  const allowLegacyChat = capability === 'chat' && candidates.length === 0;
+  // A pinned request narrows the candidate list to the one model the caller named, and to
+  // nothing else. Failover across that provider's KEYS is untouched — a pin gives up
+  // cross-model failover, which is the caller's decision, not ours to quietly override by
+  // answering with a model they did not ask for.
+  const candidates = pinnedModelId ? ordered.filter((m) => m.id === pinnedModelId) : ordered;
+
+  // The legacy pool-tier path is used only for chat when no registry model qualifies. A
+  // pinned request never takes it: falling back to a pool's own preferred model is exactly
+  // the substitution a pin exists to forbid.
+  const allowLegacyChat = capability === 'chat' && candidates.length === 0 && !pinnedModelId;
 
   // The model a sticky pin should serve: the registry candidate for its provider, or —
   // on the legacy path — the pinned pool's own preferred model. Reusing the *key*
@@ -419,6 +428,10 @@ export async function discoverBestPool(
   // a deployment whose pools exist but whose registry is empty still serves traffic
   // (boot-seed normally prevents this). Non-chat capabilities have no legacy path.
   if (capability !== 'chat') return null;
+  // …and neither does a pinned request. The walk below substitutes each pool's own
+  // preferred model, which is exactly the substitution a pin forbids: the caller asked for
+  // one model, and would silently be answered by another.
+  if (pinnedModelId) return null;
 
   let priceOf: PriceOf = () => null;
   if (costWeight > 0) {
