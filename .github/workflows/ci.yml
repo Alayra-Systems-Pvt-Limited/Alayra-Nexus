@@ -381,8 +381,15 @@ jobs:
       # is exactly what an empty DATABASE_URL would have done, silently.
       - name: Prove the migration actually ran
         run: |
-          docker logs nexus 2>&1 | grep -q "migrations have been successfully applied" || {
-            echo "::error::migrate deploy did not report success"; docker logs nexus; exit 1; }
+          # Waited for rather than read once, for the same reason as the bind-mount step below:
+          # `docker logs` can lag the container's stdout. This one is a positive check, so the race
+          # only ever produces a spurious red — but a job that goes red at random is a job people
+          # learn to re-run without reading.
+          for i in $(seq 1 30); do
+            if docker logs nexus 2>&1 | grep -q "migrations have been successfully applied"; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::migrate deploy did not report success"; docker logs nexus; exit 1
       # The bind mount, run as an arbitrary uid — the recipe the README documents.
       #
       # This exists because its absence cost a release. The image built, pushed and was tagged, and
@@ -420,6 +427,33 @@ jobs:
           test -f "$BIND/nexus.db"    || { echo "::error::no database in the bind mount"; docker logs nexus-bind; exit 1; }
           test -f "$BIND/api-key.txt" || { echo "::error::the API key was not written beside the database"; docker logs nexus-bind; exit 1; }
 
+          # ── Read the log ONCE, and only after it is complete ────────────────────────────────
+          #
+          # `docker logs` is not synchronised with the container's stdout: the json-file driver can
+          # be a fraction of a second behind, and this step greps the instant /health answers. That
+          # is how this job once failed with "the log never said where the key was written" and
+          # then printed a log that plainly said it, 11ms later.
+          #
+          # The direction of the race matters far more than the flake. One check below is POSITIVE
+          # (the path appears) and a short read fails it loudly. The other is NEGATIVE (the key
+          # does NOT appear) — and an empty log passes that. So the same race that produced one
+          # spurious failure could produce a spurious PASS on the single assertion standing between
+          # a live master credential and whatever collects these logs.
+          #
+          # Waiting on the positive check first, then snapshotting once, removes both: the negative
+          # check can no longer run against a log that has not arrived, and the two checks cannot
+          # disagree with each other about what was written.
+          for i in $(seq 1 30); do
+            if docker logs nexus-bind 2>&1 | grep -q '/app/.nexus/api-key.txt'; then break; fi
+            sleep 1
+          done
+          LOGS=$(docker logs nexus-bind 2>&1)
+
+          # And it is still findable. A key filed somewhere nobody was told about is the same outage
+          # as no key at all, which is why deleting the message was never an option.
+          printf '%s\n' "$LOGS" | grep -q '/app/.nexus/api-key.txt' \
+            || { echo "::error::the log never said where the key was written"; printf '%s\n' "$LOGS"; exit 1; }
+
           # Where the key went is only half the contract. The reason it goes to a file at all is that
           # it must NOT go to stdout, and that half fails differently: a key in the wrong directory
           # is a container that will not start, while a key still on stdout starts perfectly and
@@ -428,15 +462,11 @@ jobs:
           # Never echoed, only matched. -F because a key is opaque bytes, not a pattern.
           APIKEY=$(cat "$BIND/api-key.txt")
           [ -n "$APIKEY" ] || { echo "::error::the API key file is empty"; exit 1; }
-          if docker logs nexus-bind 2>&1 | grep -qF "$APIKEY"; then
+          if printf '%s\n' "$LOGS" | grep -qF "$APIKEY"; then
             echo "::error::the master API key reached stdout — that is the regression 1.6.0 fixed"
             exit 1
           fi
-          # And it is still findable. A key filed somewhere nobody was told about is the same outage
-          # as no key at all, which is why deleting the message was never an option.
-          docker logs nexus-bind 2>&1 | grep -q '/app/.nexus/api-key.txt' \
-            || { echo "::error::the log never said where the key was written"; docker logs nexus-bind; exit 1; }
-          unset APIKEY
+          unset APIKEY LOGS
 
           docker rm -f nexus-bind >/dev/null
 
