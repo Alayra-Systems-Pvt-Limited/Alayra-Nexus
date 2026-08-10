@@ -22,6 +22,7 @@ import { getTeamStats, type TeamStatsPeriod } from '../../services/teamStats.ser
 import { prisma }              from '../../lib/prisma';
 import { randomUUID, createHash, randomBytes } from 'crypto';
 import { z }                   from 'zod';
+import { invalidBody }        from '../../lib/invalidBody';
 import { patchSchema }        from '../../lib/patchSchema';
 import { adminGuard, adminWriteGuard } from './guard';
 import { ADMIN_WRITE_RATE_LIMIT, withRateLimit } from '../../lib/routeRateLimits';
@@ -83,8 +84,11 @@ export default async function adminTeamsRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post('/admin/teams', adminWriteGuard, async (request, reply) => {
-    const body = teamSchema.parse(request.body);
-    const team = await prisma.team.create({ data: { id: randomUUID(), ...body } });
+    const parsed = teamSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid team.'));
+    }
+    const team = await prisma.team.create({ data: { id: randomUUID(), ...parsed.data } });
     return reply.code(201).send({ team });
   });
 
@@ -92,8 +96,11 @@ export default async function adminTeamsRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     // patchSchema, not `.partial()`: under zod 4 a bare partial keeps every `.default()`, so
     // renaming a suspended team would also set status back to 'active' and un-suspend it.
-    const body   = patchSchema(teamSchema).parse(request.body);
-    const team   = await prisma.team.update({ where: { id }, data: body });
+    const parsed = patchSchema(teamSchema).safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid change to a team.'));
+    }
+    const team   = await prisma.team.update({ where: { id }, data: parsed.data });
     return reply.send({ team });
   });
 

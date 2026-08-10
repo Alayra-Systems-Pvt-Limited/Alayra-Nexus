@@ -24,6 +24,7 @@ import { validateProviderCredentials, validateModel, fetchProviderModels } from 
 import { removeModelsForProvider } from '../../services/model.service';
 import { invalidateProviderCache } from '../../services/providerCache.service';
 import { z }                   from 'zod';
+import { invalidBody }        from '../../lib/invalidBody';
 import { patchSchema }        from '../../lib/patchSchema';
 import { adminGuard, adminWriteGuard } from './guard';
 
@@ -83,7 +84,11 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
   }
 
   fastify.post('/admin/providers', adminWriteGuard, async (request, reply) => {
-    const body = providerSchema.parse(request.body);
+    const parsed = providerSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid provider pool.'));
+    }
+    const body   = parsed.data;
     const urlErr = await assertProviderUrlsSafe(body);
     if (urlErr) return reply.code(400).send({ error: urlErr });
     const existing = await prisma.nexusProvider.findUnique({ where: { slug: body.slug } });
@@ -97,7 +102,11 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     // patchSchema, not `.partial()`: under zod 4 a bare partial keeps every `.default()`, so a
     // rename would also write tier, authHeader and modelIdPath back to their creation values.
-    const body   = patchSchema(providerSchema).parse(request.body);
+    const parsed = patchSchema(providerSchema).safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid change to a provider pool.'));
+    }
+    const body   = parsed.data;
     const urlErr = await assertProviderUrlsSafe(body);
     if (urlErr) return reply.code(400).send({ error: urlErr });
     const provider = await prisma.nexusProvider.update({ where: { id }, data: toProviderData(body) });

@@ -107,6 +107,25 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
+- **A malformed admin body was reported as a server fault.** Eleven routes across provider pools,
+  teams, provider keys and settings validated with `schema.parse()` and let the resulting error
+  escape, so Fastify answered `500` where every other admin route answered `400`. The cost was not
+  cosmetic: an operator's typo raised the gateway's server-error rate, so dashboards, alerts and
+  SLOs built on `5xx` counted it as an outage of ours; a well-written client retries `5xx` and not
+  `4xx`, so a body that would never be accepted was retried until something gave up; and what came
+  back was a wall of serialised validation internals with nothing saying the fix belonged to the
+  caller. All eleven now answer `400` with a sentence and the list of fields that were wrong.
+
+  Two deliberate limits on what that answer contains. It names the field and repeats the validator's
+  own message — which describes the type that arrived, never the value — because these routes accept
+  credentials, and an error body is logged, shown in a console and pasted into support threads. And
+  it is capped at five fields, with a count of how many were left out, so a body of the wrong shape
+  cannot ask the gateway to serialise six hundred problems back to whoever sent it.
+
+  A validation error that still reaches the error handler keeps its `500` on purpose: it means a
+  route forgot to validate, which is this codebase's defect and not the caller's. What stops that
+  happening is a source-level guard that fails the build if any route reintroduces the old form.
+
 - **`"model": "auto"` works.** The dashboard's Quick Start has always told operators to send it, and
   the gateway answered with a `400`. The first request most people ever made to this gateway failed,
   in all three copy-paste snippets. It is now an accepted auto-route alias.

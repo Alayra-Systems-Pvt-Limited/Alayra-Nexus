@@ -188,14 +188,13 @@ describe('editing a pool writes only what was sent', () => {
   });
 
   it('still validates what it is given', async () => {
-    // The status code is deliberately not pinned. These routes call `schema.parse()` and let the
-    // ZodError escape, so Fastify answers 500 — where every sibling admin route uses `safeParse`
-    // and answers 400. That is a real defect (a client's bad body reported as a server fault, and
-    // counted as one on every error dashboard) but it spans eleven call sites across four files
-    // and needs an error handler, so it is its own change. What must hold either way, and is what
-    // this asserts, is that the row is not written.
+    // This asserted `>= 400` when it was written: the route called `schema.parse()`, let the
+    // ZodError escape, and Fastify answered 500 — a client's bad body reported as a server fault.
+    // Now pinned, along with the other ten call sites that shared the defect. The full contract
+    // for a malformed body — the shape, the fields it names, and that no credential comes back —
+    // is in malformedBody.test.ts; what belongs here is that the row is not written.
     const res = await app.inject({ method: 'PATCH', url: '/admin/providers/p1', payload: { tier: 'platinum' } });
-    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    expect(res.statusCode).toBe(400);
     expect(db.update).not.toHaveBeenCalled();
   });
 
