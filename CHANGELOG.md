@@ -143,6 +143,28 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
+- **A streamed answer was billed as one output token.** Whenever a provider did not volunteer a
+  `usage` block in its stream, Nexus recorded the whole answer as exactly 1 output token — not an
+  estimate that drifted, a constant. A two-thousand-word reply and a one-word reply were recorded
+  identically.
+
+  OpenAI is that provider: a streamed completion carries no usage unless the request asks with
+  `stream_options`, and Nexus did not ask. So streamed spend read as approximately `$0` in
+  Analytics, team budgets were never reached because nothing was ever spent against them, and the
+  TPM reconciliation handed back nearly the whole reservation, leaving a key's throughput limit
+  unable to bind on streamed traffic. Three failures from one number.
+
+  The fallback counter reached into JSON with a regular expression that stopped one brace short of
+  a valid object, so the `JSON.parse` it fed always threw and was always swallowed. It returned
+  nothing for every input — including `Hello world`, before any question of braces or quotes in the
+  answer arose. It had no test: it was called from one line and reached by none, and the mock
+  provider the end-to-end suite runs against sends a usage block, so the fallback never ran there
+  either.
+
+  Counting now uses the same JSON parse the cache always used. Providers that report their own
+  usage are still believed, and are still read from the last frame rather than the first, because a
+  mid-stream figure is a running total and not the bill. Non-streaming was never affected.
+
 - **Streaming replies on `/v1/messages` arrived empty.** A streaming Anthropic Messages request
   returned a complete, correctly framed SSE stream — `message_start`, `content_block_start`,
   `content_block_stop`, `message_stop`, `output_tokens: 0` — containing no text at all. Claude Code
@@ -260,6 +282,28 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   committed evidence.
 
 ### Changed
+
+- **A streamed answer is read as it passes, not held until it ends.** The proxy kept every byte a
+  provider sent in one growing string so it could read the usage and the content once the stream
+  finished. SSE repeats the entire JSON envelope for each token, so it was keeping about fifty
+  times the answer it was after: measured on OpenAI's own frame shape, a single six-byte token
+  costs 251 bytes on the wire.
+
+  | Answer | Held before | Held now |
+  | --- | --- | --- |
+  | 500 words | 0.17 MB | 3 KB |
+  | long, with code | 0.95 MB | 19 KB |
+  | a model at its 64,000-token ceiling | 15.25 MB | 304 KB |
+
+  Parsing incrementally makes what is retained proportional to the answer instead of to the
+  protocol — and an answer is already bounded by the model's own output limit, which is why there
+  is no cap. A cap would have to either truncate an answer that was paid for or refuse to cache it.
+  The one thing that could still grow without bound was an upstream that never sends a newline, so
+  a single frame beyond a megabyte is dropped and the stream is marked as having a hole in it,
+  which skips the cache rather than storing a partial answer for everyone who asks again.
+
+  Nothing on the wire changed: the bytes are still forwarded to the caller untouched, as they
+  arrive.
 
 - **A route now carries the mask of the key it will use, not only the key.** The internal routing
   decision has always held the provider credential in plain text — the proxy needs it to build the
