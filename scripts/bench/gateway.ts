@@ -129,6 +129,23 @@ export interface HarnessOptions {
    * published as the gateway's latency. Profile to find WHERE the time goes; measure separately.
    */
   profile?: { controlPort: number; out: string };
+
+  /**
+   * Start against a database another instance has already claimed, instead of claiming it.
+   *
+   * The difference between this and `workers` is the whole of what the multi-instance scenario
+   * measures. `workers` forks one gateway across cores, which is a real test of shared counters but
+   * a weak one: the forks are siblings on one machine, started together, from one configuration. A
+   * second instance is what a deployment actually looks like — its own process, its own caches, its
+   * own connection pools, reached over its own port, agreeing with the first only through Postgres
+   * and Redis.
+   *
+   * Provisioning is skipped, because claiming a gateway twice fails and creating the pool twice
+   * would give the second instance a different key to rate-limit. The API key is not read either:
+   * it is written once on first boot and is unrecoverable afterwards, so the caller carries the
+   * first instance's key across. Both fields come back empty rather than wrong.
+   */
+  joinExisting?: boolean;
 }
 
 const MASTER   = 'bench-master-password';
@@ -238,10 +255,10 @@ export async function startHarness(
     if (profileControlUrl) await waitFor(`${profileControlUrl}/health`, 'profiler control');
 
     // Written once, on the first run, and never recoverable afterwards — so it is read from the file
-    // the gateway put it in rather than requested.
-    const apiKey = readGeneratedApiKey(dir);
-
-    const adminToken = await provisionGateway(gatewayUrl, mockUrl);
+    // the gateway put it in rather than requested. An instance joining an already-claimed database
+    // has no file to read, and nothing to claim.
+    const apiKey     = opts.joinExisting ? '' : readGeneratedApiKey(dir);
+    const adminToken = opts.joinExisting ? '' : await provisionGateway(gatewayUrl, mockUrl);
 
     return { gatewayUrl, mockUrl, apiKey, adminToken, metricsToken: MASTER, profileControlUrl, log: () => out, dispose };
   } catch (e) {

@@ -397,6 +397,27 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Internal
 
+- **`npm run bench:multi-instance` — two gateways, one key, one budget.** Nexus has always claimed a
+  provider key's rate limit is shared across instances, and the mechanism was readable, atomic and
+  never once executed on more than one instance. Every measurement in the repository used a single
+  process, or one process forked across cores — siblings on one machine, started together from one
+  configuration, sharing a socket. Two instances are what a deployment is: separate processes,
+  separate caches, separate connection pools, agreeing only through Postgres and Redis.
+
+  Measured, with a key rated 60/min and 240 requests split between them:
+
+  | | Served | |
+  | --- | --- | --- |
+  | Sharing one Redis | **60** | 1.00× the limit — A 32, B 28 |
+  | No shared Redis (the control) | **120** | 2.00× the limit — A 60, B 60 |
+
+  The control is the half that matters. A rig that never generates enough load, or quietly sends
+  everything to one instance, reports "the limit held" just as convincingly as a working one — so
+  the same load runs again with the instances given no Redis at all, and it has to *fail* to hold
+  the limit. If it does not, the run says the first result is unproven rather than printing a tick.
+  The run also asserts both instances actually served, and reads the counter back out of Redis to
+  show that is where the counting happened.
+
 - **The release smoke test now checks the API key, not just the database.** It asserted `nexus.db`
   and nothing else, so it caught the data-directory bug in 1.6.0 only because that bug happened to
   crash the process. A key written somewhere unexpected *without* crashing would have shipped.
