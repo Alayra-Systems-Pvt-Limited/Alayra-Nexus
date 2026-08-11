@@ -107,6 +107,24 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
+- **Streaming replies on `/v1/messages` arrived empty.** A streaming Anthropic Messages request
+  returned a complete, correctly framed SSE stream — `message_start`, `content_block_start`,
+  `content_block_stop`, `message_stop`, `output_tokens: 0` — containing no text at all. Claude Code
+  and the Anthropic SDKs showed a blank reply, with no error raised and nothing in the logs to
+  chase.
+
+  The reply wrapper translated each write with `chunk.toString()`. Two of the three paths that write
+  to it hand over a string, and both worked. The third — ordinary streaming — hands over the
+  `Uint8Array` read from the upstream body, and `Uint8Array.prototype.toString()` returns the byte
+  values as a comma-separated list. The translator found no events in `"100,97,116,97,…"` and closed
+  out a valid, empty message. A `Buffer` would have decoded correctly, and that near-miss is most of
+  why it went unseen; the path with no coverage was the one carrying the traffic.
+
+  Chunks are now decoded explicitly, through a single decoder held across the stream so that a
+  multi-byte character split across two socket writes survives intact, with the tail flushed at the
+  end. Non-streaming `/v1/messages`, and the cache-hit and guardrail-buffered streaming paths, were
+  never affected.
+
 - **A malformed admin body was reported as a server fault.** Eleven routes across provider pools,
   teams, provider keys and settings validated with `schema.parse()` and let the resulting error
   escape, so Fastify answered `500` where every other admin route answered `400`. The cost was not
