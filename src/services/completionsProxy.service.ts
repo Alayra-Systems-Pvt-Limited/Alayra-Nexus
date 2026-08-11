@@ -34,6 +34,7 @@ import { isCacheable, responseCacheKey, getCached, setCached, toCompletionJson, 
 import { resolveRequestScope }         from './byok.service';
 import { isByok, isIsolated }          from '../lib/scope';
 import { resolveRequestedModel, unknownModelError, noCapacityMessage } from './modelCatalog.service';
+import type { RequestTrace }          from '../lib/requestTrace';
 
 export interface TeamContext {
   id:           string;
@@ -161,6 +162,10 @@ export async function handleProxy(
   teamKeyId?: string,
   reqHeaders: Record<string, unknown> = {},
   team?: TeamContext,
+  // Optional, and last, so every existing caller is untouched — `/v1/chat/completions` and the
+  // Anthropic wrapper both pass nothing and behave exactly as before. Pass one and it is filled in
+  // as the request proceeds; see lib/requestTrace.ts for what may and may not go in it.
+  trace?: RequestTrace,
 ): Promise<FastifyReply | void> {
   // Metrics: measure the whole request and record its outcome at each exit.
   const t0 = Date.now();
@@ -178,6 +183,10 @@ export async function handleProxy(
   const observe = (outcome: metrics.RequestOutcome, persist = true) => {
     const elapsed = Date.now() - t0;
     metrics.observeRequest(outcome, tier, elapsed / 1000);
+    // The trace's outcome and total ride here rather than at each exit, because `observe` is
+    // already the one place every exit passes through exactly once — which is what makes it the
+    // only stamp that cannot be forgotten when a fifteenth exit is added.
+    if (trace) { trace.outcome = outcome; trace.timing.totalMs = elapsed; }
     if (outcome !== 'success' && persist) {
       void recordOutcome({
         outcome, latencyMs: elapsed, provider: routeProvider, modelName: routeModel, nexusTeamKeyId: teamKeyId,
@@ -185,17 +194,38 @@ export async function handleProxy(
     }
   };
 
+  /**
+   * Record what the provider actually billed, on whichever of the three success paths ran.
+   *
+   * Token counts only. The money is stamped separately by `recordTokenUsage`, which is the one
+   * place the registry is consulted — computing a price here as well would give two figures that
+   * agree until the day one of them changes. See lib/requestTrace.ts.
+   */
+  const stampUsage = (inputTokens: number, outputTokens: number) => {
+    if (!trace) return;
+    trace.usage = { inputTokens, outputTokens, estimatedUsd: null, savedUsd: null };
+    trace.timing.upstreamMs = Date.now() - tFetch;
+  };
+
   // ── BYOK scope (Phase 5.5) — resolved once, then threaded into model resolution, the
   // response cache namespace, and pool discovery. Deriving them from one value is what
   // keeps a response paid for by one team's private key out of another scope's cache, and
   // what stops an isolated team being offered a model it can never reach.
   const scope = await resolveRequestScope(team);
+  if (trace) {
+    trace.requestedModel = typeof body.model === 'string' ? body.model : null;
+    trace.stream = body.stream === true;
+    trace.scope  = { namespace: scope.namespace, byok: isByok(scope), isolated: isIsolated(scope) };
+  }
 
   // What the caller asked for: auto-route (no model, or an alias), or a pinned model from
   // the operator's registry. An unknown id is a 400 that names the alternatives rather
   // than a silent substitution — see modelCatalog.service.
   const requestedModel = await resolveRequestedModel(body.model, 'chat', scope);
+  if (trace) trace.resolution = requestedModel.kind === 'pinned' ? 'pinned'
+    : requestedModel.kind === 'unknown' ? 'unknown' : 'auto';
   if (requestedModel.kind === 'unknown') {
+    if (trace) trace.refusal = { status: 400, reason: 'The model asked for is not in the registry.' };
     observe('client_error');
     return reply.code(400).send(unknownModelError(requestedModel));
   }
@@ -209,7 +239,12 @@ export async function handleProxy(
   let overBudgetDowngrade = false;
   if (team && team.budgetUsd != null) {
     const budget = await checkTeamBudget(team.id, team.budgetUsd, team.budgetPeriod as BudgetPeriod, (team.overBudgetAction ?? 'block') as OverBudgetAction);
+    if (trace) trace.budget = {
+      checked: true, allowed: budget.allowed, action: team.overBudgetAction ?? 'block',
+      downgraded: budget.downgrade, spendUsd: budget.spendUsd, budgetUsd: team.budgetUsd,
+    };
     if (!budget.allowed) {
+      if (trace) trace.refusal = { status: 429, reason: 'The team is over its budget for this period.' };
       observe('budget_blocked');
       return reply
         .code(429)
@@ -222,6 +257,10 @@ export async function handleProxy(
         });
     }
     overBudgetDowngrade = budget.downgrade;
+  } else if (trace) {
+    // Nothing to check is not the same as checked and allowed — a caller with no team, or a team
+    // with no cap, has no budget state, and reporting one would invent a limit that does not exist.
+    trace.budget = { checked: false, allowed: true, action: 'none', downgraded: false };
   }
 
   const messages = Array.isArray(body.messages) ? body.messages : [];
@@ -233,16 +272,23 @@ export async function handleProxy(
   const guardHeaders: Record<string, string> = {};
   let effectiveMessages = messages;
 
+  if (trace) trace.guardrails = {
+    active: guardActive, input: 'pass', inputMatched: [], output: 'off', outputMatched: [],
+  };
+
   if (guardActive) {
     guardHeaders['X-Nexus-Guardrails'] = 'on';
     const verdict = evaluateMessages(messages, guard.compiled);
     if (verdict.decision === 'block') {
+      if (trace?.guardrails) { trace.guardrails.input = 'block'; trace.guardrails.inputMatched = verdict.matched; }
+      if (trace) trace.refusal = { status: 400, reason: 'A content guardrail blocked the request.' };
       observe('blocked');
       return reply.code(400).send({ error: 'Request blocked by content guardrails.', guardrails: verdict.matched });
     }
     if (verdict.decision === 'redact') {
       effectiveMessages = verdict.messages;
       guardHeaders['X-Nexus-Guardrails-Input'] = `redacted:${verdict.matched.join(',')}`;
+      if (trace?.guardrails) { trace.guardrails.input = 'redact'; trace.guardrails.inputMatched = verdict.matched; }
     }
   }
 
@@ -253,6 +299,9 @@ export async function handleProxy(
   const bufferStream = isStream && outputFiltering && guard.bufferedSafe;
   if (isStream && outputFiltering && !guard.bufferedSafe) {
     guardHeaders['X-Nexus-Guardrails-Output'] = 'skipped-streaming';
+    if (trace?.guardrails) trace.guardrails.output = 'skipped-streaming';
+  } else if (trace?.guardrails && outputFiltering) {
+    trace.guardrails.output = bufferStream ? 'buffered' : 'applied';
   }
 
   // ── Response cache (Phase 4.5) — exact-match, checked BEFORE routing. A hit is
@@ -260,6 +309,9 @@ export async function handleProxy(
   // provider entirely; only a miss falls through to routing.
   const cacheCfg    = await getCacheConfig();
   let cacheStoreKey: string | null = null;
+  // Told apart deliberately: "the operator switched the cache off" and "this request could never
+  // be cached" look identical from outside and are different answers to "why was nothing reused?".
+  if (trace) trace.cache = !cacheCfg.enabled ? 'disabled' : isCacheable(body) ? 'miss' : 'not-cacheable';
   if (cacheCfg.enabled && isCacheable(body)) {
     // The pinned model is part of the identity: two models answering one prompt are two
     // responses, and sharing an entry between them would replay the wrong one silently.
@@ -267,6 +319,14 @@ export async function handleProxy(
     const hit = await getCached(key);
     if (hit) {
       metrics.responseCache('hit');
+      if (trace) {
+        trace.cache      = 'hit';
+        trace.cachedFrom = { provider: hit.provider, modelString: hit.model };
+        trace.usage      = {
+          inputTokens: hit.promptTokens, outputTokens: hit.completionTokens,
+          estimatedUsd: null, savedUsd: null,
+        };
+      }
       observe('success');
       // A cache hit is a $0 provider call, still attributed to the team so cost
       // and analytics numbers stay honest.
@@ -275,7 +335,7 @@ export async function handleProxy(
         inputTokens: hit.promptTokens, outputTokens: hit.completionTokens,
         nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd,
         cached: true, latencyMs: Date.now() - t0,
-      }).catch(() => {});
+      }, trace).catch(() => {});
       const completion = toCompletionJson(hit);
       const hitHeaders = { 'X-Nexus-Model': hit.model, 'X-Nexus-Provider': hit.provider, 'X-Nexus-Cache': 'hit' };
       if (isStream) {
@@ -310,6 +370,9 @@ export async function handleProxy(
   const preferredTier = overBudgetDowngrade ? 'fast' : (team?.assignedTier ?? null);
   const route = await discoverBestPool(reserve, session, scope, 'chat', userId, preferredTier, pinnedModelId);
   if (!route) {
+    if (trace) trace.refusal = { status: 503, reason: pinnedModelId
+      ? 'No key had capacity for the model that was pinned.'
+      : 'No pool had a key with capacity for this request.' };
     observe('no_capacity');
     const isolated = isIsolated(scope);
     if (isolated) metrics.byokRequest('isolated_block');
@@ -330,6 +393,21 @@ export async function handleProxy(
   tier          = route.tier;
   routeProvider = route.providerSlug;
   routeModel    = route.modelString;
+  // Field by field, never `...route` — the route carries `decryptedKey`, and a spread would put a
+  // live provider credential into an object that is serialised into an admin API response. See
+  // #117 and lib/requestTrace.ts. `keyMask` is what exists so this has a safe answer.
+  if (trace) trace.route = {
+    provider:   route.providerSlug,
+    modelString: route.modelString,
+    modelId:    route.modelId,
+    tier:       route.tier,
+    keyId:      route.keyId,
+    keyMask:    route.keyMask,
+    sticky:     route.sticky,
+    byok:       route.byok,
+    downgraded: route.wasDowngrade,
+    probe:      route.isProbe,
+  };
   metrics.providerRequest(route.providerSlug);
   if (route.sticky) metrics.cacheHit();
   // Only a key-owning team can produce a BYOK outcome; pooled callers are not counted.
@@ -346,6 +424,7 @@ export async function handleProxy(
     assertSafeUrl(stripTrailingSlash(route.baseUrl), await getSsrfPolicy());
   } catch (err) {
     refundReservation();
+    if (trace) trace.refusal = { status: 502, reason: 'The pool\'s base URL is blocked by the network policy.' };
     observe('ssrf_blocked');
     return reply.code(502).send({ error: err instanceof Error ? err.message : 'Upstream blocked by SSRF policy.' });
   }
@@ -379,11 +458,15 @@ export async function handleProxy(
     await reportServerFailure(keyId, route.isProbe);
     metrics.providerError(route.providerSlug, 'timeout');
     span.recordException(err as Error); span.setStatus({ code: SpanStatusCode.ERROR }); span.end();
-    observe('upstream_error');
     const aborted = err instanceof Error && err.name === 'AbortError';
+    if (trace) trace.refusal = { status: 504, reason: aborted
+      ? `The provider sent no response headers within ${UPSTREAM_TTFT_MS}ms.`
+      : 'The connection to the provider failed.' };
+    observe('upstream_error');
     return reply.code(504).send({ error: aborted ? 'Upstream timed out before responding.' : 'Upstream connection failed.' });
   }
   clearTimeout(ttftTimer);
+  if (trace) trace.timing.ttfbMs = Date.now() - tFetch;
   metrics.observeTtfb((Date.now() - tFetch) / 1000);
   span.setAttribute('http.status_code', upstream.status);
 
@@ -397,6 +480,7 @@ export async function handleProxy(
     else if (upstream.status >= 500)                         { await reportServerFailure(keyId, route.isProbe); metrics.providerError(route.providerSlug, 'server'); }
     span.setStatus({ code: SpanStatusCode.ERROR }); span.end();
     refundReservation(); // rejected upstream — return the reserved budget
+    if (trace) trace.refusal = { status: upstream.status, reason: `The provider answered ${upstream.status}.` };
     // 4xx (other than 429) is the caller's bad request; 429/auth/5xx is an upstream fault.
     observe(upstream.status >= 500 || upstream.status === 429 || upstream.status === 401 || upstream.status === 403 ? 'upstream_error' : 'client_error');
     return reply.code(upstream.status).send(errText);
@@ -437,6 +521,7 @@ export async function handleProxy(
     onHealthy();
 
     const matched = applyOutputGuardrails(data, guard.compiled);
+    if (trace?.guardrails) trace.guardrails.outputMatched = matched;
     const outHeaders = { ...nexusHeaders, 'X-Nexus-Guardrails-Output': matched.length ? `buffered:${matched.join(',')}` : 'buffered' };
 
     reply.hijack();
@@ -453,10 +538,11 @@ export async function handleProxy(
     const usageObj     = data.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
     const inputTokens  = usageObj?.prompt_tokens    ?? countMessageTokens(effectiveMessages);
     const outputTokens = usageObj?.completion_tokens ?? 1;
+    stampUsage(inputTokens, outputTokens);
     observe('success'); metrics.addTokens(inputTokens, outputTokens);
     storeInCache(cacheStoreKey, data, route.providerSlug, cacheCfg.ttlSeconds);
     void reconcileTpm(keyId, reserve, inputTokens + outputTokens).catch(() => {});
-    void recordTokenUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0 }).catch(() => {});
+    void recordTokenUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0 }, trace).catch(() => {});
     return;
   }
 
@@ -502,11 +588,12 @@ export async function handleProxy(
     const usage        = parseUsageFromSSE(collected);
     const inputTokens  = usage?.input  ?? countMessageTokens(effectiveMessages);
     const outputTokens = usage?.output ?? estimateDeltaTokens(collected);
+    stampUsage(inputTokens, outputTokens);
     metrics.addTokens(inputTokens, outputTokens);
     // Only cache a cleanly-completed stream; reuse the buffer already collected.
     if (!streamFailed) storeStreamInCache(cacheStoreKey, collected, route.modelString, route.providerSlug, inputTokens, outputTokens, cacheCfg.ttlSeconds);
     void reconcileTpm(keyId, reserve, inputTokens + outputTokens).catch(() => {});
-    void recordTokenUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0, outcome: streamFailed ? 'upstream_error' : 'success' }).catch(() => {});
+    void recordTokenUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0, outcome: streamFailed ? 'upstream_error' : 'success' }, trace).catch(() => {});
     return;
   }
 
@@ -528,16 +615,18 @@ export async function handleProxy(
   // Guardrails (output side) — safe here because the full body is already buffered.
   if (outputFiltering) {
     const matched = applyOutputGuardrails(data, guard.compiled);
+    if (trace?.guardrails) trace.guardrails.outputMatched = matched;
     if (matched.length) nexusHeaders['X-Nexus-Guardrails-Output'] = `applied:${matched.join(',')}`;
   }
 
   const usageObj     = data.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
   const inputTokens  = usageObj?.prompt_tokens     ?? countMessageTokens(effectiveMessages);
   const outputTokens = usageObj?.completion_tokens  ?? 1;
+  stampUsage(inputTokens, outputTokens);
   observe('success'); metrics.addTokens(inputTokens, outputTokens);
   storeInCache(cacheStoreKey, data, route.providerSlug, cacheCfg.ttlSeconds); // cache the post-guardrails response
   void reconcileTpm(keyId, reserve, inputTokens + outputTokens).catch(() => {});
-  void recordTokenUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0 }).catch(() => {});
+  void recordTokenUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0 }, trace).catch(() => {});
 
   for (const [k, v] of Object.entries(nexusHeaders)) reply.header(k, v);
   return reply.code(200).send(data);

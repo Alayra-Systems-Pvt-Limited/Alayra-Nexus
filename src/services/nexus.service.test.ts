@@ -86,7 +86,14 @@ const { state, prismaMock, admission } = vi.hoisted(() => {
 });
 
 vi.mock('../lib/prisma',     () => ({ dbEngine: 'postgres', prisma: prismaMock }));
-vi.mock('../lib/encryption', () => ({ decrypt: (s: string) => `dec-${s}`, maskKey: (s: string) => s }));
+// `maskKey` was the identity function here, which made the mask indistinguishable from the key it
+// was meant to hide — so an assertion that the two differ could not have been written, and the one
+// below would have passed against a route handing out the plaintext. Realistic enough to tell them
+// apart, which is the whole property under test. See #117.
+vi.mock('../lib/encryption', () => ({
+  decrypt: (s: string) => `dec-${s}`,
+  maskKey: (s: string) => `●●●●${s.slice(-4)}`,
+}));
 // The real selectAndReserve talks to the KV; this suite is about SELECTION, not admission mechanics.
 // The walk itself — breaker gate, Max Users, RPM/TPM, and the order the side effects happen in — is
 // covered against BOTH the Lua and its twin in lib/kv/parity.test.ts, which is where it belongs.
@@ -176,6 +183,32 @@ describe('reportTierExhausted (Phase 6.4b)', () => {
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({
       type: 'tierExhausted', dedupeKey: 'tierExhausted:embedding:isolated',
     }));
+  });
+});
+
+describe('discoverBestPool — the key mask (#117)', () => {
+  // `NexusRoute` carries the decrypted provider credential. `keyMask` exists so that everything
+  // downstream which legitimately needs to say WHICH key served a request has a safe answer, and
+  // never a reason to reach for the plaintext. It is only that if it is actually produced — a
+  // route whose mask came back empty would send every caller straight back to `decryptedKey`.
+
+  it('carries a mask alongside the credential', async () => {
+    const route = await discoverBestPool(10, null, SHARED_SCOPE);
+    expect(route?.keyMask).toBeTruthy();
+  });
+
+  it('is not the credential', async () => {
+    const route = await discoverBestPool(10, null, SHARED_SCOPE);
+    expect(route?.keyMask).not.toBe(route?.decryptedKey);
+    expect(route?.keyMask).not.toContain(route!.decryptedKey);
+  });
+
+  it('describes the key this route will actually authenticate with', async () => {
+    // Masked from the decrypted value rather than read from the stored `maskedKey` column, so the
+    // two cannot drift — a mask that describes a different key is worse than no mask, because it
+    // is the string an operator would use to decide which credential to rotate.
+    const route = await discoverBestPool(10, null, SHARED_SCOPE);
+    expect(route?.keyMask).toBe(`●●●●${route!.decryptedKey.slice(-4)}`);
   });
 });
 

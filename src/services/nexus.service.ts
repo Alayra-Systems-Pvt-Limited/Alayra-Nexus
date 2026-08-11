@@ -50,6 +50,15 @@ export const TIER_ORDER: Tier[] = ['premium', 'standard', 'fast'];
 export interface NexusRoute {
   keyId:        string;
   decryptedKey: string;
+  /**
+   * The same masked form the dashboard shows for this key (`maskKey`, so the two always agree).
+   *
+   * Carried on the route so that everything downstream which legitimately needs to say WHICH key
+   * served a request — a trace, a diagnostic, a log line — has a safe answer sitting right beside
+   * the credential, rather than a reason to reach for `decryptedKey`. See #117: the plaintext above
+   * is necessary and is guarded only by nobody having copied it yet.
+   */
+  keyMask:      string;
   baseUrl:      string;
   modelString:  string;
   // The registry model id this route serves, when selection came from the registry
@@ -100,9 +109,13 @@ function buildRoute(
   gate: breaker.BreakerGate,
   model: RouteModel,
 ): Omit<NexusRoute, 'wasDowngrade' | 'sticky'> {
+  // Decrypted once and masked from that, rather than read from the `maskedKey` column: the mask
+  // then describes the key this route will actually authenticate with, and cannot drift from it.
+  const decryptedKey = decrypt(key.encryptedKey);
   return {
     keyId:        key.id,
-    decryptedKey: decrypt(key.encryptedKey),
+    decryptedKey,
+    keyMask:      maskKey(decryptedKey),
     baseUrl:      provider.baseUrl ?? providerDefaultUrl(provider.provider),
     modelString:  model.modelString,
     modelId:      model.modelId,

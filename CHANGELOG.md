@@ -207,6 +207,15 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Changed
 
+- **A route now carries the mask of the key it will use, not only the key.** The internal routing
+  decision has always held the provider credential in plain text — the proxy needs it to build the
+  upstream auth header — and nothing had ever copied it anywhere it should not go. But the route is
+  the richest object on the request path, which makes it the natural thing to log while debugging a
+  routing question, and every one of those instincts would have shipped a live provider key to a log
+  aggregator. It now carries the same masked form the dashboard shows, so "which key served this?"
+  has a safe answer sitting beside the credential rather than a reason to reach past it. Groundwork
+  for the Playground, which is the first feature to report routing decisions over HTTP.
+
 - **Four dependency majors: zod 3 → 4, jose 5 → 6, @fastify/multipart 9 → 10, dotenv 16 → 17.** All
   four had been open and green for a week. Green was not the answer: two of them carried a real
   break that no existing test could see.
