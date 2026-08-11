@@ -245,6 +245,66 @@ describe('AnthropicStreamTranslator — text', () => {
   });
 });
 
+describe('AnthropicStreamTranslator — a stream the gateway cut short', () => {
+  // Nexus writes an error frame when it stops a stream early: an upstream that went silent, or a
+  // request past its time limit. Without translating it, an Anthropic client gets a reply that
+  // stops mid-sentence and then closes as though it had finished — the answer is wrong and nothing
+  // says so.
+
+  it('turns the gateway error frame into an Anthropic error event', () => {
+    const t = new AnthropicStreamTranslator();
+    let sse = '';
+    sse += t.push(oaiChunk({ model: 'gpt', choices: [{ delta: { content: 'The capital of' } }] }));
+    sse += t.push('data: {"error":{"message":"The provider sent nothing for 30s, so this answer is incomplete.","type":"upstream_timeout","code":"stream_idle"}}\n\n');
+    sse += t.end();
+
+    const events = parseSse(sse);
+    expect(events.map(e => e.event)).toContain('error');
+
+    const failure = events.find(e => e.event === 'error')!.data as { type: string; error: Record<string, string> };
+    expect(failure.type).toBe('error');
+    expect(failure.error.message).toContain('incomplete');
+    expect(failure.error.type).toBe('api_error');   // 504 maps here
+  });
+
+  it('still closes what it opened, for a client that ignores the error', () => {
+    const t = new AnthropicStreamTranslator();
+    let sse = '';
+    sse += t.push(oaiChunk({ choices: [{ delta: { content: 'half an ans' } }] }));
+    sse += t.push('data: {"error":{"message":"cut"}}\n\n');
+    sse += t.end();
+
+    const events = parseSse(sse).map(e => e.event);
+    expect(events).toEqual([
+      'message_start', 'content_block_start', 'content_block_delta',
+      'error', 'content_block_stop', 'message_delta', 'message_stop',
+    ]);
+  });
+
+  it('delivers the text that did arrive before the cut', () => {
+    // Truncated is not the same as lost. The caller paid for these tokens and the provider billed
+    // for them; withholding them on the way out would be a second failure on top of the first.
+    const t = new AnthropicStreamTranslator();
+    let sse = '';
+    sse += t.push(oaiChunk({ choices: [{ delta: { content: 'The capital of France is' } }] }));
+    sse += t.push('data: {"error":{"message":"cut"}}\n\n');
+    sse += t.end();
+
+    expect(sse).toContain('The capital of France is');
+  });
+
+  it('names an error that arrived before any content', () => {
+    // A provider that goes silent before its first token. There is no open block to close, and the
+    // envelope still has to be well formed.
+    const t = new AnthropicStreamTranslator();
+    const sse = t.push('data: {"error":{"message":"nothing arrived"}}\n\n') + t.end();
+
+    const events = parseSse(sse);
+    expect(events.map(e => e.event)).toContain('error');
+    expect(events[0].event).toBe('message_start');
+  });
+});
+
 describe('AnthropicStreamTranslator — tools', () => {
   it('opens a tool_use block and streams input_json_delta, closing any text first', () => {
     const t = new AnthropicStreamTranslator();

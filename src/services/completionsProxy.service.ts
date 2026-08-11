@@ -32,6 +32,7 @@ import { checkTeamBudget, type BudgetPeriod, type OverBudgetAction } from './bud
 import { getCacheConfig }              from './cache.service';
 import { isCacheable, responseCacheKey, getCached, setCached, toCompletionJson, buildFromCompletion, buildFromStreamContent } from '../lib/responseCache';
 import { createStreamTally } from '../lib/streamTally';
+import { createClientWriter } from '../lib/clientWriter';
 import { resolveRequestScope }         from './byok.service';
 import { isByok, isIsolated }          from '../lib/scope';
 import { resolveRequestedModel, unknownModelError, noCapacityMessage } from './modelCatalog.service';
@@ -73,6 +74,31 @@ const UPSTREAM_BODY_MS = parseInt(process.env.UPSTREAM_BODY_MS ?? '60000', 10);
 // Streaming: maximum gap allowed between two chunks (an idle/hung stream is aborted;
 // legitimate long streams keep running as long as chunks keep arriving).
 const STREAM_IDLE_MS   = parseInt(process.env.UPSTREAM_STREAM_IDLE_MS ?? '30000', 10);
+// Streaming: the ceiling on one whole request. The idle guard restarts on every chunk, so it
+// bounds silence and nothing else — an upstream dripping one byte every 29 seconds holds a
+// connection, a slot and a token reservation for as long as it cares to. Ten minutes clears the
+// slowest legitimate case (a reasoning model on a very long answer) with room to spare; past that
+// a request is not slow, it is stuck.
+const STREAM_MAX_MS    = parseInt(process.env.UPSTREAM_STREAM_MAX_MS ?? '600000', 10);
+
+/** Why a stream stopped before the provider said it was finished. */
+type CutReason = 'idle' | 'duration' | 'client';
+
+/**
+ * The frame that tells a caller their answer is incomplete.
+ *
+ * Without it a cut stream is indistinguishable from a finished one: the bytes simply stop, and the
+ * last thing the reader saw was an ordinary token. Silence is the wrong answer here — a truncated
+ * reply that looks whole is worse than an error, because it gets used.
+ */
+function cutFrame(reason: Exclude<CutReason, 'client'>): string {
+  const message = reason === 'idle'
+    ? `The provider sent nothing for ${Math.round(STREAM_IDLE_MS / 1000)}s, so this answer is incomplete.`
+    : `This answer passed the ${Math.round(STREAM_MAX_MS / 60000)}-minute limit for one request and is incomplete.`;
+  // OpenAI's own mid-stream convention: an `error` object in the data frame, and no `[DONE]` —
+  // a `[DONE]` after this would read to most clients as a clean finish.
+  return `data: ${JSON.stringify({ error: { message, type: 'upstream_timeout', code: `stream_${reason}` } })}\n\n`;
+}
 
 // Usage and content both come off the stream as it passes now — see `streamTally.ts`. The two
 // functions that used to derive them from a buffer of the whole response are gone: one held 32x
@@ -542,25 +568,42 @@ export async function handleProxy(
     const reader = upstream.body.getReader();
     // Reads the stream as it goes rather than holding it: the answer and the usage, not the wire.
     const tally  = createStreamTally();
+    // Writes at the caller's pace rather than the provider's, so a slow reader slows the request
+    // down instead of making this process hold the rest of their answer.
+    const client = createClientWriter(reply.raw, controller.signal);
     let streamFailed = false;
-    // Idle guard: abort if the gap between chunks exceeds STREAM_IDLE_MS.
-    let idleTimer: ReturnType<typeof setTimeout> = setTimeout(() => controller.abort(), STREAM_IDLE_MS);
+    /** Set by whichever guard fires first; read once in `finally` to say what happened. */
+    let cutShort: CutReason | null = null;
+
+    const startIdleTimer = (): ReturnType<typeof setTimeout> =>
+      setTimeout(() => { cutShort ??= 'idle'; controller.abort(); }, STREAM_IDLE_MS);
+
+    let idleTimer = startIdleTimer();
+    const wholeTimer = setTimeout(() => { cutShort ??= 'duration'; controller.abort(); }, STREAM_MAX_MS);
 
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        // Stopped for the whole of the write, not restarted around it: this timer measures how long
+        // the provider has been silent, and time spent waiting for a slow caller is not that. The
+        // whole-request ceiling is what bounds a caller who never drains.
         clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => controller.abort(), STREAM_IDLE_MS);
         tally.push(value);
-        reply.raw.write(value);
+        await client.write(value);
+        if (client.gone()) { cutShort ??= 'client'; break; }
+        idleTimer = startIdleTimer();
       }
-    } catch { streamFailed = true; /* aborted (idle timeout) or upstream error mid-stream — flush what we have */ }
+    } catch { streamFailed = true; /* aborted (a guard fired) or upstream error mid-stream — keep what arrived */ }
     finally {
       clearTimeout(idleTimer);
+      clearTimeout(wholeTimer);
+      client.release();
       // Before reading the tally either way: a stream that died mid-flight still delivered tokens
       // the provider will bill for, and the last of them may be sitting in the decoder.
       tally.end();
+      // Nothing to explain to a caller who has already hung up.
+      if (cutShort && cutShort !== 'client') reply.raw.write(cutFrame(cutShort));
       reply.raw.end();
     }
 
