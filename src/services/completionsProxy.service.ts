@@ -30,7 +30,8 @@ import * as metrics                   from '../lib/metrics';
 import { startUpstreamSpan, SpanStatusCode } from '../lib/tracing';
 import { checkTeamBudget, type BudgetPeriod, type OverBudgetAction } from './budget.service';
 import { getCacheConfig }              from './cache.service';
-import { isCacheable, responseCacheKey, getCached, setCached, toCompletionJson, buildFromCompletion, buildFromStream } from '../lib/responseCache';
+import { isCacheable, responseCacheKey, getCached, setCached, toCompletionJson, buildFromCompletion, buildFromStreamContent } from '../lib/responseCache';
+import { createStreamTally } from '../lib/streamTally';
 import { resolveRequestScope }         from './byok.service';
 import { isByok, isIsolated }          from '../lib/scope';
 import { resolveRequestedModel, unknownModelError, noCapacityMessage } from './modelCatalog.service';
@@ -73,28 +74,10 @@ const UPSTREAM_BODY_MS = parseInt(process.env.UPSTREAM_BODY_MS ?? '60000', 10);
 // legitimate long streams keep running as long as chunks keep arriving).
 const STREAM_IDLE_MS   = parseInt(process.env.UPSTREAM_STREAM_IDLE_MS ?? '30000', 10);
 
-function parseUsageFromSSE(collected: string): { input: number; output: number } | null {
-  const lines = collected.split('\n');
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim();
-    if (!line.startsWith('data:')) continue;
-    const json = line.slice(5).trim();
-    if (json === '[DONE]') continue;
-    try {
-      const parsed = JSON.parse(json) as { usage?: { prompt_tokens?: number; completion_tokens?: number } };
-      if (parsed.usage?.prompt_tokens !== undefined) {
-        return { input: parsed.usage.prompt_tokens ?? 0, output: parsed.usage.completion_tokens ?? 0 };
-      }
-    } catch { /* skip */ }
-  }
-  return null;
-}
-
-function estimateDeltaTokens(collected: string): number {
-  const matches = collected.match(/"delta"\s*:\s*\{[^}]*"content"\s*:\s*"([^"]*)"/g) ?? [];
-  const content = matches.map(m => { try { return JSON.parse(`{${m}}`).delta?.content ?? ''; } catch { return ''; } }).join('');
-  return Math.max(1, countTokens(content));
-}
+// Usage and content both come off the stream as it passes now — see `streamTally.ts`. The two
+// functions that used to derive them from a buffer of the whole response are gone: one held 32x
+// the memory of the answer it was reading, and the other reached into JSON with a regular
+// expression that returned nothing for every input, billing those answers as one output token.
 
 /** Does the rule set contain any rule that inspects the model's output? */
 function hasOutputRules(rules: CompiledRule[]): boolean {
@@ -147,10 +130,10 @@ function storeInCache(key: string | null, data: Record<string, unknown>, provide
   void setCached(key, entry, ttl).catch(() => {});
 }
 
-/** Fire-and-forget: persist a streamed completion, assembled from its buffer. */
-function storeStreamInCache(key: string | null, collected: string, model: string, provider: string, promptTokens: number, completionTokens: number, ttl: number): void {
+/** Fire-and-forget: persist a streamed completion from the content the tally assembled. */
+function storeStreamInCache(key: string | null, content: string, model: string, provider: string, promptTokens: number, completionTokens: number, ttl: number): void {
   if (!key) return;
-  const entry = buildFromStream(collected, model, provider, promptTokens, completionTokens);
+  const entry = buildFromStreamContent(content, model, provider, promptTokens, completionTokens);
   if (!entry.content) return; // empty / tool-call-only stream — nothing to replay
   metrics.responseCache('store');
   void setCached(key, entry, ttl).catch(() => {});
@@ -556,9 +539,9 @@ export async function handleProxy(
       ...nexusHeaders,
     });
 
-    const reader    = upstream.body.getReader();
-    const decoder   = new TextDecoder();
-    let collected   = '';
+    const reader = upstream.body.getReader();
+    // Reads the stream as it goes rather than holding it: the answer and the usage, not the wire.
+    const tally  = createStreamTally();
     let streamFailed = false;
     // Idle guard: abort if the gap between chunks exceeds STREAM_IDLE_MS.
     let idleTimer: ReturnType<typeof setTimeout> = setTimeout(() => controller.abort(), STREAM_IDLE_MS);
@@ -569,12 +552,15 @@ export async function handleProxy(
         if (done) break;
         clearTimeout(idleTimer);
         idleTimer = setTimeout(() => controller.abort(), STREAM_IDLE_MS);
-        collected += decoder.decode(value, { stream: true });
+        tally.push(value);
         reply.raw.write(value);
       }
     } catch { streamFailed = true; /* aborted (idle timeout) or upstream error mid-stream — flush what we have */ }
     finally {
       clearTimeout(idleTimer);
+      // Before reading the tally either way: a stream that died mid-flight still delivered tokens
+      // the provider will bill for, and the last of them may be sitting in the decoder.
+      tally.end();
       reply.raw.end();
     }
 
@@ -585,13 +571,17 @@ export async function handleProxy(
     if (streamFailed) { void reportServerFailure(keyId, route.isProbe).catch(() => {}); metrics.providerError(route.providerSlug, 'server'); observe('upstream_error', false); }
     else { onHealthy(); observe('success'); }
 
-    const usage        = parseUsageFromSSE(collected);
+    const usage        = tally.usage();
+    const answer       = tally.content();
     const inputTokens  = usage?.input  ?? countMessageTokens(effectiveMessages);
-    const outputTokens = usage?.output ?? estimateDeltaTokens(collected);
+    // Providers that report their own usage are believed. The rest are counted from what they
+    // actually said — never below 1, since a request that reached a provider was not free.
+    const outputTokens = usage?.output ?? Math.max(1, countTokens(answer));
     stampUsage(inputTokens, outputTokens);
     metrics.addTokens(inputTokens, outputTokens);
-    // Only cache a cleanly-completed stream; reuse the buffer already collected.
-    if (!streamFailed) storeStreamInCache(cacheStoreKey, collected, route.modelString, route.providerSlug, inputTokens, outputTokens, cacheCfg.ttlSeconds);
+    // Only cache a cleanly-completed stream, and only one that was read whole: a dropped frame
+    // leaves a hole in the answer, and a cached hole is served to everyone who asks again.
+    if (!streamFailed && !tally.degraded()) storeStreamInCache(cacheStoreKey, answer, route.modelString, route.providerSlug, inputTokens, outputTokens, cacheCfg.ttlSeconds);
     void reconcileTpm(keyId, reserve, inputTokens + outputTokens).catch(() => {});
     void recordTokenUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0, outcome: streamFailed ? 'upstream_error' : 'success' }, trace).catch(() => {});
     return;

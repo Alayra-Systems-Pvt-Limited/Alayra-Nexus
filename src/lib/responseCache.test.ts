@@ -22,7 +22,7 @@ vi.mock('./redis', () => ({ redis: { get: vi.fn(), set: vi.fn() } }));
 
 import {
   isCacheable, responseCacheKey, cacheRedisKey, toCompletionJson,
-  buildFromCompletion, buildFromStream, extractStreamContent,
+  buildFromCompletion, buildFromStreamContent,
 } from './responseCache';
 import { SHARED_NAMESPACE } from './scope';
 
@@ -137,30 +137,25 @@ describe('buildFromCompletion', () => {
   });
 });
 
-describe('extractStreamContent / buildFromStream', () => {
-  const sse = [
-    'data: {"choices":[{"delta":{"role":"assistant"}}]}',
-    'data: {"choices":[{"delta":{"content":"Hello"}}]}',
-    'data: {"choices":[{"delta":{"content":", world"}}]}',
-    'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
-    'data: [DONE]',
-  ].join('\n\n');
+describe('buildFromStreamContent', () => {
+  // Assembling the content from SSE moved to `streamTally.ts`, which does it as the stream arrives
+  // instead of from a buffer of the whole thing; the parsing tests moved with it. What is left here
+  // is the entry-building, which now takes the answer already assembled.
 
-  it('assembles delta content across chunks (JSON-parsed, escaping-safe)', () => {
-    expect(extractStreamContent(sse)).toBe('Hello, world');
-  });
-
-  it('preserves escaped characters in content', () => {
-    const s = 'data: {"choices":[{"delta":{"content":"line1\\nline2"}}]}\n\ndata: [DONE]';
-    expect(extractStreamContent(s)).toBe('line1\nline2');
-  });
-
-  it('builds a cache entry with the assembled content and passed token counts', () => {
-    const c = buildFromStream(sse, 'alayra-nexus-1', 'anthropic', 8, 3);
+  it('builds a cache entry with the content and passed token counts', () => {
+    const c = buildFromStreamContent('Hello, world', 'alayra-nexus-1', 'anthropic', 8, 3);
     expect(c.content).toBe('Hello, world');
     expect(c.provider).toBe('anthropic');
     expect(c.promptTokens).toBe(8);
     expect(c.completionTokens).toBe(3);
+    expect(c.finishReason).toBe('stop');
+  });
+
+  it('does not itself parse SSE, which is why its name says content', () => {
+    // Handing it the wire format is the one way to misuse it, and it fails loudly rather than
+    // caching frames as if they were the model's words — the caller sees its own mistake replayed.
+    const c = buildFromStreamContent('data: {"choices":[{"delta":{"content":"hi"}}]}', 'm', 'openai', 1, 1);
+    expect(c.content).not.toBe('hi');
   });
 });
 

@@ -138,33 +138,21 @@ export function buildFromCompletion(data: Record<string, unknown>, provider: str
 }
 
 /**
- * Assemble the assistant content from a collected SSE stream. Parses each `data:`
- * line as JSON (so escaping/unicode is preserved), concatenating delta content.
+ * Build a cache entry from a streamed response's assembled content + known usage.
+ *
+ * Takes the answer, not the SSE. It used to take the collected wire format and parse it here,
+ * which meant the whole stream had to be held to the end to be read once — see `streamTally.ts`,
+ * which now reads it as it passes and is the only thing in the codebase that parses this format.
+ * The name says `Content` because the difference is invisible at the call site: hand this function
+ * SSE and it caches the frames as if they were the model's words.
  */
-export function extractStreamContent(collected: string): string {
-  let content = '';
-  for (const line of collected.split('\n')) {
-    const t = line.trim();
-    if (!t.startsWith('data:')) continue;
-    const json = t.slice(5).trim();
-    if (!json || json === '[DONE]') continue;
-    try {
-      const parsed = JSON.parse(json) as { choices?: Array<{ delta?: { content?: unknown } }> };
-      const delta  = parsed.choices?.[0]?.delta?.content;
-      if (typeof delta === 'string') content += delta;
-    } catch { /* skip a partial/non-JSON keepalive line */ }
-  }
-  return content;
-}
-
-/** Build a cache entry from a streamed response's collected buffer + known usage. */
-export function buildFromStream(collected: string, model: string, provider: string, promptTokens: number, completionTokens: number): CachedCompletion {
+export function buildFromStreamContent(content: string, model: string, provider: string, promptTokens: number, completionTokens: number): CachedCompletion {
   return {
     id:               `chatcmpl-cache-${Date.now()}`,
     created:          Math.floor(Date.now() / 1000),
     model,
     provider,
-    content:          extractStreamContent(collected),
+    content,
     finishReason:     'stop',
     promptTokens,
     completionTokens,
