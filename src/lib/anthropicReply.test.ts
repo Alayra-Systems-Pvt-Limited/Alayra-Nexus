@@ -29,7 +29,9 @@ function fakeReply() {
     hijack() { return reply; },
     raw: {
       writeHead(status: number, headers?: Record<string, string>) { state.head = { status, headers }; },
-      write(s: string | Buffer) { state.raw += s.toString(); },
+      // A real socket takes either; decode rather than `.toString()` so this stand-in cannot hide
+      // the very bug the tests below are about.
+      write(s: string | Uint8Array) { state.raw += typeof s === 'string' ? s : new TextDecoder().decode(s); },
       end() { state.ended = true; },
     },
   };
@@ -85,7 +87,8 @@ describe('createAnthropicReply — streaming', () => {
     const { reply, state } = fakeReply();
     const { reply: wrap } = createAnthropicReply(reply);
 
-    // Exactly what handleProxy's streaming path does.
+    // What the cache-hit and guardrail-buffered paths do: one pre-built SSE string.
+    // The ordinary streaming path writes bytes instead — covered below.
     wrap.hijack();
     wrap.raw.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
     wrap.raw.write(`data: ${JSON.stringify({ model: 'gpt', choices: [{ delta: { role: 'assistant', content: 'Hi' } }] })}\n\n`);
@@ -137,5 +140,75 @@ describe('createAnthropicReply — streaming', () => {
 
     const start = parseSse(state.raw).find(e => e.event === 'message_start');
     expect((start!.data.message as Record<string, unknown>).model).toBe('alayra-nexus-1');
+  });
+});
+
+// ── The bytes the proxy really writes ─────────────────────────────────────────
+//
+// `completionsProxy.service.ts` reads the upstream body with `getReader()` and writes each chunk
+// through unchanged. Those chunks are plain `Uint8Array` — not Buffer, not string. The wrapper used
+// to call `.toString()` on them, which for a Uint8Array returns the byte values as a comma
+// separated list. The translator then found no SSE events in it and emitted a complete, correctly
+// framed, entirely EMPTY Anthropic response: no error, no warning, a blank reply in Claude Code.
+//
+// Every test above writes a string, because the two paths that write strings — cache hit and
+// guardrail buffering — are the two that were reached for. The path carrying ordinary streaming
+// traffic was the one nothing exercised.
+describe('createAnthropicReply — the chunk type the proxy actually writes', () => {
+  const sse = (o: unknown) => `data: ${JSON.stringify(o)}\n\n`;
+  const bytes = (s: string) => new TextEncoder().encode(s);
+
+  function streamed(chunks: Uint8Array[]) {
+    const { reply, state } = fakeReply();
+    const { reply: wrap } = createAnthropicReply(reply);
+    wrap.hijack();
+    wrap.raw.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
+    for (const c of chunks) wrap.raw.write(c);
+    wrap.raw.end();
+    return parseSse(state.raw);
+  }
+
+  const textOf = (events: ReturnType<typeof streamed>) =>
+    events.filter(e => e.event === 'content_block_delta')
+          .map(e => (e.data.delta as Record<string, unknown>).text).join('');
+
+  it('delivers the content when chunks arrive as Uint8Array', () => {
+    const events = streamed([
+      bytes(sse({ model: 'gpt', choices: [{ delta: { role: 'assistant', content: 'Hello' } }] })),
+      bytes(sse({ choices: [{ delta: { content: ' world' }, finish_reason: 'stop' }] })),
+      bytes('data: [DONE]\n\n'),
+    ]);
+    expect(textOf(events)).toBe('Hello world');
+  });
+
+  it('does not answer with a well-formed empty message', () => {
+    // The regression as it actually presented. Framing alone proves nothing: the broken version
+    // produced every one of these events too. What it could not produce was a delta.
+    const events = streamed([bytes(sse({ choices: [{ delta: { content: 'Hi' } }] }))]);
+    expect(events.map(e => e.event)).toContain('content_block_delta');
+    expect(textOf(events)).not.toBe('');
+  });
+
+  it('keeps a multi-byte character split across two chunks intact', () => {
+    // A 4-byte emoji landing on a chunk boundary. Decoding each chunk independently turns it into
+    // replacement characters — which is why the decoder is held across writes rather than made per
+    // chunk. Real streams split wherever the socket does, so this is ordinary, not exotic.
+    const whole = bytes(sse({ choices: [{ delta: { content: 'hi 👋' } }] }));
+    const cut   = whole.length - 4;   // mid-emoji
+    const events = streamed([whole.slice(0, cut), whole.slice(cut)]);
+    expect(textOf(events)).toBe('hi 👋');
+    expect(textOf(events)).not.toContain('�');
+  });
+
+  it('still accepts strings, which two paths rely on', () => {
+    // The cache-hit and guardrail-buffered paths hand over a string. Fixing the byte path must not
+    // cost them.
+    const { reply, state } = fakeReply();
+    const { reply: wrap } = createAnthropicReply(reply);
+    wrap.hijack();
+    wrap.raw.writeHead(200, {});
+    wrap.raw.write(sse({ choices: [{ delta: { content: 'from cache' } }] }));
+    wrap.raw.end();
+    expect(textOf(parseSse(state.raw))).toBe('from cache');
   });
 });
