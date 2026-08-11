@@ -23,6 +23,7 @@ import { emit }            from './usagePipeline';
 import { addSpend, periodKey, type BudgetPeriod } from './budget.service';
 import { notify } from './notifications.service';
 import { budgetThresholdCrossed, budgetThresholdMessage } from '../lib/notify';
+import type { RequestTrace } from '../lib/requestTrace';
 import { isUsageAnonymized } from './audit.service';
 import { hashIdentifier }    from '../lib/audit';
 
@@ -95,7 +96,12 @@ export interface RecordTokenUsageParams {
   outcome?:          string;
 }
 
-export async function recordTokenUsage(p: RecordTokenUsageParams): Promise<void> {
+/**
+ * @param trace Optional (see lib/requestTrace.ts). When present, the price computed below is
+ *   stamped onto it — so the figure a caller is shown is the figure that was recorded, rather than
+ *   a second calculation that agrees with the invoice only until one of them changes.
+ */
+export async function recordTokenUsage(p: RecordTokenUsageParams, trace?: RequestTrace): Promise<void> {
   const unit     = p.unit ?? 'token';
   const quantity = p.quantity ?? 0;
 
@@ -105,6 +111,11 @@ export async function recordTokenUsage(p: RecordTokenUsageParams): Promise<void>
   // makes "what has caching saved me" answerable — previously a cache hit stored a bare 0 and the
   // counterfactual was lost forever.
   let price = 0;
+  // Whether anyone knows what this model costs — NOT whether the figure came out at zero. A model
+  // with no price and a genuinely free model both compute to $0.00, and a reader that cannot tell
+  // them apart reports a total lower than the truth as though it were the truth (Phase P0c).
+  // `pricingSource: 'unset'` is the registry's own word for "nobody knows".
+  let priced = false;
   try {
     const registry = await getModelRegistry();
     const matchesModel = (r: { modelString?: string; id?: string }): boolean =>
@@ -115,12 +126,18 @@ export async function recordTokenUsage(p: RecordTokenUsageParams): Promise<void>
       price = unit === 'token'
         ? modelCost(m, p.inputTokens, p.outputTokens)
         : unitCost(m, unit, quantity);
+      priced = m.pricingSource !== 'unset';
     }
   } catch { /* non-fatal — never block a proxy request */ }
 
   const cached       = p.cached ?? false;
   const estimatedUsd = cached ? 0     : price;
   const savedUsd     = cached ? price : 0;
+
+  // Stamped before the write, not after: the write is awaited by nobody on the proxy path, and a
+  // caller reading the trace must not be racing a database round-trip for a number this function
+  // already holds.
+  if (trace?.usage) { trace.usage.estimatedUsd = estimatedUsd; trace.usage.savedUsd = savedUsd; trace.usage.priced = priced; }
 
   // Record the request's real cost against the team's budget window (fire-and-
   // forget — budget accounting must never block or fail a proxied request). The new
