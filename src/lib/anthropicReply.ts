@@ -16,6 +16,7 @@
 
 import type { FastifyReply } from 'fastify';
 import { AnthropicStreamTranslator, openAIToAnthropic, anthropicErrorBody } from './anthropic';
+import { createChunkDecoder } from './chunkDecoder';
 
 type Json = Record<string, unknown>;
 
@@ -42,18 +43,10 @@ export interface AnthropicReply {
 export function createAnthropicReply(real: FastifyReply): AnthropicReply {
   let status = 200;
   const translator = new AnthropicStreamTranslator();
-  // The proxy writes two different things here. The cache-hit and guardrail-buffered paths write a
-  // string; the ordinary streaming path writes the `Uint8Array` it read from the upstream body.
-  // `String(chunk)` on the latter yields "100,97,116,97,…" — the byte values, comma separated —
-  // which the translator then parses as an SSE stream containing no events, producing a complete,
-  // well-formed, EMPTY Anthropic response. No error anywhere; just a blank reply.
-  //
-  // `stream: true` is what makes this correct rather than merely working: a multi-byte character
-  // can be split across two chunks, and a decoder that forgets the tail between calls turns one
-  // emoji into two replacement characters.
-  const decoder = new TextDecoder();
-  const asText = (chunk: string | Uint8Array): string =>
-    typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true });
+  // The proxy writes a string on some paths and the upstream's raw bytes on others; see
+  // `chunkDecoder.ts` for what happens when a wrapper assumes only one of them, which is the bug
+  // this line exists to have fixed.
+  const decoder = createChunkDecoder();
 
   const raw: RawSink = {
     // Same SSE headers; the event framing inside is what differs.
@@ -68,11 +61,11 @@ export function createAnthropicReply(real: FastifyReply): AnthropicReply {
       if (typeof served === 'string') translator.setModel(served);
       real.raw.writeHead(code, headers);
     },
-    write(chunk) { real.raw.write(translator.push(asText(chunk))); },
+    write(chunk) { real.raw.write(translator.push(decoder.text(chunk))); },
     end() {
       // Flush whatever the decoder was holding back for a continuation byte that never came, so a
       // stream truncated mid-character still delivers everything that was complete.
-      const tail = decoder.decode();
+      const tail = decoder.flush();
       if (tail) real.raw.write(translator.push(tail));
       real.raw.write(translator.end());
       real.raw.end();
