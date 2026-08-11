@@ -112,6 +112,28 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   providers whose key is on that machine — reading the newest file alone would let a contributor
   holding two keys retract seven verifications they never tested.
 
+- **One way to read a stream's chunks, shared by everything that stands in for a reply.**
+  `handleProxy` writes a string on the cache-hit and guardrail-buffered paths and the upstream's raw
+  bytes on the ordinary streaming path. Assuming only one of them is the bug fixed above, so the
+  handling is now a named thing with its own tests rather than three lines repeated per wrapper. The
+  Anthropic wrapper uses it; so does the capturing reply below. It holds one decoder across the
+  whole stream, which is what keeps a multi-byte character split across two socket writes intact,
+  and flushes at the end so a stream cut mid-character shows the truncation rather than quietly
+  shortening the answer.
+
+- **A capturing reply, so the Playground can run the real request path.** `handleProxy` writes to a
+  `FastifyReply`; the Playground needs that answer as a value it can put beside the request trace in
+  one object. This accepts every call the proxy makes on a reply and keeps the result instead of
+  writing it to a socket — the same seam `createAnthropicReply` uses to translate, doing a different
+  job. Streaming chunks can be relayed as they arrive, so tokens still appear as the provider
+  produces them, and retention is capped with the truncation reported rather than a prefix passed
+  off as the whole reply.
+
+  The tests that matter here are the ones that hand it to the real `handleProxy` and compare what it
+  captured against what a reply on the wire received — status, headers and body, streaming and not.
+  A stand-in checked only against its author's belief about the caller verifies the belief, which is
+  exactly how the empty-stream bug shipped.
+
 - **Reference chapters moved to `docs/`.** Standalone mode, backup and restore, rate limits and
   routing, the API reference, and the accounts/SSRF/guardrails half of the security model are now
   their own pages, linked from short summaries that keep every existing anchor working. The README
