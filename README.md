@@ -653,6 +653,7 @@ curl http://<your-host>:3000/v1/chat/completions \
 | `UPSTREAM_TTFT_MS` | No | Abort if a provider doesn't return response headers within this many ms (default: `20000`) |
 | `UPSTREAM_BODY_MS` | No | Non-streaming: max ms to read the full response body (default: `60000`) |
 | `UPSTREAM_STREAM_IDLE_MS` | No | Streaming: max ms gap between chunks before a hung stream is aborted (default: `30000`) |
+| `UPSTREAM_STREAM_MAX_MS` | No | Streaming: ceiling on one whole request in ms — the idle guard restarts on every chunk, so it bounds silence, not duration (default: `600000`) |
 
 > [!IMPORTANT]
 > Generate `MASTER_ENCRYPTION_KEY` with:

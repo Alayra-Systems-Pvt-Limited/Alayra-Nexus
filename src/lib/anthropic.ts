@@ -284,6 +284,22 @@ export class AnthropicStreamTranslator {
     let out = '';
     if (!this.started) out += this.begin(chunk);
 
+    // An error frame. The gateway writes one when it cuts a stream short — an upstream that went
+    // silent, or a request past its time limit. It carries no `choices`, so without this it falls
+    // through as an ordinary chunk and translates to nothing at all, leaving an Anthropic client a
+    // reply that stops mid-sentence and then closes as if it were finished.
+    //
+    // The terminal events still follow from `end()`. A client that acts on the error will have
+    // stopped reading by then, and one that ignores it gets a well-formed envelope rather than a
+    // truncated one.
+    const failure = chunk.error as Json | undefined;
+    if (failure) {
+      return out + sseEvent('error', {
+        type:  'error',
+        error: { type: anthropicErrorType(504), message: String(failure.message ?? 'The stream ended early.') },
+      });
+    }
+
     const usage = chunk.usage as Json | undefined;
     if (usage) {
       this.inputTokens  = Number(usage.prompt_tokens ?? this.inputTokens);

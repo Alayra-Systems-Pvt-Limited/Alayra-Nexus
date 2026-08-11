@@ -11,6 +11,24 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **A ceiling on how long one request may run.** `UPSTREAM_STREAM_MAX_MS`, ten minutes by default.
+  There was already an idle guard, but it restarts on every chunk, so it bounds silence and nothing
+  else: an upstream sending one byte every 29 seconds held a connection, a worker slot and a token
+  reservation for as long as it cared to, and no guard would ever have fired. Ten minutes clears the
+  slowest legitimate case — a reasoning model on a very long answer — with room to spare; past that
+  a request is not slow, it is stuck.
+
+- **A cut stream says why it was cut.** When the gateway stops a stream early the caller used to see
+  the bytes simply stop, with the last thing they read being an ordinary token. A truncated reply
+  that looks whole is worse than an error, because it gets used. There is now a final frame naming
+  the reason — `stream_idle` for a provider that went quiet, `stream_duration` for a request past
+  its ceiling — following OpenAI's own mid-stream convention of an `error` object and no `[DONE]`,
+  since a `[DONE]` after it would read to most clients as a clean finish.
+
+  `/v1/messages` gets the same thing in its own dialect: the Anthropic translator turns that frame
+  into an Anthropic `error` event, so a client on either endpoint is told. Text that arrived before
+  the cut is still delivered — the caller paid for those tokens and the provider billed for them.
+
 - **`GET /v1/models` serves your models.** It returned one hardcoded entry, `alayra-nexus-1`, and
   read nothing. An operator could curate ten models in the Models tab and every client still saw
   exactly one — including Claude Code, which builds its model picker from this endpoint.
@@ -142,6 +160,22 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   check to keep it there.
 
 ### Fixed
+
+- **A slow reader made the gateway hold their answer for them.** `reply.raw.write()` returns `false`
+  when Node has taken a chunk into memory rather than put it on the wire. Nothing read that return
+  value, so a caller reading slowly — a phone on a train, a background browser tab, a script that
+  forgot to consume the body — did not slow the gateway down. It made the gateway buffer the rest
+  of their answer, at the provider's full speed, until the provider had finished sending it.
+
+  The cost was per slow caller and it was the whole remaining answer each time; ten of them on a
+  long answer was not ten slow requests but ten copies of an answer nobody was reading. The gateway
+  now waits for the caller to catch up before reading the next chunk, which pushes back through the
+  whole chain: this process stops reading, undici stops acknowledging, and the answer waits on the
+  provider's side instead of in this process's heap.
+
+  Waiting is bounded four ways, because a wait that could only end when the caller caught up would
+  be a worse leak than the buffering it replaced: the caller drains, the connection closes, the
+  connection errors, or the request hits its ceiling.
 
 - **A streamed answer was billed as one output token.** Whenever a provider did not volunteer a
   `usage` block in its stream, Nexus recorded the whole answer as exactly 1 output token — not an
