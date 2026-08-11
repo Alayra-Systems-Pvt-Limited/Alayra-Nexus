@@ -84,6 +84,20 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   than store `"{}"`; that the owned-key count is taken before the team is destroyed; and that the
   plaintext of a new access key is returned once and never stored.
 
+- **`/v1/messages` and streaming are now proven end to end.** Neither had ever been reached by a
+  test that starts the gateway. The Playwright suite covered `/v1/chat/completions`, `/v1/models`
+  and two typo guards; the release gate sent one non-streaming completion. Every occurrence of
+  `stream` in the proxy spec was the word *upstream*. Those two gaps intersected exactly on a bug
+  that shipped and is fixed above.
+
+  Nine specs now cover the Anthropic Messages endpoint in both modes and OpenAI streaming, and the
+  mock upstream streams for real: spaced writes with Nagle disabled, and a four-byte character split
+  down the middle across two of them. The assertions are about the text that arrived, never the
+  event framing — the broken build framed its empty stream perfectly, so a structural assertion
+  would have passed it. Decoding those chunks one at a time rather than holding a decoder across the
+  stream yields three replacement characters, which is what makes the split a guard rather than
+  decoration.
+
 - **`npm run gate:e2e`** walks the whole path a new operator walks — create a pool from a preset, add
   a real key, fetch models, save one with its provenance, send a request through
   `/v1/chat/completions`, and confirm the cost lands in analytics — against a running gateway. The

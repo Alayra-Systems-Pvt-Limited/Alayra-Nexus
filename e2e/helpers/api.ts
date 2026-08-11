@@ -127,6 +127,43 @@ export class Gateway {
     return { status: res.status, body };
   }
 
+  /**
+   * POST and read the reply as a live SSE stream, returning the raw text off the socket.
+   *
+   * Deliberately NOT `send()`. `send()` awaits `res.text()`, which for a stream is only a slower
+   * way of getting the same string — and it hides the thing worth proving, that the bytes arrive as
+   * a stream at all. This reads the body reader directly and decodes with `stream: true`, because a
+   * multi-byte character can land across two network reads here exactly as it does inside the
+   * gateway; a helper that decoded each chunk on its own would report mojibake as a server fault.
+   */
+  async stream(
+    path: string,
+    opts: { token?: string; body?: unknown; headers?: Record<string, string> } = {},
+  ): Promise<{ status: number; contentType: string | null; text: string }> {
+    const headers: Record<string, string> = { ...opts.headers };
+    if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
+    if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+
+    const res = await fetch(`${this.baseURL}${path}`, {
+      method: 'POST',
+      headers,
+      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+    });
+
+    let text = '';
+    if (res.body) {
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+      }
+      text += decoder.decode();
+    }
+    return { status: res.status, contentType: res.headers.get('content-type'), text };
+  }
+
   /** Sign in with email + password and hand back the session token. Throws if refused. */
   async login(email: string, password: string, code?: string): Promise<string> {
     const res = await this.send<{ token?: string; error?: string }>('POST', '/admin/login', {
