@@ -339,6 +339,23 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   `exited 137 after 20s`, so Docker had to SIGKILL it and both the exit-code and timing assertions
   fired. The guard is load-bearing.
 
+- **This file said 1.6.0 was never released.** The `## [1.6.0] - 2026-08-09` heading was removed by
+  the same hunk that added the two entries above it — one deleted line among 329 added ones, which
+  is why it read as an insertion in review. Everything that shipped in 1.6.0, about a thousand
+  lines of it, sat under `[Unreleased]` for eleven commits, directly above 1.5.3. The tag, the
+  GitHub release and `package.json` all said 1.6.0; the front page of the repository and the npm
+  package page said the last release was three weeks older than it was.
+
+  The heading is back where it was, and the restored section is byte-identical to the same section
+  at `v1.6.0` — checked, rather than eyeballed, because "looks right" is what shipped it.
+
+  Guarded now: `package.json`'s version must have a heading, that heading must be the newest one,
+  `[Unreleased]` must exist above it, versions must descend, none may repeat, and no release may be
+  dated after the one below it. Read from the two files rather than from git, because CI checks out
+  at depth 1 and a guard that looks for tags there would find none and pass every time.
+
+## [1.6.0] - 2026-08-09
+
 ### Security
 
 - **The master API key no longer goes to stdout.** It was printed twice — once on first run, once
