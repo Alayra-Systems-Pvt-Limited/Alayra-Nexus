@@ -161,6 +161,37 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
+- **A key rated 20 requests a minute delivered about 9.** A provider key's RPM limit was not a rate.
+  It was a quota whose clock restarted every time it was used, so a key served its whole allowance,
+  refused everything for about a minute, then served it again — on repeat, under any sustained
+  traffic, however slow.
+
+  Measured on a key rated 20/min and offered only 15/min: it served 20 requests over 81 seconds,
+  refused for the next 53, and delivered a third less than it was being asked for while never once
+  being asked for more than it was rated for. The busier a gateway is, the more of its time it spends
+  in that blackout.
+
+  `EXPIRE` was called on every admitted request rather than only on the first, so the sixty-second
+  window was pushed sixty seconds further out each time one got through. The count therefore climbed
+  to the limit no matter how slowly traffic arrived, and the only thing that could clear it was sixty
+  consecutive seconds in which nothing was admitted — which, since a refusal returns before the
+  increment, meant sixty seconds of pure refusal. TPM had the identical shape.
+
+  It is a sliding window now, which is what the code always claimed: two counters per limit, one per
+  minute, with the previous one weighted by how much of it is still inside the trailing sixty
+  seconds. Ten seconds in, five sixths of the previous minute counts for five sixths; fifty seconds
+  in, one sixth. The measure moves continuously rather than jumping, so there is no boundary to burst
+  across — a fixed window resetting on schedule would have cured the blackout and still allowed the
+  full limit in its last second plus the full limit in the next window's first, which is twice the
+  rating in two seconds against a number whose whole purpose is not exceeding what the provider
+  permits. Two counters and no per-request storage, so nothing here grows with traffic.
+
+  The rule now lives in one place and both admission scripts paste it in. It had been written out
+  twice — once in the single-key primitive and once in the script the request path actually calls —
+  and the first attempt at this fix went into the primitive, changed nothing any caller could see,
+  and was caught only because the multi-instance rig re-ran the failing scenario and reported the
+  same numbers.
+
 - **A slow reader made the gateway hold their answer for them.** `reply.raw.write()` returns `false`
   when Node has taken a chunk into memory rather than put it on the wire. Nothing read that return
   value, so a caller reading slowly — a phone on a train, a background browser tab, a script that

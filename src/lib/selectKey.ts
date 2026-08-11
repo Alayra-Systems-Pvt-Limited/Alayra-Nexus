@@ -18,6 +18,7 @@ import { redis } from './redis';
 import { defineScript } from './kv/memory';
 import { openKey, probeKey, PROBE_TTL_SECONDS, type BreakerGate } from './breaker';
 import { rpmKey, tpmKey, usersKey, RPM_TPM_WINDOW_SECONDS, MAXUSERS_WINDOW_SECONDS } from './admission';
+import { RATE_WINDOW_LUA, rateWindow, rateCount, windowTtl } from './rateWindow';
 
 // Pick the first usable key in a pool and reserve on it, in ONE round trip.
 //
@@ -85,7 +86,7 @@ const ARGV_PER_CANDIDATE = 3;
 // ARGV[1] nowMs  [2] probeTtl  [3] rpmTpmWindow  [4] reserve  [5] userId ('' = no identity)
 //     [6] maxUsersWindow, then three per candidate: rpmLimit, tpmLimit, maxUsers
 // Returns { 1-based index, gate } or { -1, '' } when no key could be admitted.
-export const SELECT_KEY_LUA = defineScript(`
+export const SELECT_KEY_LUA = defineScript(`${RATE_WINDOW_LUA}
 local nowMs      = tonumber(ARGV[1])
 local probeTtl   = tonumber(ARGV[2])
 local window     = tonumber(ARGV[3])
@@ -125,10 +126,12 @@ local function tryOne(i)
     end
   end
 
-  local rpm = tonumber(redis.call('GET', rpmK) or '0')
-  local tpm = tonumber(redis.call('GET', tpmK) or '0')
-  if rpm + 1 > rpmLimit then return nil end
-  if tpm + reserve > tpmLimit then return nil end
+  -- One rule, defined in rateWindow.ts and pasted into both admission scripts. See #135 for what
+  -- a single counter with a use-refreshed expiry did instead of limiting a rate.
+  local rcur, rprev, weight = nexusWindow(rpmK, nowMs, window)
+  local tcur, tprev         = nexusWindow(tpmK, nowMs, window)
+  if nexusCount(rcur, rprev, weight) + 1 > rpmLimit then return nil end
+  if nexusCount(tcur, tprev, weight) + reserve > tpmLimit then return nil end
 
   -- Writes. The probe claim is first because it is the only one that can fail; losing it leaves
   -- this key untouched.
@@ -139,10 +142,10 @@ local function tryOne(i)
     redis.call('SADD', usersK, userId)
     redis.call('EXPIRE', usersK, userWindow)
   end
-  redis.call('INCR', rpmK)
-  redis.call('EXPIRE', rpmK, window)
-  redis.call('INCRBY', tpmK, reserve)
-  redis.call('EXPIRE', tpmK, window)
+  redis.call('INCR', rcur)
+  redis.call('EXPIRE', rcur, window * 2)
+  redis.call('INCRBY', tcur, reserve)
+  redis.call('EXPIRE', tcur, window * 2)
   return gate
 end
 
@@ -190,10 +193,11 @@ return { -1, '' }
       }
     }
 
-    const rpm = Number(kv.get(rpmK) ?? '0');
-    const tpm = Number(kv.get(tpmK) ?? '0');
-    if (rpm + 1 > rpmLimit) return null;
-    if (tpm + reserve > tpmLimit) return null;
+    const rpmW = rateWindow(rpmK, nowMs, window);
+    const tpmW = rateWindow(tpmK, nowMs, window);
+    const get  = (k: string): string | null => kv.get(k);
+    if (rateCount(rpmW, get) + 1 > rpmLimit) return null;
+    if (rateCount(tpmW, get) + reserve > tpmLimit) return null;
 
     // SET NX answers 'OK' or null. Exactly one caller in the half-open window wins the probe slot,
     // and only because nothing can run between the read and the write.
@@ -203,10 +207,10 @@ return { -1, '' }
       kv.sadd(usersK, userId);
       kv.expire(usersK, userWindow);
     }
-    kv.incr(rpmK);
-    kv.expire(rpmK, window);
-    kv.incrby(tpmK, reserve);
-    kv.expire(tpmK, window);
+    kv.incr(rpmW.current);
+    kv.expire(rpmW.current, windowTtl(window));
+    kv.incrby(tpmW.current, reserve);
+    kv.expire(tpmW.current, windowTtl(window));
     return gate;
   };
 

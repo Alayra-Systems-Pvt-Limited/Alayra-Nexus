@@ -173,12 +173,19 @@ async function scenario(label: string, shared: boolean, index: number): Promise<
     const keyId = await rateLimitTheKey(a, LIMIT);
     const [outA, outB] = await drive([a.gatewayUrl, b.gatewayUrl], a.apiKey);
 
+    // Summed across windows, because a request that lands either side of a minute boundary is
+    // counted in a different one — `nexus:rpm:<keyId>:<window>`, see src/lib/rateWindow.ts. The
+    // first version of this read the un-suffixed key, and when the counters moved under it the run
+    // reported NOT PROVEN rather than a tick, which is the behaviour it was written for.
     let redisCounter: number | null = null;
     if (shared) {
       const client = new Redis(redisUrl);
       try {
-        const raw = await client.get(`nexus:rpm:${keyId}`);
-        redisCounter = raw === null ? null : Number(raw);
+        const found = (await client.keys(`nexus:rpm:${keyId}:*`)).sort();
+        if (found.length) {
+          const values = await client.mget(found);
+          redisCounter = values.reduce((sum, v) => sum + Number(v ?? 0), 0);
+        }
       } finally { client.disconnect(); }
     }
 
