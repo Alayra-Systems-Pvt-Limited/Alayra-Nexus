@@ -101,40 +101,105 @@ describe('parity — coverage of what actually ran', () => {
   });
 });
 
+// Every admission scenario pins the instant, and that is not a convenience.
+//
+// The window index is derived from a clock — Redis's own inside the Lua, the process's inside the
+// twin — and those are two different clocks that will not agree to the millisecond. Left to
+// themselves the two halves can land in different windows, and the suite then fails or passes
+// depending on when it was run. Pinning both to the same instant is what makes "these two agree" a
+// statement about the logic rather than about the second the test started in.
+//
+// 12:00:30.000 UTC. Chosen halfway through a window, so the previous one is weighted 0.5 and a
+// mistake in the weighting cannot hide behind a factor of 1 or 0.
+const NOON = Date.UTC(2026, 7, 11, 12, 0, 30);
+/** The window index NOON falls in, and the one before it. */
+const W = Math.floor(NOON / 60_000);
+
 describe('ADMIT_LUA — rate-limit admission', () => {
   it('admits while both budgets have headroom', async () => {
-    await parity('admit first', async (r) => r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1000, 100, 60));
+    await parity('admit first', async (r) => r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1000, 100, 60, NOON));
   });
 
   it('rejects once RPM is exhausted, and does not consume tokens doing so', async () => {
     await parity('rpm exhausted', async (r) => {
-      await r.set('rpm', '10');
-      const verdict = await r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1000, 100, 60);
-      return { verdict, rpm: await r.get('rpm'), tpm: await r.get('tpm') };
+      await r.set(`rpm:${W}`, '10');
+      const verdict = await r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1000, 100, 60, NOON);
+      return { verdict, rpm: await r.get(`rpm:${W}`), tpm: await r.get(`tpm:${W}`) };
     });
   });
 
   it('rejects once TPM would be exceeded', async () => {
     await parity('tpm exhausted', async (r) => {
-      await r.set('tpm', '950');
-      const verdict = await r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1000, 100, 60);
-      return { verdict, rpm: await r.get('rpm'), tpm: await r.get('tpm') };
+      await r.set(`tpm:${W}`, '950');
+      const verdict = await r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1000, 100, 60, NOON);
+      return { verdict, rpm: await r.get(`rpm:${W}`), tpm: await r.get(`tpm:${W}`) };
     });
   });
 
   it('admits exactly up to the limit and no further', async () => {
     await parity('walk to the limit', async (r) => {
       const verdicts: unknown[] = [];
-      for (let i = 0; i < 5; i++) verdicts.push(await r.eval(ADMIT, 2, 'rpm', 'tpm', 3, 10_000, 10, 60));
-      return { verdicts, rpm: await r.get('rpm'), tpm: await r.get('tpm') };
+      for (let i = 0; i < 5; i++) verdicts.push(await r.eval(ADMIT, 2, 'rpm', 'tpm', 3, 10_000, 10, 60, NOON));
+      return { verdicts, rpm: await r.get(`rpm:${W}`), tpm: await r.get(`tpm:${W}`) };
     });
   });
 
-  it('sets a TTL on both windows', async () => {
+  it('sets a TTL on both windows, long enough to be read from the next one', async () => {
     await parity('window ttl', async (r) => {
-      await r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1000, 100, 60);
-      // Compared as a bucket, since a real round-trip may tick the second over.
-      return { rpm: (await r.ttl('rpm')) > 50, tpm: (await r.ttl('tpm')) > 50 };
+      await r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1000, 100, 60, NOON);
+      // Compared as a bucket, since a real round-trip may tick the second over. Above 60 rather
+      // than above 50: this window has to outlive itself to be weighed as the previous one.
+      return { rpm: (await r.ttl(`rpm:${W}`)) > 60, tpm: (await r.ttl(`tpm:${W}`)) > 60 };
+    });
+  });
+
+  // ── The window itself, which is the whole of #135 ───────────────────────────────────────────
+
+  it('counts the previous window in proportion to how much of it is still in range', async () => {
+    // Halfway through a window, a previous window holding 10 counts as 5. So a limit of 10 has
+    // exactly 5 left, and the sixth request is the one that is refused.
+    await parity('half-weighted carry', async (r) => {
+      await r.set(`rpm:${W - 1}`, '10');
+      const verdicts: unknown[] = [];
+      for (let i = 0; i < 6; i++) verdicts.push(await r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1e9, 1, 60, NOON));
+      return { verdicts, rpm: await r.get(`rpm:${W}`) };
+    });
+  });
+
+  it('forgets a window that has fully passed', async () => {
+    // Two windows back is outside the trailing minute at any point, so it must count for nothing.
+    // A rate limiter that remembers longer than its window is the bug this replaced.
+    await parity('two windows back', async (r) => {
+      await r.set(`rpm:${W - 2}`, '1000');
+      return r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1e9, 1, 60, NOON);
+    });
+  });
+
+  it('does not let a window boundary hand out a second full allowance', async () => {
+    // The reason this is a sliding window and not a fixed one. Spend the whole limit at the end of
+    // a window, cross into the next, and ask again: a fixed window would have reset and served the
+    // lot a second time, which is twice the rating in two seconds.
+    const endOfWindow = (W + 1) * 60_000 - 500;   // half a second before the boundary
+    const justAfter   = (W + 1) * 60_000 + 500;   // half a second after it
+
+    await parity('no boundary burst', async (r) => {
+      const before: unknown[] = [];
+      for (let i = 0; i < 10; i++) before.push(await r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1e9, 1, 60, endOfWindow));
+      const after = await r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1e9, 1, 60, justAfter);
+      return { admittedBefore: before.filter((v) => v === 1).length, immediatelyAfter: after };
+    });
+  });
+
+  it('serves a steady trickle indefinitely, instead of using it up', async () => {
+    // #135 in one scenario. One request every 10 seconds against a limit of 10/min is a sixth of
+    // the rating; the old counter climbed to 10 and then refused for a minute. Walked across four
+    // whole windows, every one of these must be admitted.
+    await parity('steady trickle', async (r) => {
+      const verdicts: unknown[] = [];
+      for (let i = 0; i < 24; i++) {
+        verdicts.push(await r.eval(ADMIT, 2, 'rpm', 'tpm', 10, 1e9, 1, 60, NOON + i * 10_000));
+      }
+      return { admitted: verdicts.filter((v) => v === 1).length, of: verdicts.length };
     });
   });
 });
@@ -142,33 +207,45 @@ describe('ADMIT_LUA — rate-limit admission', () => {
 describe('RECONCILE_LUA — refunding an over-reservation', () => {
   it('refunds the unused part', async () => {
     await parity('partial refund', async (r) => {
-      await r.set('tpm', '100');
-      const after = await r.eval(RECONCILE, 1, 'tpm', 30);
-      return { after, value: await r.get('tpm') };
+      await r.set(`tpm:${W}`, '100');
+      const after = await r.eval(RECONCILE, 1, 'tpm', 30, 60, NOON);
+      return { after, value: await r.get(`tpm:${W}`) };
     });
   });
 
   it('never drives the counter below zero', async () => {
     await parity('over-refund clamps', async (r) => {
-      await r.set('tpm', '10');
-      const after = await r.eval(RECONCILE, 1, 'tpm', 999);
-      return { after, value: await r.get('tpm') };
+      await r.set(`tpm:${W}`, '10');
+      const after = await r.eval(RECONCILE, 1, 'tpm', 999, 60, NOON);
+      return { after, value: await r.get(`tpm:${W}`) };
     });
   });
 
   it('is a no-op for a non-positive refund', async () => {
     await parity('zero refund', async (r) => {
-      await r.set('tpm', '42');
-      return { after: await r.eval(RECONCILE, 1, 'tpm', 0), value: await r.get('tpm') };
+      await r.set(`tpm:${W}`, '42');
+      return { after: await r.eval(RECONCILE, 1, 'tpm', 0, 60, NOON), value: await r.get(`tpm:${W}`) };
     });
   });
 
   // The window must survive a refund — restarting it would hand out a fresh allowance early.
   it('preserves the window TTL', async () => {
     await parity('refund keeps ttl', async (r) => {
-      await r.set('tpm', '100', 'EX', 60);
-      await r.eval(RECONCILE, 1, 'tpm', 10);
-      return (await r.ttl('tpm')) > 50;
+      await r.set(`tpm:${W}`, '100', 'EX', 60);
+      await r.eval(RECONCILE, 1, 'tpm', 10, 60, NOON);
+      return (await r.ttl(`tpm:${W}`)) > 50;
+    });
+  });
+
+  it('refunds into the window that is current when it runs', async () => {
+    // Named because it is a real limitation rather than an accident: a request that spans a
+    // boundary gives its refund to the next window, since nothing carries the window index from
+    // admission through to the answer. Bounded by one request's over-reservation.
+    await parity('refund lands in the current window', async (r) => {
+      await r.set(`tpm:${W}`, '100');
+      await r.set(`tpm:${W + 1}`, '50');
+      await r.eval(RECONCILE, 1, 'tpm', 20, 60, NOON + 60_000);
+      return { reserved: await r.get(`tpm:${W}`), current: await r.get(`tpm:${W + 1}`) };
     });
   });
 });
