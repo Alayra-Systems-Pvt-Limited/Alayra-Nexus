@@ -166,6 +166,11 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   check to keep it there.
 
 ### Fixed
+- **The dashboard development toolchain is free of known advisories.** Vitest and its mocker move
+  to the patched 5.0.1 line, while Browserslist, baseline browser data, and Nano ID resolve to
+  patched releases. This removes the dashboard's path-traversal, prototype-write, process-exit,
+  and predictable-ID advisories and brings its complete dependency audit to zero findings.
+
 - **The production dependency audit is clean without downgrading Prisma.** Fastify and both
   `fast-uri` copies now resolve to patched releases. Prisma remains on 7.9.1 while narrow npm
   overrides replace its vulnerable `deepmerge-ts` and `mysql2` transitive dependencies with
