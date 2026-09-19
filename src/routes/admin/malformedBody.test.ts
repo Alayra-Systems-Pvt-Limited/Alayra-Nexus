@@ -51,6 +51,7 @@ const writes = vi.hoisted(() => ({
   providerCreate: vi.fn(), providerUpdate: vi.fn(),
   teamCreate:     vi.fn(), teamUpdate:     vi.fn(),
   keyCreate:      vi.fn(), keyUpdate:      vi.fn(),
+  teamKeyCreate:  vi.fn(), teamKeyUpdate:  vi.fn(),
   setSsrfConfig:  vi.fn(), setGuardrailConfig: vi.fn(),
   setCostWeight:  vi.fn(), setCacheConfig:     vi.fn(),
   setNotificationConfig: vi.fn(), updateModelRegistry: vi.fn(),
@@ -67,8 +68,8 @@ vi.mock('../../lib/prisma', () => ({
                      findUnique: reads.findUnique, findMany: reads.findMany, delete: vi.fn(), count: reads.count },
     nexusKey:      { create: writes.keyCreate, update: writes.keyUpdate,
                      findUnique: reads.findUnique, findMany: reads.findMany, delete: vi.fn(), count: reads.count },
-    nexusTeamKey:  { findMany: reads.findMany, findUnique: reads.findUnique, create: vi.fn(),
-                     update: vi.fn(), delete: vi.fn(), deleteMany: vi.fn(), count: reads.count },
+    nexusTeamKey:  { findMany: reads.findMany, findUnique: reads.findUnique, create: writes.teamKeyCreate,
+                     update: writes.teamKeyUpdate, delete: vi.fn(), deleteMany: vi.fn(), count: reads.count },
     appSettings:   { findMany: reads.findMany },
   },
 }));
@@ -144,6 +145,18 @@ const CASES: Array<{
   { what: 'edit a team',            method: 'PATCH', url: '/admin/teams/t1',
     payload: { status: 'deleted' },
     write: () => writes.teamUpdate, field: 'status' },
+
+  { what: 'create an access key with a non-string name', method: 'POST', url: '/admin/team-keys',
+    payload: { name: 12345, teamId: null },
+    write: () => writes.teamKeyCreate, field: 'name' },
+
+  { what: 'create an access key with an oversized name', method: 'POST', url: '/admin/team-keys',
+    payload: { name: 'x'.repeat(81), teamId: null },
+    write: () => writes.teamKeyCreate, field: 'name' },
+
+  { what: 'assign an access key to an invalid team id', method: 'PATCH', url: '/admin/team-keys/k1',
+    payload: { teamId: 42 },
+    write: () => writes.teamKeyUpdate, field: 'teamId' },
 
   { what: 'add a provider key',     method: 'POST',  url: '/admin/providers/p1/keys',
     payload: { apiKey: 'sk-ant-api03-REJECTED-CREDENTIAL-9f3a', rpmLimit: 0 },
@@ -379,6 +392,15 @@ describe('no route validates a body by throwing', () => {
       + 'handler is answered 500 on purpose, because it means a route forgot to validate, and that '
       + 'is this codebase\'s bug rather than the caller\'s',
     ).toEqual([]);
+  });
+
+  it('does not assert a shape for a team-key request body', () => {
+    const path = join(ROUTES, 'routes', 'admin', 'teams.routes.ts');
+    const code = readFileSync(path, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    expect(code).not.toMatch(/(?:request|req)\.body\s+as\b/);
   });
 
   it('is looking at the files it thinks it is', () => {

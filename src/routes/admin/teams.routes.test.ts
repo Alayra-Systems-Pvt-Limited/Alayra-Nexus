@@ -266,11 +266,21 @@ describe('issuing an access key', () => {
     expect(stored.maskedKey).toBe(`${plain.slice(0, 6)}••••••••${plain.slice(-4)}`);
   });
 
+  it('stores the trimmed name produced by validation', async () => {
+    const res = await app.inject({ method: 'POST', url: '/admin/team-keys', payload: { name: '  ci  ' } });
+
+    expect(res.statusCode).toBe(201);
+    expect(dataOf(db.tkCreate).name).toBe('ci');
+  });
+
   it('refuses a key for a team that does not exist', async () => {
     // Without this the key is created attached to nothing, spends from no budget, and appears in
     // no team's usage.
     db.teamFindUnique.mockResolvedValue(null);
-    const res = await app.inject({ method: 'POST', url: '/admin/team-keys', payload: { name: 'ci', teamId: 'ghost' } });
+    const res = await app.inject({
+      method: 'POST', url: '/admin/team-keys',
+      payload: { name: 'ci', teamId: '00000000-0000-4000-8000-000000000001' },
+    });
 
     expect(res.statusCode).toBe(400);
     expect(db.tkCreate).not.toHaveBeenCalled();

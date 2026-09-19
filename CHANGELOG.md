@@ -166,6 +166,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   check to keep it there.
 
 ### Fixed
+- **Malformed access-key bodies are caller errors, not server failures.** Creating a team key now
+  validates its name and optional team UUID before touching the database, caps names at 80
+  characters, and returns a bounded field-level `400` response for invalid input. Reassigning a
+  key applies the same UUID validation, and a source guard prevents unsafe body casts from
+  returning to the team-key routes.
+
 - **The E2E test toolchain is free of known advisories.** Its transitive `js-yaml` dependency now
   resolves to 4.3.2, removing the repository's final open high-severity Dependabot alert.
 
