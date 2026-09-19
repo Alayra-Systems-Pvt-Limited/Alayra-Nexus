@@ -166,6 +166,11 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   check to keep it there.
 
 ### Fixed
+- **The production dependency audit is clean without downgrading Prisma.** Fastify and both
+  `fast-uri` copies now resolve to patched releases. Prisma remains on 7.9.1 while narrow npm
+  overrides replace its vulnerable `deepmerge-ts` and `mysql2` transitive dependencies with
+  patched versions. Prisma Client generation and the PostgreSQL and SQLite schema paths are
+  validated against the overridden tree.
 
 - **The dashboard no longer advertises unfinished destinations.** Enterprise and Health Benchmarks
   were navigable pages whose only content was "coming soon." They are now kept out of the public
