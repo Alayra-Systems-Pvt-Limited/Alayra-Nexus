@@ -152,18 +152,10 @@ describe('Health — Providers tab', () => {
     // Read-only: management stays in Nexus — one editor, no duplicate.
     const link = screen.getByText(/manage pools and keys in Nexus/i).closest('a');
     expect(link).toHaveAttribute('href', '/nexus');
+    expect(screen.queryByRole('tab', { name: /benchmarks/i })).not.toBeInTheDocument();
   });
 });
 
-describe('Health — Benchmarks tab', () => {
-  it('is honestly empty rather than showing numbers the gateway never measured', async () => {
-    render(<Health />);
-    await waitFor(() => expect(screen.getByText('All systems operational')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('tab', { name: /benchmarks/i }));
-    expect(screen.getByText('Benchmarks are not built yet.')).toBeInTheDocument();
-    expect(screen.getByText(/numbers the gateway never measured/)).toBeInTheDocument();
-  });
-});
 
 // The Storage card (S0). It answers "what is this gateway actually running on" — a question an
 // operator otherwise has to answer from environment variables they may not be able to see.

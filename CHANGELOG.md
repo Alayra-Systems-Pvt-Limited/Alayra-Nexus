@@ -11,6 +11,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **The zero-configuration path now has a real-browser release gate.** A separate Playwright suite
+  boots the compiled gateway with SQLite and in-process state, claims the first owner through the
+  dashboard, configures a custom OpenAI-compatible provider, imports its model, sends a completion,
+  and confirms the request appears in Analytics. It needs no PostgreSQL, Redis, or Docker, so the
+  exact path a first-time `npx` user takes is protected in the lightweight standalone CI job.
+
 - **A ceiling on how long one request may run.** `UPSTREAM_STREAM_MAX_MS`, ten minutes by default.
   There was already an idle guard, but it restarts on every chunk, so it bounds silence and nothing
   else: an upstream sending one byte every 29 seconds held a connection, a worker slot and a token
@@ -160,6 +166,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   check to keep it there.
 
 ### Fixed
+- **The production dependency audit is clean without downgrading Prisma.** Fastify and both
+  `fast-uri` copies now resolve to patched releases. Prisma remains on 7.9.1 while narrow npm
+  overrides replace its vulnerable `deepmerge-ts` and `mysql2` transitive dependencies with
+  patched versions. Prisma Client generation and the PostgreSQL and SQLite schema paths are
+  validated against the overridden tree.
+
+- **The dashboard no longer advertises unfinished destinations.** Enterprise and Health Benchmarks
+  were navigable pages whose only content was "coming soon." They are now kept out of the public
+  information architecture until they are functional, and the README roadmap now reflects the
+  backup, notification, and integration-test work that has already shipped.
 
 - **A key rated 20 requests a minute delivered about 9.** A provider key's RPM limit was not a rate.
   It was a quota whose clock restarted every time it was used, so a key served its whole allowance,

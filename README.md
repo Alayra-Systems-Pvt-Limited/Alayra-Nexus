@@ -882,10 +882,12 @@ Accounts, the three roles, invites, single sign-on, recovery, two-factor authent
 - [x] A static, read-only live demo of the console
 - [ ] **CLI — coming soon.** A command-line interface over the existing admin API
 - [x] `npx @alayrasystems/nexus` — a published package that starts a gateway with no clone and no Docker
-- [ ] Scheduled backups, and writing them off-box (S3, GCS, a mounted volume)
-- [ ] Webhook and email alerts on key failure or budget threshold
+- [x] Scheduled backups with retention and optional directory / mounted-volume copies
+- [ ] Object-storage backup destinations (S3 and GCS)
+- [x] Webhook and email alerts on key failure or budget threshold
 - [ ] Custom domain / CNAME support
-- [ ] Integration test suite
+- [x] Integration and browser end-to-end test suites
+- [ ] Playground for single-model requests and side-by-side model comparison
 - [ ] Kubernetes Helm chart
 
 ---
