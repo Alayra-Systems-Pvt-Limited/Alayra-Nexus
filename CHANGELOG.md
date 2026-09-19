@@ -166,6 +166,9 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   check to keep it there.
 
 ### Fixed
+- **The E2E test toolchain is free of known advisories.** Its transitive `js-yaml` dependency now
+  resolves to 4.3.2, removing the repository's final open high-severity Dependabot alert.
+
 - **The gateway test toolchain is free of known advisories.** Vitest and its mocker move to the
   patched 5.0.1 line, and the refreshed dependency tree resolves Nano ID to 3.3.19. The root
   dependency audit now reports zero findings.
