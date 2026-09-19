@@ -46,6 +46,15 @@ export default async function adminTeamsRoutes(fastify: FastifyInstance) {
     byokFallback: z.boolean().default(true),
   });
 
+  const teamKeySchema = z.object({
+    name:   z.string().trim().min(1).max(80),
+    teamId: z.string().uuid().nullish(),
+  });
+
+  const teamKeyAssignmentSchema = z.object({
+    teamId: z.string().uuid().nullable(),
+  });
+
   fastify.get('/admin/teams', adminGuard, async (_req, reply) => {
     const teams = await prisma.team.findMany({
       include: { _count: { select: { teamKeys: true } } },
@@ -123,8 +132,11 @@ export default async function adminTeamsRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post('/admin/team-keys', adminWriteGuard, async (request, reply) => {
-    const { name, teamId } = request.body as { name: string; teamId?: string | null };
-    if (!name?.trim()) return reply.code(400).send({ error: 'name is required' });
+    const parsed = teamKeySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid access key.'));
+    }
+    const { name, teamId } = parsed.data;
     if (teamId) {
       const team = await prisma.team.findUnique({ where: { id: teamId } });
       if (!team) return reply.code(400).send({ error: 'teamId does not match an existing team' });
@@ -133,7 +145,7 @@ export default async function adminTeamsRoutes(fastify: FastifyInstance) {
     const keyHash    = createHash('sha256').update(plain).digest('hex');
     const maskedKey  = plain.slice(0, 6) + '••••••••' + plain.slice(-4);
     const created    = await prisma.nexusTeamKey.create({
-      data: { id: randomUUID(), name: name.trim(), encryptedKey: encrypt(plain), keyHash, maskedKey, teamId: teamId ?? null },
+      data: { id: randomUUID(), name, encryptedKey: encrypt(plain), keyHash, maskedKey, teamId: teamId ?? null },
     });
     return reply.code(201).send({
       key: { id: created.id, name: created.name, maskedKey, teamId: created.teamId, createdAt: created.createdAt, plainKey: plain },
@@ -142,7 +154,11 @@ export default async function adminTeamsRoutes(fastify: FastifyInstance) {
 
   fastify.patch('/admin/team-keys/:id', adminWriteGuard, async (request, reply) => {
     const { id }     = request.params as { id: string };
-    const { teamId } = request.body as { teamId: string | null };
+    const parsed = teamKeyAssignmentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(invalidBody(parsed.error, 'That is not a valid access-key assignment.'));
+    }
+    const { teamId } = parsed.data;
     if (teamId) {
       const team = await prisma.team.findUnique({ where: { id: teamId } });
       if (!team) return reply.code(400).send({ error: 'teamId does not match an existing team' });
