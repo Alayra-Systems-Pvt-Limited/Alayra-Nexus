@@ -166,6 +166,10 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   check to keep it there.
 
 ### Fixed
+- **The gateway test toolchain is free of known advisories.** Vitest and its mocker move to the
+  patched 5.0.1 line, and the refreshed dependency tree resolves Nano ID to 3.3.19. The root
+  dependency audit now reports zero findings.
+
 - **The dashboard development toolchain is free of known advisories.** Vitest and its mocker move
   to the patched 5.0.1 line, while Browserslist, baseline browser data, and Nano ID resolve to
   patched releases. This removes the dashboard's path-traversal, prototype-write, process-exit,
