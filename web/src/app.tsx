@@ -18,11 +18,10 @@ import { Admin } from './pages/Admin';
 import { AcceptInvite } from './pages/login/AcceptInvite';
 import { Settings } from './pages/Settings';
 import { Logs } from './pages/Logs';
-import { Placeholder } from './pages/Placeholder';
 import { PageHeader, Card } from './ui';
 
-// Sections with a redesigned page of their own; the rest fall through to Placeholder until their
-// phase lands. Models folded into Nexus in P7.4b — a pool now owns its own models.
+// Every public navigation section has a real page. Keep unfinished work out of SECTIONS until it is
+// usable; a visible "coming soon" route makes the release look less complete than it is.
 const PAGES: Record<string, FunctionComponent> = {
   nexus:     Nexus,
   connect:   Connect,
@@ -47,7 +46,7 @@ function NotFound() {
 
 /**
  * The app: a persistent shell wrapping a client-side router. Overview is the landing plane;
- * every other section renders its Placeholder until its phase lands. Deep links work because
+ * every other section renders its own page. Deep links work because
  * preact-iso intercepts same-origin anchor navigations under LocationProvider.
  */
 export function App() {
@@ -81,7 +80,7 @@ export function App() {
           <Route path={BASE || '/'} component={Overview} />
           {SECTIONS.filter((sec) => sec.id !== 'overview').map((sec) => {
             const Page = PAGES[sec.id];
-            return <Route key={sec.id} path={href(sec.path)} component={Page ?? (() => <Placeholder section={sec} />)} />;
+            return <Route key={sec.id} path={href(sec.path)} component={Page ?? NotFound} />;
           })}
           <Route default component={NotFound} />
         </Router>

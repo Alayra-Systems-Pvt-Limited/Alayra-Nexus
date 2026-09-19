@@ -204,6 +204,20 @@ jobs:
         run: npm run db:sqlite-schema -- --check
       - run: npm run build
       - run: npm run smoke:standalone
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: npm ci
+        working-directory: e2e
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+      - name: Drive first run through the standalone dashboard
+        run: npm run test:standalone
+        working-directory: e2e
+        env:
+          E2E_SKIP_BUILD: '1'
 
   # ── The measured findings, guarded (2026-08-09) ───────────────────────────────────────────────
   #

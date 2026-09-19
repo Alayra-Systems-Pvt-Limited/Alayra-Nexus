@@ -10,6 +10,7 @@ describe('Sidebar', () => {
     for (const section of SECTIONS) {
       expect(screen.getByText(section.label)).toBeInTheDocument();
     }
+    expect(screen.queryByText('Enterprise')).not.toBeInTheDocument();
   });
 
   it('marks the current route active (Overview at /)', () => {
