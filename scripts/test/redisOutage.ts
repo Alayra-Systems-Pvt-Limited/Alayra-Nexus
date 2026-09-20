@@ -10,7 +10,6 @@
 // rejects outage traffic without queueing it, returns, and has no stale work to replay.
 
 import { execFileSync } from 'node:child_process';
-import { once } from 'node:events';
 import { performance } from 'node:perf_hooks';
 import { createRedisClient } from '../../src/lib/redisClient';
 import { isKvUnavailable } from '../../src/lib/kvUnavailable';
@@ -35,6 +34,19 @@ function deadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T>
   });
 }
 
+/**
+ * Unlike node:events once, this deliberately does not reject when the emitter reports an error.
+ * Socket errors are expected while Redis is down; the state transition is what this gate awaits.
+ */
+function waitForRedisEvent(
+  redis: ReturnType<typeof createRedisClient>,
+  event: 'close' | 'ready',
+): Promise<void> {
+  return new Promise((resolve) => {
+    redis.once(event, resolve);
+  });
+}
+
 async function main(): Promise<void> {
   const redis = createRedisClient(URL, COMMAND_TIMEOUT_MS);
   // Reconnect errors are expected while the container is stopped. Without a listener EventEmitter
@@ -50,7 +62,7 @@ async function main(): Promise<void> {
     await redis.set(KEY, '0');
     await redis.save();
 
-    const closed = once(redis, 'close');
+    const closed = waitForRedisEvent(redis, 'close');
     docker(['stop', '--time', '5', CONTAINER]);
     await deadline(closed, RECOVERY_BUDGET_MS, 'Redis close detection');
 
@@ -68,7 +80,7 @@ async function main(): Promise<void> {
     void rejected;
     const refusedInMs = performance.now() - started;
 
-    const ready = once(redis, 'ready');
+    const ready = waitForRedisEvent(redis, 'ready');
     docker(['start', CONTAINER]);
     await deadline(ready, RECOVERY_BUDGET_MS, 'Redis recovery');
 
