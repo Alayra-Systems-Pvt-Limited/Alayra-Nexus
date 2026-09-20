@@ -76,7 +76,15 @@ export interface CapturingReplyOptions {
    * while still ending up with the trace. Without it the object simply collects, which is what the
    * tests and the non-streaming path want.
    */
-  onChunk?: (chunk: string) => void;
+  onChunk?: (chunk: string) => unknown;
+  /**
+   * Optional event source for a real downstream socket. The Playground delegates drain, close,
+   * and error to its outer response so capture preserves normal backpressure and disconnects.
+   */
+  events?: {
+    once(event: string, listener: () => void): unknown;
+    off(event: string, listener: () => void): unknown;
+  };
   /**
    * How much of a streamed response to retain, in characters. Default 1,000,000.
    *
@@ -106,13 +114,14 @@ export function createCapturingReply(opts: CapturingReplyOptions = {}): Capturin
     payload: undefined, sse: '', truncated: false,
   };
 
-  const collect = (text: string): void => {
-    if (!text) return;
-    opts.onChunk?.(text);
+  const collect = (text: string): unknown => {
+    if (!text) return true;
+    const accepted = opts.onChunk?.(text);
     const room = maxSseChars - captured.sse.length;
-    if (room <= 0) { captured.truncated = true; return; }
-    if (text.length > room) { captured.sse += text.slice(0, room); captured.truncated = true; return; }
+    if (room <= 0) { captured.truncated = true; return accepted; }
+    if (text.length > room) { captured.sse += text.slice(0, room); captured.truncated = true; return accepted; }
     captured.sse += text;
+    return accepted;
   };
 
   const putHeader = (name: string, value: unknown): void => {
@@ -125,7 +134,11 @@ export function createCapturingReply(opts: CapturingReplyOptions = {}): Capturin
       captured.streamed = true;
       for (const [k, v] of Object.entries(headers ?? {})) putHeader(k, v);
     },
-    write(chunk: string | Uint8Array) { collect(decoder.text(chunk)); },
+    write(chunk: string | Uint8Array) { return collect(decoder.text(chunk)); },
+    ...(opts.events ? {
+      once: (event: string, listener: () => void) => opts.events!.once(event, listener),
+      off:  (event: string, listener: () => void) => opts.events!.off(event, listener),
+    } : {}),
     end() {
       collect(decoder.flush());
       captured.ended = true;

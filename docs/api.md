@@ -73,6 +73,8 @@ that routes, so it can never advertise a model the gateway would refuse.
 | `GET` | `/admin/keys/:id/metrics` | Live RPM and status for a key |
 | `GET` | `/admin/models` | List model registry |
 | `PUT` | `/admin/models` | Add or update a model in the registry |
+| `GET` | `/admin/playground/models` | List currently servable chat models for the dashboard Playground |
+| `POST` | `/admin/playground/run` | Stream one Playground request through the real proxy path (owner/admin only; response cache bypassed) |
 | `GET` | `/admin/teams` | List teams with key counts and current-period spend |
 | `POST` | `/admin/teams` | Create a team (name, budget cap + period, status) |
 | `PATCH` | `/admin/teams/:id` | Update a team (budget, status, tier, `byokFallback`) |
@@ -89,5 +91,11 @@ All admin routes require `Authorization: Bearer <token>` — a session token fro
 or an admin API token for scripts and CI. On a gateway that has not been claimed yet, the raw
 `ADMIN_PASSWORD` is still accepted, exactly as it was before Phase 7.13a; creating an owner account
 closes that door. See [Accounts and roles](../README.md#accounts-and-roles).
+
+The Playground run endpoint accepts OpenAI-style roles with text content-part arrays and returns an
+outer server-sent event stream. `upstream` events contain the provider's original stream chunks; the
+final `result` event contains the captured response metadata and request trace. The endpoint does not
+persist prompt or reply content. Because a run consumes provider capacity, viewers can list models
+but receive `403` if they try to execute one.
 
 </details>

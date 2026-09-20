@@ -20,6 +20,7 @@ describe('demo responder — reads', () => {
     '/admin/analytics/overview?period=30d',
     '/admin/nexus/overview',
     '/admin/models',
+    '/admin/playground/models',
     '/admin/teams',
     '/admin/audit?limit=50',
     '/admin/notifications?limit=20',
@@ -132,6 +133,7 @@ describe('demo responder — every endpoint the dashboard calls', () => {
     '/admin/me/password', '/admin/me/recovery-key', '/admin/me/sessions/revoke-others',
     '/admin/api-key/regenerate', '/admin/cache/purge',
     '/admin/notifications/read-all', '/admin/invites/accept',
+    '/admin/playground/run',
     // "Back up now" — the same machinery the schedule uses, on demand. POST only.
     '/admin/backup/schedule/run',
     // Moving to PostgreSQL (S3): one looks at a database the caller names, the other moves data
