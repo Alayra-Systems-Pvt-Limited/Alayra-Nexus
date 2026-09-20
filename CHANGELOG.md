@@ -166,6 +166,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   check to keep it there.
 
 ### Fixed
+- **A Redis outage no longer throttles the minute after it.** The client keeps its offline queue
+  only long enough to complete the first healthy startup, then refuses new commands immediately
+  whenever the connection is down. Commands already on a failed socket are not resent either, so
+  reservations whose callers received a `503` cannot be replayed into the live rate-limit window
+  after Redis returns.
+
+  Reconnection still runs in the background and acts as the half-open probe. A required release
+  gate stops a real Redis container, proves twenty commands fail promptly with no queued writes,
+  restarts it, and proves a fresh command succeeds without restarting the gateway process.
+
 - **Malformed access-key bodies are caller errors, not server failures.** Creating a team key now
   validates its name and optional team UUID before touching the database, caps names at 80
   characters, and returns a bounded field-level `400` response for invalid input. Reassigning a

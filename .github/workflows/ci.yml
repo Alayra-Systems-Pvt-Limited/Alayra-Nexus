@@ -99,6 +99,39 @@ jobs:
           PARITY_REDIS_URL: redis://localhost:6379
           PARITY_DATABASE_URL: postgresql://nexus:nexus@localhost:5432/nexus_parity
 
+  # A unit mock cannot prove that ioredis discards commands instead of replaying them after a real
+  # socket outage. This owns a disposable Redis container, stops it, and starts the same instance
+  # again so both the absence of stale writes and automatic recovery are measured over the wire.
+  redis-outage:
+    name: Redis outage (fail fast + recover)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: Start the disposable Redis
+        run: |
+          docker run --detach --name nexus-redis-outage-test --publish 56380:6379 redis:7-alpine
+          for attempt in {1..20}; do
+            if docker exec nexus-redis-outage-test redis-cli ping | grep -q PONG; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs nexus-redis-outage-test
+          exit 1
+      - name: Prove outage commands are refused, not replayed
+        run: npm run test:redis-outage
+        env:
+          REDIS_OUTAGE_CONTAINER: nexus-redis-outage-test
+          REDIS_OUTAGE_URL: redis://127.0.0.1:56380/0
+      - name: Remove the disposable Redis
+        if: always()
+        run: docker rm --force nexus-redis-outage-test || true
+
   build:
     name: Build
     runs-on: ubuntu-latest
