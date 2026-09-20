@@ -1,0 +1,395 @@
+{
+  "generatedAt": "2026-09-20T05:58:52.952Z",
+  "note": "Produced by `npm run verify:providers` against live provider APIs. Never edited by hand.",
+  "summary": {
+    "measured": 7,
+    "chatVerified": 6,
+    "drifted": 0
+  },
+  "results": [
+    {
+      "slug": "openai",
+      "label": "OpenAI",
+      "status": "skipped",
+      "claimed": null,
+      "drift": false,
+      "pricingClaimed": false,
+      "streamUsageOptionClaimed": false,
+      "notes": [
+        "no PROVIDER_KEY_OPENAI in the environment"
+      ]
+    },
+    {
+      "slug": "anthropic",
+      "label": "Anthropic",
+      "status": "skipped",
+      "claimed": null,
+      "drift": false,
+      "pricingClaimed": false,
+      "streamUsageOptionClaimed": false,
+      "notes": [
+        "no PROVIDER_KEY_ANTHROPIC in the environment"
+      ]
+    },
+    {
+      "slug": "google",
+      "label": "Google",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": false,
+      "streamUsageOptionClaimed": true,
+      "notes": [],
+      "modelsUrl": "https://generativelanguage.googleapis.com/v1beta/openai/models",
+      "modelCount": 58,
+      "sampleIds": [
+        "models/gemini-2.5-flash",
+        "models/gemini-2.5-pro",
+        "models/gemini-2.5-flash-preview-tts"
+      ],
+      "pricingPublished": false,
+      "chatAttempts": [
+        {
+          "model": "models/gemini-flash-lite-latest",
+          "ok": true
+        }
+      ],
+      "chatModel": "models/gemini-flash-lite-latest",
+      "chatModelEchoed": "models/gemini-flash-lite-latest",
+      "usage": {
+        "completion_tokens": 0,
+        "prompt_tokens": 2,
+        "total_tokens": 2
+      },
+      "streamUsageProbes": {
+        "baseline": {
+          "accepted": true
+        },
+        "requested": {
+          "accepted": true,
+          "usage": {
+            "input": 2,
+            "output": 0
+          }
+        }
+      },
+      "streamUsageOptionSupported": true
+    },
+    {
+      "slug": "groq",
+      "label": "Groq",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": true,
+      "streamUsageOptionClaimed": true,
+      "notes": [],
+      "modelsUrl": "https://api.groq.com/openai/v1/models",
+      "modelCount": 13,
+      "sampleIds": [
+        "groq/compound-mini",
+        "allam-2-7b",
+        "meta-llama/llama-prompt-guard-2-86m"
+      ],
+      "pricingPublished": true,
+      "chatAttempts": [
+        {
+          "model": "groq/compound-mini",
+          "ok": true
+        }
+      ],
+      "chatModel": "groq/compound-mini",
+      "chatModelEchoed": "groq/compound-mini",
+      "usage": {
+        "queue_time": 0.345338,
+        "prompt_tokens": 437,
+        "prompt_time": 0.021051,
+        "completion_tokens": 29,
+        "completion_time": 0.071923,
+        "total_tokens": 466,
+        "total_time": 0.092975
+      },
+      "streamUsageProbes": {
+        "baseline": {
+          "accepted": true
+        },
+        "requested": {
+          "accepted": true,
+          "usage": {
+            "input": 437,
+            "output": 29
+          }
+        }
+      },
+      "streamUsageOptionSupported": true
+    },
+    {
+      "slug": "openrouter",
+      "label": "OpenRouter",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": true,
+      "streamUsageOptionClaimed": true,
+      "notes": [
+        "the provider returned streamed usage even without `stream_options.include_usage`"
+      ],
+      "modelsUrl": "https://openrouter.ai/api/v1/models",
+      "modelCount": 446,
+      "sampleIds": [
+        "prism-ml/ternary-bonsai-2-27b",
+        "z-ai/glm-5.3-flashx",
+        "unbiased/pareto"
+      ],
+      "pricingPublished": true,
+      "chatAttempts": [
+        {
+          "model": "prism-ml/ternary-bonsai-2-27b",
+          "ok": true
+        }
+      ],
+      "chatModel": "prism-ml/ternary-bonsai-2-27b",
+      "chatModelEchoed": "prism-ml/ternary-bonsai-2-27b",
+      "usage": {
+        "prompt_tokens": 53,
+        "completion_tokens": 1,
+        "total_tokens": 54,
+        "cost": 0.000004475,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.000004475,
+          "upstream_inference_prompt_cost": 0.000003975,
+          "upstream_inference_completions_cost": 5e-7
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 1,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "streamUsageProbes": {
+        "baseline": {
+          "accepted": true,
+          "usage": {
+            "input": 53,
+            "output": 1
+          }
+        },
+        "requested": {
+          "accepted": true,
+          "usage": {
+            "input": 53,
+            "output": 1
+          }
+        }
+      },
+      "streamUsageOptionSupported": true
+    },
+    {
+      "slug": "mistral",
+      "label": "Mistral",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": false,
+      "streamUsageOptionClaimed": true,
+      "notes": [
+        "the provider returned streamed usage even without `stream_options.include_usage`"
+      ],
+      "modelsUrl": "https://api.mistral.ai/v1/models",
+      "modelCount": 46,
+      "sampleIds": [
+        "codestral-2508",
+        "codestral-latest",
+        "mistral-code-latest"
+      ],
+      "pricingPublished": false,
+      "chatAttempts": [
+        {
+          "model": "mistral-small-latest",
+          "ok": false,
+          "error": "HTTP 429: {\"object\":\"error\",\"message\":\"Rate limit exceeded\",\"type\":\"rate_limited\",\"param\":null,\"code\":\"1300\",\"raw_status_code\":429}"
+        },
+        {
+          "model": "ministral-3b-latest",
+          "ok": true
+        }
+      ],
+      "error": "HTTP 429: {\"object\":\"error\",\"message\":\"Rate limit exceeded\",\"type\":\"rate_limited\",\"param\":null,\"code\":\"1300\",\"raw_status_code\":429}",
+      "chatModel": "ministral-3b-latest",
+      "chatModelEchoed": "ministral-3b-latest",
+      "usage": {
+        "prompt_tokens": 4,
+        "total_tokens": 5,
+        "completion_tokens": 1,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "service_tier": "standard"
+      },
+      "streamUsageProbes": {
+        "baseline": {
+          "accepted": true,
+          "usage": {
+            "input": 4,
+            "output": 1
+          }
+        },
+        "requested": {
+          "accepted": true,
+          "usage": {
+            "input": 4,
+            "output": 1
+          }
+        }
+      },
+      "streamUsageOptionSupported": true
+    },
+    {
+      "slug": "huggingface",
+      "label": "HuggingFace",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": false,
+      "streamUsageOptionClaimed": true,
+      "notes": [
+        "asked for \"deepseek-ai/DeepSeek-V4-Flash-0731\" and the response names \"deepseek-v4-flash-0731\" — this provider routes to a host of its choosing, so the model that ran is not the model configured"
+      ],
+      "modelsUrl": "https://router.huggingface.co/v1/models",
+      "modelCount": 139,
+      "sampleIds": [
+        "deepseek-ai/DeepSeek-V4.1-Flash",
+        "Qwen/Qwen3.8-27B",
+        "meta-llama/Llama-3.1-8B-Instruct"
+      ],
+      "pricingPublished": false,
+      "chatAttempts": [
+        {
+          "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+          "ok": true
+        }
+      ],
+      "chatModel": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "chatModelEchoed": "deepseek-v4-flash-0731",
+      "usage": {
+        "prompt_tokens": 84,
+        "total_tokens": 85,
+        "completion_tokens": 1,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "created_cache_tokens": 0,
+          "multimodal_tokens": null
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 1
+        }
+      },
+      "streamUsageProbes": {
+        "baseline": {
+          "accepted": true
+        },
+        "requested": {
+          "accepted": true,
+          "usage": {
+            "input": 84,
+            "output": 1
+          }
+        }
+      },
+      "streamUsageOptionSupported": true
+    },
+    {
+      "slug": "cloudflare",
+      "label": "Cloudflare Workers AI",
+      "status": "chat",
+      "claimed": "chat",
+      "drift": false,
+      "pricingClaimed": false,
+      "streamUsageOptionClaimed": true,
+      "notes": [
+        "the provider returned streamed usage even without `stream_options.include_usage`"
+      ],
+      "modelsUrl": "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/models/search",
+      "modelCount": 65,
+      "sampleIds": [
+        "@cf/pipecat-ai/smart-turn-v2",
+        "@cf/openai/gpt-oss-120b",
+        "@cf/baai/bge-m3"
+      ],
+      "pricingPublished": false,
+      "chatAttempts": [
+        {
+          "model": "@cf/meta/llama-3.2-3b-instruct",
+          "ok": true
+        }
+      ],
+      "chatModel": "@cf/meta/llama-3.2-3b-instruct",
+      "chatModelEchoed": "@cf/meta/llama-3.2-3b-instruct",
+      "usage": {
+        "prompt_tokens": 36,
+        "completion_tokens": 1,
+        "total_tokens": 37,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 0.1969597041606903
+      },
+      "streamUsageProbes": {
+        "baseline": {
+          "accepted": true,
+          "usage": {
+            "input": 36,
+            "output": 1
+          }
+        },
+        "requested": {
+          "accepted": true,
+          "usage": {
+            "input": 36,
+            "output": 1
+          }
+        }
+      },
+      "streamUsageOptionSupported": true
+    },
+    {
+      "slug": "cerebras",
+      "label": "Cerebras",
+      "status": "models",
+      "claimed": "models",
+      "drift": false,
+      "pricingClaimed": false,
+      "streamUsageOptionClaimed": false,
+      "notes": [
+        "the model list works; 2 completion attempt(s) did not — see chatAttempts for what each model answered"
+      ],
+      "modelsUrl": "https://api.cerebras.ai/v1/models",
+      "modelCount": 2,
+      "sampleIds": [
+        "gpt-oss-120b",
+        "qwen-3.8-27b"
+      ],
+      "pricingPublished": false,
+      "chatAttempts": [
+        {
+          "model": "gpt-oss-120b",
+          "ok": false,
+          "error": "HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}"
+        },
+        {
+          "model": "qwen-3.8-27b",
+          "ok": false,
+          "error": "HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}"
+        }
+      ],
+      "error": "HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}"
+    }
+  ]
+}

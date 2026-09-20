@@ -1,5 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { candidates, resolveUrls, redact, shouldWriteRecord, NOT_CHAT } from './verify-providers';
+import {
+  candidates, resolveUrls, redact, shouldWriteRecord, NOT_CHAT,
+  streamingProbeBody, usageFromStream, streamUsageSupported,
+} from './verify-providers';
 import { presetFor, type ProviderPreset } from '../src/data/providers';
 import type { FetchedModel } from '../src/lib/modelPath';
 
@@ -165,5 +168,40 @@ describe('redaction of the committed record', () => {
   it('leaves text alone when no account id is configured', () => {
     delete process.env[account];
     expect(redact('HTTP 500 from https://api.groq.com/openai/v1/models')).toBe('HTTP 500 from https://api.groq.com/openai/v1/models');
+  });
+});
+
+describe('streamed usage capability probes', () => {
+  it('changes only the option under test between the two requests', () => {
+    const baseline = streamingProbeBody('model-1', false);
+    const requested = streamingProbeBody('model-1', true);
+
+    expect(baseline).not.toHaveProperty('stream_options');
+    expect(requested).toMatchObject({
+      model: 'model-1', stream: true, max_tokens: 1,
+      stream_options: { include_usage: true },
+    });
+  });
+
+  it('reads provider usage from the final SSE frame', () => {
+    const body = [
+      'data: {"choices":[{"delta":{"content":"hi"}}]}',
+      '',
+      'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":5}}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+
+    expect(usageFromStream(body)).toEqual({ input: 7, output: 5 });
+  });
+
+  it('does not call acceptance alone support', () => {
+    expect(streamUsageSupported({ accepted: true })).toBe(false);
+    expect(streamUsageSupported({ accepted: false, error: 'HTTP 400' })).toBe(false);
+  });
+
+  it('requires accepted output with a usage block', () => {
+    expect(streamUsageSupported({ accepted: true, usage: { input: 7, output: 5 } })).toBe(true);
   });
 });

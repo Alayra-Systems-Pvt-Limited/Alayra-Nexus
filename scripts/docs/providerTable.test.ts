@@ -13,7 +13,8 @@ import type { Result } from '../verify-providers';
 // nobody measured, which is exactly the state it was in before it was generated.
 
 const result = (slug: string, over: Partial<Result> = {}): Result => ({
-  slug, label: slug, status: 'chat', claimed: 'chat', drift: false, notes: [], ...over,
+  slug, label: slug, status: 'chat', claimed: 'chat', drift: false,
+  streamUsageOptionClaimed: false, notes: [], ...over,
 });
 
 const file = (generatedAt: string, results: Result[]): EvidenceFile => ({ generatedAt, results });
