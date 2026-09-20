@@ -83,14 +83,16 @@ async function streamCompletion(res, parsed) {
   }
 
   await wait(15);
-  // Usage on the final chunk, as OpenAI sends it under `stream_options.include_usage`. The gateway
-  // reads it from the stream rather than guessing, so the same fixed counts the non-streaming reply
-  // reports are available here.
-  res.write(sse({
+  const final = {
     id: 'mock-stream-1', object: 'chat.completion.chunk', model,
     choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-    usage: { prompt_tokens: 7, completion_tokens: 5, total_tokens: 12 },
-  }));
+  };
+  // Real providers do not all volunteer usage. The mock only returns it when the caller explicitly
+  // requested it, so unknown-provider E2E traffic exercises Nexus's local fallback.
+  if (parsed?.stream_options?.include_usage === true) {
+    final.usage = { prompt_tokens: 7, completion_tokens: 5, total_tokens: 12 };
+  }
+  res.write(sse(final));
   res.write('data: [DONE]\n\n');
   res.end();
 }
@@ -123,6 +125,7 @@ const server = http.createServer((req, res) => {
       url: req.url,
       authorization: req.headers.authorization ?? null,
       model: parsed?.model ?? null,
+      streamOptions: parsed?.stream_options ?? null,
     });
 
     if (req.method === 'POST' && req.url === '/v1/chat/completions' && parsed?.stream === true) {

@@ -166,6 +166,15 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   check to keep it there.
 
 ### Fixed
+
+- **Streamed usage is provider-authoritative where live probes prove it is safe.** Nexus now asks
+  Google, Groq, OpenRouter, Mistral, HuggingFace, and Cloudflare for the final streamed usage block,
+  so billing and TPM reconciliation use the provider's token counts instead of a local estimate.
+
+  The capability is measured by `npm run verify:providers` with paired requests both without and
+  with `stream_options.include_usage`, and the evidence is committed by date. Unknown, custom, and
+  unmeasured providers receive no extra field because OpenAI-compatible servers are not guaranteed
+  to accept it; their existing bounded local tally remains the fallback.
 - **A Redis outage no longer throttles the minute after it.** The client keeps its offline queue
   only long enough to complete the first healthy startup, then refuses new commands immediately
   whenever the connection is down. Commands already on a failed socket are not resent either, so

@@ -66,7 +66,7 @@ vi.mock('./modelCatalog.service', async (o) => ({
 vi.mock('../lib/metrics', async (o) => ({ ...(await o<typeof import('../lib/metrics')>()) }));
 vi.mock('../lib/tracing', async (o) => ({ ...(await o<typeof import('../lib/tracing')>()) }));
 
-import { handleProxy } from './completionsProxy.service';
+import { handleProxy, withProviderStreamUsage } from './completionsProxy.service';
 import { countTokens } from '../lib/tokenizer';
 
 const ROUTE = {
@@ -121,6 +121,30 @@ beforeEach(() => {
   getCacheConfig.mockResolvedValue({ enabled: false, ttlSeconds: 0 });
 });
 
+describe('requesting authoritative streamed usage', () => {
+  it('adds the option for a provider proven safe by the live probe', () => {
+    expect(withProviderStreamUsage({ model: 'x', stream: true }, 'google', true)).toEqual({
+      model: 'x', stream: true, stream_options: { include_usage: true },
+    });
+  });
+
+  it('keeps other stream options while forcing authoritative usage on', () => {
+    expect(withProviderStreamUsage({
+      stream_options: { include_usage: false, future_option: 'keep' },
+    }, 'groq', true).stream_options).toEqual({ include_usage: true, future_option: 'keep' });
+  });
+
+  it('leaves unknown providers byte-for-byte untouched', () => {
+    const body = { model: 'x', stream: true };
+    expect(withProviderStreamUsage(body, 'custom-provider', true)).toBe(body);
+  });
+
+  it('does not add a streaming option when the upstream request is non-streamed', () => {
+    const body = { model: 'x', stream: false };
+    expect(withProviderStreamUsage(body, 'google', false)).toBe(body);
+  });
+});
+
 describe('a provider that reports its own usage', () => {
   it('is believed', async () => {
     const row = await stream([
@@ -148,8 +172,8 @@ describe('a provider that reports its own usage', () => {
 });
 
 describe('a provider that reports no usage at all', () => {
-  // OpenAI is this provider. A streamed completion carries no `usage` block unless the request
-  // asked for one with `stream_options: { include_usage: true }`, and Nexus does not ask.
+  // Unknown and not-yet-measured providers remain on the local fallback because Nexus cannot
+  // safely send an option their API may reject.
 
   it('is counted from the words it actually sent', async () => {
     const answer = 'The capital of France is Paris.';

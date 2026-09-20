@@ -29,6 +29,7 @@ import { evaluateMessages, evaluateText, type CompiledRule } from '../lib/guardr
 import * as metrics                   from '../lib/metrics';
 import { startUpstreamSpan, SpanStatusCode } from '../lib/tracing';
 import { checkTeamBudget, type BudgetPeriod, type OverBudgetAction } from './budget.service';
+import { supportsStreamUsageOption } from '../data/providers';
 import { getCacheConfig }              from './cache.service';
 import { isCacheable, responseCacheKey, getCached, setCached, toCompletionJson, buildFromCompletion, buildFromStreamContent } from '../lib/responseCache';
 import { createStreamTally } from '../lib/streamTally';
@@ -58,6 +59,26 @@ export interface CompletionsBody {
   tools?:       unknown[];
   tool_choice?: unknown;
   [key: string]: unknown;
+}
+
+/**
+ * Ask for provider-authoritative usage only where a live probe proved the option is safe.
+ *
+ * Unknown/custom providers are returned byte-for-byte untouched. A caller's other stream options
+ * are retained, but include_usage is forced on for a measured provider because Nexus needs the
+ * provider's billed counts for cost attribution and TPM reconciliation.
+ */
+export function withProviderStreamUsage(
+  body: CompletionsBody,
+  providerSlug: string,
+  streamingUpstream: boolean,
+): CompletionsBody {
+  if (!streamingUpstream || !supportsStreamUsageOption(providerSlug)) return body;
+  const current = body.stream_options;
+  const options = current && typeof current === 'object' && !Array.isArray(current)
+    ? current as Record<string, unknown>
+    : {};
+  return { ...body, stream_options: { ...options, include_usage: true } };
 }
 
 export class ProxyError extends Error {
@@ -441,7 +462,11 @@ export async function handleProxy(
   const upstreamUrl  = `${stripTrailingSlash(route.baseUrl)}/chat/completions`;
   // Forward the (possibly redacted) messages. In buffered-safe mode we request a
   // non-streamed response from upstream so we can inspect it before replaying it.
-  const upstreamBody = { ...body, messages: effectiveMessages, model: route.modelString, ...(bufferStream ? { stream: false } : {}) };
+  const upstreamBody = withProviderStreamUsage(
+    { ...body, messages: effectiveMessages, model: route.modelString, ...(bufferStream ? { stream: false } : {}) },
+    route.providerSlug,
+    isStream && !bufferStream,
+  );
   const headers: Record<string, string> = withExtraHeaders(route.extraHeaders, {
     'Content-Type': 'application/json',
     ...providerAuthHeader(route.authHeader, route.authPrefix, route.decryptedKey),

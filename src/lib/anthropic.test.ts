@@ -182,8 +182,23 @@ describe('AnthropicStreamTranslator — text', () => {
     expect((events[3].data.delta as Record<string, unknown>).text).toBe('lo');
     // stop reason carried on message_delta
     expect((events[5].data.delta as Record<string, unknown>).stop_reason).toBe('end_turn');
+    // No provider usage was present, so the translator exposes the same local fallback as billing.
+    expect((events[5].data.usage as Record<string, unknown>).output_tokens).toBeGreaterThan(0);
     // message_start announces an assistant message with the model
     expect((events[0].data.message as Record<string, unknown>).role).toBe('assistant');
+  });
+
+  it('believes provider-reported streamed usage instead of replacing it with an estimate', () => {
+    const t = new AnthropicStreamTranslator();
+    let sse = t.push(oaiChunk({ choices: [{ delta: { content: 'a non-empty answer' } }] }));
+    sse += t.push(oaiChunk({
+      choices: [{ delta: {}, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 4, completion_tokens: 7 },
+    }));
+    sse += t.end();
+
+    const delta = parseSse(sse).find(e => e.event === 'message_delta');
+    expect((delta!.data.usage as Record<string, unknown>).output_tokens).toBe(7);
   });
 
   // Routing happens after the translator is constructed, so the model that actually served
