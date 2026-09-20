@@ -392,6 +392,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Changed
 
+- **The Redis client is upgraded to ioredis 6 without silently changing the wire contract.** Version
+  6 brings the maintained command set, reconnect fixes, and stricter cluster redirect validation.
+  It also defaults to RESP3, whose reply shapes are a separate compatibility change; Nexus pins its
+  production client to RESP2 so the Redis-backed and in-process stores keep the same observable
+  behaviour. The existing Node 22 minimum already exceeds ioredis 6's Node 20 requirement.
+
 - **A streamed answer is read as it passes, not held until it ends.** The proxy kept every byte a
   provider sent in one growing string so it could read the usage and the content once the stream
   finished. SSE repeats the entire JSON envelope for each token, so it was keeping about fifty

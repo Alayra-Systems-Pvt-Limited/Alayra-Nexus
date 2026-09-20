@@ -42,6 +42,7 @@ describe('Redis fail-fast gate', () => {
 
   it('disables replay while retaining the bounded in-flight timeout', () => {
     expect(redisClientOptions(2_000)).toEqual({
+      protocol: 2,
       maxRetriesPerRequest: null,
       commandTimeout: 2_000,
       enableOfflineQueue: true,
