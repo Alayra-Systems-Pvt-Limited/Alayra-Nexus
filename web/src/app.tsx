@@ -9,6 +9,7 @@ import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
 import { Nexus } from './pages/Nexus';
 import { Connect } from './pages/Connect';
+import { Playground } from './pages/Playground';
 import { Analytics } from './pages/Analytics';
 import { Teams } from './pages/Teams';
 import { Security } from './pages/Security';
@@ -25,6 +26,7 @@ import { PageHeader, Card } from './ui';
 const PAGES: Record<string, FunctionComponent> = {
   nexus:     Nexus,
   connect:   Connect,
+  playground: Playground,
   analytics: Analytics,
   teams:     Teams,
   security:  Security,

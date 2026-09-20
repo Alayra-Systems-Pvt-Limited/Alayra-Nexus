@@ -9,6 +9,15 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+
+- **A built-in single-chat Playground.** Owners and admins can choose any currently servable chat
+  model (or automatic routing), tune temperature and output length, add a system prompt, and watch
+  the response stream inside the dashboard. The request goes through the real gateway routing path,
+  bypasses the response cache so every run is genuine, and returns its request trace for the richer
+  diagnostics planned next. Prompts and replies remain in browser memory only and are not stored by
+  the Playground. Viewers may inspect the page and available models but cannot spend provider quota.
+
 ## [1.6.5] - 2026-09-20
 
 ### Added

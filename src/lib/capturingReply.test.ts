@@ -140,6 +140,25 @@ describe('a streamed response', () => {
     expect(seen[1]).toBe('data: two\n\n');
   });
 
+  it('preserves outer-socket backpressure and event delegation for the Playground', () => {
+    const once = vi.fn();
+    const off = vi.fn();
+    const onChunk = vi.fn(() => false);
+    const { reply } = createCapturingReply({ onChunk, events: { once, off } });
+    const raw = reply.raw as typeof reply.raw & {
+      once(event: string, listener: () => void): unknown;
+      off(event: string, listener: () => void): unknown;
+    };
+    const listener = () => undefined;
+
+    expect(raw.write('data: token\n\n')).toBe(false);
+    raw.once('drain', listener);
+    raw.off('drain', listener);
+
+    expect(onChunk).toHaveBeenCalledWith('data: token\n\n');
+    expect(once).toHaveBeenCalledWith('drain', listener);
+    expect(off).toHaveBeenCalledWith('drain', listener);
+  });
   it('marks a stream that outran its retention rather than passing off a prefix as the whole', () => {
     // A cut-off answer presented as the complete one is worse than no answer: it is wrong in a way
     // that reads as right.

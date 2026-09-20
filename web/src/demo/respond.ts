@@ -123,6 +123,14 @@ export function demoRespond<T>(method: string, path: string): T {
     case '/admin/analytics/overview':  return dataset.analytics[period(path, '30d')] as T;
     case '/admin/nexus/overview':      return dataset.nexus as T;
     case '/admin/models':              return dataset.models as T;
+    case '/admin/playground/models':  return {
+      models: [
+        { id: 'alayra-nexus-1', displayName: 'Auto — Nexus routing', provider: 'alayra-nexus', auto: true, contextWindow: 0, maxTokens: 0 },
+        ...dataset.models.models
+          .filter((model) => model.status === 'active' && model.capabilities.includes('chat'))
+          .map((model) => ({ id: model.id, displayName: model.displayName, provider: model.provider, auto: false, contextWindow: model.contextWindow, maxTokens: model.maxTokens })),
+      ],
+    } as T;
     case '/admin/teams':               return { teams: dataset.teams } as T;
     case '/admin/audit':               return (Number(query(path).get('limit')) > 50 ? dataset.auditLarge : dataset.audit) as T;
     case '/admin/notifications':       return dataset.notifications as T;

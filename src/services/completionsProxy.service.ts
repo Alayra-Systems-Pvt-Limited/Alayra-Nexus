@@ -338,11 +338,12 @@ export async function handleProxy(
   // replayed straight from Redis (streamed if the client asked), skipping the
   // provider entirely; only a miss falls through to routing.
   const cacheCfg    = await getCacheConfig();
+  const cacheBypassed = reqHeaders['x-nexus-cache-bypass'] === '1';
   let cacheStoreKey: string | null = null;
   // Told apart deliberately: "the operator switched the cache off" and "this request could never
   // be cached" look identical from outside and are different answers to "why was nothing reused?".
-  if (trace) trace.cache = !cacheCfg.enabled ? 'disabled' : isCacheable(body) ? 'miss' : 'not-cacheable';
-  if (cacheCfg.enabled && isCacheable(body)) {
+  if (trace) trace.cache = cacheBypassed ? 'bypassed' : !cacheCfg.enabled ? 'disabled' : isCacheable(body) ? 'miss' : 'not-cacheable';
+  if (!cacheBypassed && cacheCfg.enabled && isCacheable(body)) {
     // The pinned model is part of the identity: two models answering one prompt are two
     // responses, and sharing an entry between them would replay the wrong one silently.
     const key = responseCacheKey(body, scope.namespace, pinnedModelId);

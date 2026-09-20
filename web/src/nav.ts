@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Network, Plug, BarChart3, Users,
-  Shield, DatabaseZap, HeartPulse, ScrollText, Settings, UserCog,
+  Shield, DatabaseZap, HeartPulse, ScrollText, Settings, UserCog, MessageSquareText,
 } from 'lucide-preact';
 import type { ComponentType } from 'preact';
 
@@ -19,7 +19,8 @@ export interface Section {
 export const SECTIONS: Section[] = [
   { id: 'overview',   label: 'Overview',   path: '/',           icon: LayoutDashboard, group: 'workspace' },
   { id: 'nexus',      label: 'Nexus',      path: '/nexus',      icon: Network,         group: 'workspace' },
-  { id: 'connect',    label: 'Connect',    path: '/connect',    icon: Plug,            group: 'workspace' },
+  { id: 'connect',    label: 'Connect',    path: '/connect',    icon: Plug,              group: 'workspace' },
+  { id: 'playground', label: 'Playground', path: '/playground', icon: MessageSquareText, group: 'workspace' },
   { id: 'analytics',  label: 'Analytics',  path: '/analytics',  icon: BarChart3,       group: 'workspace' },
   { id: 'teams',      label: 'Teams',      path: '/teams',      icon: Users,           group: 'workspace' },
   { id: 'security',   label: 'Security',   path: '/security',   icon: Shield,          group: 'workspace' },
