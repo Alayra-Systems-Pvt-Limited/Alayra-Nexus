@@ -8,7 +8,9 @@ import {
   type PlaygroundMessage,
   type PlaygroundModelsResponse,
   type PlaygroundResult,
+  type PlaygroundTrace,
 } from '../lib/playground';
+import { PlaygroundDiagnostics } from './playground/PlaygroundDiagnostics';
 import s from './playground/playground.module.css';
 
 interface ChatMessage extends PlaygroundMessage {
@@ -16,6 +18,7 @@ interface ChatMessage extends PlaygroundMessage {
   model?: string;
   error?: string;
   stopped?: boolean;
+  diagnostics?: PlaygroundTrace;
 }
 
 const AUTO_MODEL = 'alayra-nexus-1';
@@ -84,6 +87,7 @@ export function Playground() {
         })),
         onResult: (result: PlaygroundResult) => updateAssistant(assistant.id, (message) => ({
           ...message,
+          diagnostics: result.trace,
           model: result.trace.route?.modelString
             ?? result.response.headers['x-nexus-model']
             ?? selected?.displayName
@@ -223,6 +227,7 @@ export function Playground() {
                     <span class={s.cursor} aria-label="Streaming response" />
                   )}
                   {message.error && <div class={s.messageError} role="alert">{message.error}</div>}
+                  {message.diagnostics && <PlaygroundDiagnostics trace={message.diagnostics} />}
                 </div>
               </article>
             ))}

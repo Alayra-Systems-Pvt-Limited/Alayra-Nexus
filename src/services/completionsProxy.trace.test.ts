@@ -124,6 +124,30 @@ describe('a request that reaches a provider', () => {
     expect(trace.outcome).toBe('success');
   });
 
+  it('records the provider dispatch as an ordered, credential-safe attempt', async () => {
+    const trace = newTrace();
+    await handleProxy({ messages } as never, fakeReply() as never, undefined, {}, undefined, trace);
+
+    expect(trace.attempts).toEqual([expect.objectContaining({
+      provider: 'anthropic', modelString: 'claude-sonnet-4-5', tier: 'premium',
+      keyMask: ROUTE.keyMask, status: 200, outcome: 'success',
+    })]);
+    expect(trace.attempts[0].ttfbMs).toBeGreaterThanOrEqual(0);
+    expect(JSON.stringify(trace.attempts)).not.toContain(SECRET);
+  });
+
+  it('waits for the traced cost stamp before returning the Playground result', async () => {
+    recordTokenUsage.mockImplementationOnce(async (_params, target) => {
+      await Promise.resolve();
+      const traced = target as ReturnType<typeof newTrace>;
+      if (traced.usage) { traced.usage.estimatedUsd = 0.0025; traced.usage.priced = true; }
+    });
+    const trace = newTrace();
+    await handleProxy({ messages } as never, fakeReply() as never, undefined, {}, undefined, trace);
+
+    expect(trace.usage?.estimatedUsd).toBe(0.0025);
+    expect(trace.usage?.priced).toBe(true);
+  });
   it('names the key by its mask, and carries the routing facts a person would ask about', async () => {
     const trace = newTrace();
     await handleProxy({ messages } as never, fakeReply() as never, undefined, {}, undefined, trace);
@@ -203,6 +227,7 @@ describe('a request the gateway refused', () => {
     // The route IS recorded here — a provider that refused is still a provider that was chosen,
     // and "which key got rate-limited" is the whole question.
     expect(trace.route?.keyId).toBe('key-1');
+    expect(trace.attempts[0]).toMatchObject({ status: 429, outcome: 'rate_limited' });
   });
 });
 

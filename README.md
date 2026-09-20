@@ -114,7 +114,7 @@ Alayra Nexus is the infrastructure layer that sits between your application and 
 | **Custom Date Ranges** | Analytics filterable by today / 7d / 30d / 90d or any custom from→to window |
 | **CSV Export** | One-click export of all analytics data for finance or reporting |
 | **Model Registry** | Manage which models are available, their tier, capabilities, and per-1M token pricing |
-| **Built-in Playground** | Stream a single-model or auto-routed chat through the real gateway path, with system prompt, temperature, token limit, stop, regenerate, and clear controls |
+| **Built-in Playground** | Stream a single-model or auto-routed chat through the real gateway path, then inspect its route, provider attempt, timing, tokens, cache verdict, and exact recorded cost |
 | **Encrypted Backup & Restore** | One encrypted file for the whole gateway. Secrets are re-keyed on the way in, so a backup restores onto a *different* gateway with a different master key — PostgreSQL ⇄ SQLite included. Every restore is dry-run first |
 | **Standalone Mode** | No Postgres, no Redis — a SQLite file and in-process memory. One process, one directory, nothing to provision |
 | **Web Admin Dashboard** | Full browser UI — no CLI required for day-to-day operations |
@@ -779,7 +779,7 @@ control — no CLI required for day-to-day work:
 - **Overview** — live gateway telemetry: request/token/cost trends, active keys and models, top teams, and recent admin activity by name
 - **Nexus** — provider pools and the model registry: per-key RPM utilization meters, add/test/ban keys, and each model's tier, capability flags, context window, and per-1M token pricing
 - **Connect** — the base URL (verified against your browser's own address bar), the API-key hint with one-click rotation, endpoint reference, and filled-in quick-start snippets
-- **Playground:** a private, in-memory single-chat workspace that streams through the real routing path; choose automatic routing or a model, tune the request, stop it, clear it, or regenerate it without storing the conversation
+- **Playground:** a private, in-memory single-chat workspace that streams through the real routing path and explains the selected model, provider, masked key, routing decisions, attempt outcome, latency, tokens, cache state, and recorded cost
 - **Analytics** — request and token trend charts, stacked model breakdown, cost area chart, input/output comparison, team leaderboard, response-cache savings, CSV export, and a custom date-range picker
 - **Teams** — teams with budgets and routing tier, scoped access keys, and per-team usage stats
 - **Enterprise** — operator branding / white-labelling and per-company controls

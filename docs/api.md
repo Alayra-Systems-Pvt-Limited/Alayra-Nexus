@@ -94,7 +94,10 @@ closes that door. See [Accounts and roles](../README.md#accounts-and-roles).
 
 The Playground run endpoint accepts OpenAI-style roles with text content-part arrays and returns an
 outer server-sent event stream. `upstream` events contain the provider's original stream chunks; the
-final `result` event contains the captured response metadata and request trace. The endpoint does not
+final `result` event contains the captured response metadata and request trace. The trace includes
+the requested and resolved model, routing mode, provider, tier, masked key, provider-attempt
+outcome, cache state, timing, token usage, recorded estimated cost, guardrail and budget decisions,
+and any refusal reason. The endpoint does not
 persist prompt or reply content. Because a run consumes provider capacity, viewers can list models
 but receive `403` if they try to execute one.
 

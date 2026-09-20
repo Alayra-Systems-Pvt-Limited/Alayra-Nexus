@@ -11,6 +11,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **Per-response Playground routing diagnostics.** Every completed run can now explain the requested
+  and resolved model, provider, tier, masked key, routing mode, BYOK/sticky/downgrade decisions,
+  cache verdict, provider-attempt outcome, time to first byte, upstream and total latency, token
+  counts, and the exact estimated cost recorded by usage accounting. Unknown pricing remains clearly
+  distinct from a genuinely free request, and provider credentials have no field in the trace.
+
 - **A built-in single-chat Playground.** Owners and admins can choose any currently servable chat
   model (or automatic routing), tune temperature and output length, add a system prompt, and watch
   the response stream inside the dashboard. The request goes through the real gateway routing path,

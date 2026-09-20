@@ -40,11 +40,29 @@ export interface PlaygroundResult {
     streamed: boolean;
     truncated: boolean;
   };
-  trace: {
-    route?: { modelString: string; provider: string };
-    refusal?: { status: number; reason: string };
-    outcome?: string;
+  trace: PlaygroundTrace;
+}
+
+export interface PlaygroundTrace {
+  requestedModel: string | null;
+  resolution: 'auto' | 'pinned' | 'unknown';
+  stream: boolean;
+  scope?: { namespace: string; byok: boolean; isolated: boolean };
+  route?: {
+    provider: string; modelString: string; modelId: string | null; tier: string;
+    keyId: string; keyMask: string; sticky: boolean; byok: boolean; downgraded: boolean; probe: boolean;
   };
+  cache: 'hit' | 'miss' | 'disabled' | 'not-cacheable' | 'bypassed';
+  guardrails?: { active: boolean; input: string; inputMatched: string[]; output: string; outputMatched: string[] };
+  budget?: { checked: boolean; allowed: boolean; action: string; downgraded: boolean; spendUsd?: number; budgetUsd?: number | null };
+  usage?: { inputTokens: number; outputTokens: number; estimatedUsd: number | null; savedUsd: number | null; priced?: boolean };
+  timing: { ttfbMs?: number; upstreamMs?: number; totalMs?: number };
+  attempts: Array<{
+    provider: string; modelString: string; tier: string; keyMask: string;
+    status?: number; ttfbMs?: number; outcome?: string;
+  }>;
+  outcome?: string;
+  refusal?: { status: number; reason: string };
 }
 
 export interface PlaygroundRunCallbacks {
