@@ -16,6 +16,7 @@
 
 import Redis from 'ioredis';
 import { MemoryKv } from './kv/memory';
+import { createRedisClient } from './redisClient';
 
 const REDIS_URL = process.env.REDIS_URL?.trim();
 
@@ -36,6 +37,15 @@ const REDIS_URL = process.env.REDIS_URL?.trim();
  * of them for no gain.
  */
 /**
+ * Current policy: `redisClient.ts` keeps the offline queue only through the first healthy startup,
+ * disables it permanently after the first `ready`, and disables replay of commands that were on a
+ * socket when it failed. New outage commands therefore reject immediately; ioredis reconnects in
+ * the background and its successful handshake is the half-open probe.
+ *
+ * The measurements below record why the earlier timeout-only policy existed and the replay cost
+ * it accepted. They are retained as the evidence that led to the current connection-state breaker,
+ * not as a description of the options now in force.
+ *
  * What a command does when Redis is not answering — measured, not assumed.
  *
  * ── What it used to do ────────────────────────────────────────────────────────────────────────
@@ -80,8 +90,7 @@ const REDIS_URL = process.env.REDIS_URL?.trim();
 const KV_COMMAND_TIMEOUT_MS = parseInt(process.env.NEXUS_KV_COMMAND_TIMEOUT_MS ?? '2000', 10);
 
 export const redis = (REDIS_URL
-  ? new Redis(REDIS_URL, {
-      maxRetriesPerRequest: null,
+  ? createRedisClient(REDIS_URL,
       // Two seconds rather than one, deliberately. A healthy command measured p50 0.9ms, p99 1.7ms,
       // worst 2.45ms — so even one second is six hundred times the observed ceiling, and the choice
       // is not about Redis. It is about THIS process: the gateway is CPU-bound at saturation, and
@@ -89,8 +98,8 @@ export const redis = (REDIS_URL
       // answered perfectly well while the loop was busy — a false timeout, which costs a spurious
       // 503 and a reservation for a request that never happened. One extra second during a genuine
       // wedge is the cheaper mistake.
-      commandTimeout: KV_COMMAND_TIMEOUT_MS,
-    })
+      KV_COMMAND_TIMEOUT_MS,
+    )
   : new MemoryKv()) as unknown as Redis;
 
 /**
