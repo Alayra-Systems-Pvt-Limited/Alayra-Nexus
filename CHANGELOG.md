@@ -9,6 +9,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.6.5] - 2026-09-20
+
 ### Added
 
 - **The zero-configuration path now has a real-browser release gate.** A separate Playwright suite
@@ -2509,7 +2511,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.5...HEAD
+[1.6.5]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.0...v1.6.5
 [1.6.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.3...v1.6.0
 [1.5.3]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.1...v1.5.2
