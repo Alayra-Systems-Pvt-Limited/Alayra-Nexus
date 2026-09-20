@@ -84,6 +84,14 @@ export interface ProviderPreset {
    */
   publishesPricing: boolean;
   /**
+   * Does a streamed chat request accept `stream_options.include_usage` and return usage?
+   *
+   * This is measured by `verify:providers`, never inferred from the provider being described as
+   * OpenAI-compatible. Missing means false so custom and not-yet-measured providers are left
+   * untouched rather than risking a provider-side 400 on every streamed request.
+   */
+  streamUsageOption?: boolean;
+  /**
    * A few words qualifying `publishesPricing` where the boolean is true but incomplete.
    *
    * Table-cell length, not prose — `note` is for prose. Cloudflare is the case that needs it: "does
@@ -138,7 +146,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     authHeader: 'Authorization', authPrefix: 'Bearer',
     modelIdPath: 'data[].id', extraHeaders: {},
-    keyPrefixes: ['AIza'], publishesPricing: false, verified: 'chat',
+    keyPrefixes: ['AIza'], publishesPricing: false, streamUsageOption: true, verified: 'chat',
     note: 'Its model list advertises models this account may not be able to use: on a new key most '
         + 'answer 404 "no longer available to new users", and the free tier rate-limits per model '
         + '(gemini-2.0-flash returned 429 while gemini-flash-lite-latest served normally with the '
@@ -150,14 +158,14 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.groq.com/openai/v1',
     authHeader: 'Authorization', authPrefix: 'Bearer',
     modelIdPath: 'data[].id', extraHeaders: {},
-    keyPrefixes: ['gsk_'], publishesPricing: true, verified: 'chat',
+    keyPrefixes: ['gsk_'], publishesPricing: true, streamUsageOption: true, verified: 'chat',
   },
   {
     slug: 'openrouter', label: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
     authHeader: 'Authorization', authPrefix: 'Bearer',
     modelIdPath: 'data[].id', extraHeaders: {},
-    keyPrefixes: ['sk-or-'], publishesPricing: true, verified: 'chat',
+    keyPrefixes: ['sk-or-'], publishesPricing: true, streamUsageOption: true, verified: 'chat',
     note: 'Prices are per-model and OpenRouter\'s own — a model it resells is not necessarily the '
         + 'upstream vendor\'s price. Its `:free` models publish a genuine zero.',
   },
@@ -166,14 +174,14 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.mistral.ai/v1',
     authHeader: 'Authorization', authPrefix: 'Bearer',
     modelIdPath: 'data[].id', extraHeaders: {},
-    keyPrefixes: [], publishesPricing: false, verified: 'chat',
+    keyPrefixes: [], publishesPricing: false, streamUsageOption: true, verified: 'chat',
   },
   {
     slug: 'huggingface', label: 'HuggingFace',
     baseUrl: 'https://router.huggingface.co/v1',
     authHeader: 'Authorization', authPrefix: 'Bearer',
     modelIdPath: 'data[].id', extraHeaders: {},
-    keyPrefixes: ['hf_'], publishesPricing: false, verified: 'chat',
+    keyPrefixes: ['hf_'], publishesPricing: false, streamUsageOption: true, verified: 'chat',
     note: 'A router, not a provider: it dispatches to a third-party host (Fireworks, Together, …) '
         + 'and the response may name a different model id than the request did — so a price is not '
         + 'derivable from the model id even in principle.',
@@ -186,7 +194,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     // differently — this is the pair of fields the whole modelFetchUrl/modelIdPath split is for.
     modelFetchUrl: 'https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/models/search',
     modelIdPath: 'result[].name', extraHeaders: {},
-    keyPrefixes: [], publishesPricing: false, verified: 'chat',
+    keyPrefixes: [], publishesPricing: false, streamUsageOption: true, verified: 'chat',
     billingNote: 'bills in *neurons*, not tokens',
     accountPlaceholder: {
       token: '{account_id}',
@@ -241,4 +249,9 @@ export function providerLabel(slug: string): string {
 /** True when this provider's own model list carries prices we can harvest. */
 export function publishesPricing(slug: string): boolean {
   return BY_SLUG.get(slug)?.publishesPricing ?? false;
+}
+
+/** True only when a live provider probe observed streamed usage after requesting it. */
+export function supportsStreamUsageOption(slug: string): boolean {
+  return BY_SLUG.get(slug)?.streamUsageOption === true;
 }

@@ -122,13 +122,16 @@ test.describe('/v1/chat/completions, streaming', () => {
     });
 
     const after = await (await fetch(`${MOCK_PROVIDER_URL}/__requests`)).json() as {
-      count: number; requests: { authorization: string | null }[];
+      count: number; requests: { authorization: string | null; streamOptions: unknown }[];
     };
     expect(after.count).toBe(before.count + 1);
     // A streaming request is still a proxied request: our door opens with the caller's key, theirs
     // with the pool's.
     expect(after.requests[after.requests.length - 1].authorization).toBe('Bearer sk-mock-upstream-secret');
     expect(JSON.stringify(after.requests)).not.toContain(masterKey);
+    // `mock` is not a measured preset. Sending an unproven option to arbitrary OpenAI-compatible
+    // servers can turn every stream into a 400, so the safe default must remain no option at all.
+    expect(after.requests[after.requests.length - 1].streamOptions).toBeNull();
   });
 });
 

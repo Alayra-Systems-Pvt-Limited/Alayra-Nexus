@@ -231,17 +231,17 @@ preset only saves you typing.
 
 <!-- BEGIN GENERATED PROVIDER TABLE — npm run docs:providers -->
 
-**6 providers have served a real completion through these presets** — measured 2026-08-10.
+**6 providers have served a real completion through these presets** — measured 2026-09-20.
 
 | Provider | Verified | Endpoint | Publishes prices? |
 |---|---|---|---|
-| **Groq** | ✅ Completion · 2026-08-10 | `api.groq.com/openai/v1` | ✅ Yes, per model |
-| **OpenRouter** | ✅ Completion · 2026-08-10 | `openrouter.ai/api/v1` | ✅ Yes, per model |
-| **Google** | ✅ Completion · 2026-08-10 | `generativelanguage.googleapis.com/v1beta/openai` | ❌ Set prices yourself |
-| **Mistral** | ✅ Completion · 2026-08-10 | `api.mistral.ai/v1` | ❌ Set prices yourself |
-| **HuggingFace** | ✅ Completion · 2026-08-10 | `router.huggingface.co/v1` | ❌ Set prices yourself |
-| **Cloudflare Workers AI** | ✅ Completion · 2026-08-10 | `api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1` | ❌ Set prices yourself — bills in *neurons*, not tokens |
-| **Cerebras** | ⚠️ Model list only · 2026-08-10 — completions answered 402 until the account is funded | `api.cerebras.ai/v1` | ❌ Set prices yourself |
+| **Groq** | ✅ Completion · 2026-09-20 | `api.groq.com/openai/v1` | ✅ Yes, per model |
+| **OpenRouter** | ✅ Completion · 2026-09-20 | `openrouter.ai/api/v1` | ✅ Yes, per model |
+| **Google** | ✅ Completion · 2026-09-20 | `generativelanguage.googleapis.com/v1beta/openai` | ❌ Set prices yourself |
+| **Mistral** | ✅ Completion · 2026-09-20 | `api.mistral.ai/v1` | ❌ Set prices yourself |
+| **HuggingFace** | ✅ Completion · 2026-09-20 | `router.huggingface.co/v1` | ❌ Set prices yourself |
+| **Cloudflare Workers AI** | ✅ Completion · 2026-09-20 | `api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1` | ❌ Set prices yourself — bills in *neurons*, not tokens |
+| **Cerebras** | ⚠️ Model list only · 2026-09-20 — completions answered 402 until the account is funded | `api.cerebras.ai/v1` | ❌ Set prices yourself |
 | **OpenAI** | ⚪ Preset only | `api.openai.com/v1` | ❌ Set prices yourself |
 | **Anthropic** | ⚪ Preset only | `api.anthropic.com/v1` | ❌ Set prices yourself |
 | **Custom** | ⚪ You configure it | whatever you point it at | Depends on the endpoint |

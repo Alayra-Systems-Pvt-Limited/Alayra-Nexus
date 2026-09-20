@@ -22,6 +22,7 @@
 // it is pure so the fiddly parts (streaming event flow, tool calls) are unit-tested.
 
 import { randomBytes } from 'crypto';
+import { countTokens } from './tokenizer';
 
 export const CANONICAL_MODEL = 'alayra-nexus-1';
 
@@ -235,6 +236,8 @@ export class AnthropicStreamTranslator {
   private stopReason: string | null = null;
   private outputTokens = 0;
   private inputTokens = 0;
+  private usageReported = false;
+  private content = '';
   private model: string;
   private id: string;
 
@@ -302,6 +305,7 @@ export class AnthropicStreamTranslator {
 
     const usage = chunk.usage as Json | undefined;
     if (usage) {
+      this.usageReported = true;
       this.inputTokens  = Number(usage.prompt_tokens ?? this.inputTokens);
       this.outputTokens = Number(usage.completion_tokens ?? this.outputTokens);
     }
@@ -312,6 +316,7 @@ export class AnthropicStreamTranslator {
 
     // Text run.
     if (typeof delta.content === 'string' && delta.content.length > 0) {
+      this.content += delta.content;
       if (this.textIndex === -1) {
         this.textIndex = this.nextIndex++;
         out += sseEvent('content_block_start', { type: 'content_block_start', index: this.textIndex, content_block: { type: 'text', text: '' } });
@@ -365,7 +370,10 @@ export class AnthropicStreamTranslator {
       for (const idx of this.toolBlocks.values()) out += sseEvent('content_block_stop', { type: 'content_block_stop', index: idx });
       this.toolBlocks.clear();
     }
-    out += sseEvent('message_delta', { type: 'message_delta', delta: { stop_reason: this.stopReason ?? 'end_turn', stop_sequence: null }, usage: { output_tokens: this.outputTokens } });
+    // Match the proxy's accounting fallback when an unknown provider omits streamed usage.
+    const outputTokens = this.usageReported
+      ? this.outputTokens : Math.max(1, countTokens(this.content));
+    out += sseEvent('message_delta', { type: 'message_delta', delta: { stop_reason: this.stopReason ?? 'end_turn', stop_sequence: null }, usage: { output_tokens: outputTokens } });
     out += sseEvent('message_stop', { type: 'message_stop' });
     return out;
   }

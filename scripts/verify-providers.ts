@@ -55,6 +55,7 @@ import { PROVIDER_PRESETS, type ProviderPreset } from '../src/data/providers';
 import { extractModelMeta, type FetchedModel } from '../src/lib/modelPath';
 import { providerAuthHeader } from '../src/lib/providerHeaders';
 import { stripTrailingSlash } from '../src/lib/url';
+import { createStreamTally } from '../src/lib/streamTally';
 
 const TIMEOUT_MS = 25_000;
 
@@ -115,6 +116,11 @@ export function candidates(slug: string, models: FetchedModel[]): string[] {
 }
 
 export type Status = 'chat' | 'models' | 'unreachable' | 'skipped';
+export interface StreamProbeResult {
+  accepted: boolean;
+  usage?: { input: number; output: number };
+  error?: string;
+}
 
 export interface Result {
   slug: string;
@@ -129,6 +135,11 @@ export interface Result {
   /** Did the LIST response carry prices? This is what `publishesPricing` asserts. */
   pricingPublished?: boolean;
   pricingClaimed?: boolean;
+  /** Does the preset claim streamed usage can safely be requested? */
+  streamUsageOptionClaimed: boolean;
+  /** Did the live request with `include_usage` return a usable provider count? */
+  streamUsageOptionSupported?: boolean;
+  streamUsageProbes?: { baseline: StreamProbeResult; requested: StreamProbeResult };
   chatModel?: string;
   /** What the provider echoed back — HuggingFace answers with a different id than it was asked. */
   chatModelEchoed?: string;
@@ -181,6 +192,51 @@ const authHeaders = (preset: ProviderPreset, key: string): Record<string, string
   ...providerAuthHeader(preset.authHeader, preset.authPrefix, key),
 });
 
+/** The two probe bodies differ by exactly the capability under test. */
+export function streamingProbeBody(model: string, includeUsage: boolean): Record<string, unknown> {
+  return {
+    model,
+    messages: [{ role: 'user', content: 'hi' }],
+    max_tokens: 1,
+    stream: true,
+    ...(includeUsage ? { stream_options: { include_usage: true } } : {}),
+  };
+}
+
+/** Parse provider usage with the same bounded SSE tally used by the gateway. */
+export function usageFromStream(body: string): { input: number; output: number } | undefined {
+  const tally = createStreamTally();
+  tally.push(Buffer.from(body, 'utf8'));
+  tally.end();
+  return tally.usage() ?? undefined;
+}
+
+export function streamUsageSupported(result: StreamProbeResult): boolean {
+  return result.accepted && result.usage !== undefined;
+}
+
+async function probeStream(
+  preset: ProviderPreset,
+  key: string,
+  base: string,
+  model: string,
+  includeUsage: boolean,
+): Promise<StreamProbeResult> {
+  try {
+    const res = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: { ...authHeaders(preset, key), 'content-type': 'application/json' },
+      body: JSON.stringify(streamingProbeBody(model, includeUsage)),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const body = await res.text();
+    if (!res.ok) return { accepted: false, error: redact(`HTTP ${res.status}: ${body.slice(0, 300)}`) };
+    return { accepted: true, usage: usageFromStream(body) };
+  } catch (err) {
+    return { accepted: false, error: redact(err instanceof Error ? err.message : String(err)) };
+  }
+}
+
 async function listModels(preset: ProviderPreset, key: string, url: string) {
   const res  = await fetch(url, { headers: authHeaders(preset, key), signal: AbortSignal.timeout(TIMEOUT_MS) });
   const body = await res.text();
@@ -214,7 +270,9 @@ async function verify(preset: ProviderPreset): Promise<Result> {
   const base: Result = {
     slug: preset.slug, label: preset.label, status: 'skipped',
     claimed: preset.verified, drift: false,
-    pricingClaimed: preset.publishesPricing, notes: [],
+    pricingClaimed: preset.publishesPricing,
+    streamUsageOptionClaimed: preset.streamUsageOption ?? false,
+    notes: [],
   };
 
   const key = keyFor(preset.slug);
@@ -281,6 +339,25 @@ async function verify(preset: ProviderPreset): Promise<Result> {
       if (echoed && echoed !== model) {
         base.notes.push(`asked for "${model}" and the response names "${echoed}" — this provider `
           + 'routes to a host of its choosing, so the model that ran is not the model configured');
+      }
+      const baseline = await probeStream(preset, key, urls.base, model, false);
+      const requested = await probeStream(preset, key, urls.base, model, true);
+      const supported = streamUsageSupported(requested);
+      base.streamUsageProbes = { baseline, requested };
+      base.streamUsageOptionSupported = supported;
+
+      if (supported !== base.streamUsageOptionClaimed) {
+        base.drift = true;
+        base.notes.push(supported
+          ? '`stream_options.include_usage` returned usage, but the preset leaves it disabled'
+          : 'the preset enables `stream_options.include_usage`, but the live probe returned no usage');
+      } else if (!supported) {
+        base.notes.push(requested.accepted
+          ? '`stream_options.include_usage` was accepted but returned no usage; treating it as unsupported'
+          : `stream_options.include_usage was rejected: ${requested.error ?? 'unknown provider error'}`);
+      }
+      if (baseline.usage) {
+        base.notes.push('the provider returned streamed usage even without `stream_options.include_usage`');
       }
       break;
     } catch (err) {
