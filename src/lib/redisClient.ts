@@ -40,9 +40,14 @@ export function armRedisFailFastAfterReady(client: RedisFailFastTarget): void {
  * `autoResendUnfulfilledCommands: false` covers the other replay path: commands already written
  * to a socket when it dies. Their promises remain bounded by `commandTimeout`, but ioredis must not
  * send them a second time after reconnecting because the caller may already have received a 503.
+ *
+ * ioredis 6 defaults to RESP3. Nexus deliberately retains RESP2 so upgrading the client does not
+ * also change command reply shapes or break parity with the in-process store. RESP3 can be adopted
+ * separately when every Redis-backed operation has an explicit cross-protocol contract.
  */
 export function redisClientOptions(commandTimeoutMs: number) {
   return {
+    protocol: 2 as const,
     maxRetriesPerRequest: null,
     commandTimeout: commandTimeoutMs,
     enableOfflineQueue: true,
