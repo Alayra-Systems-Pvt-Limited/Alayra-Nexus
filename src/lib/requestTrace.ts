@@ -135,6 +135,17 @@ export interface TraceTiming {
   totalMs?:    number;
 }
 
+/** One real provider dispatch. Future retry/failover work appends another entry. */
+export interface TraceAttempt {
+  provider:    string;
+  modelString: string;
+  tier:        string;
+  keyMask:     string;
+  status?:     number;
+  ttfbMs?:     number;
+  outcome?:    'success' | 'rate_limited' | 'auth_error' | 'provider_error' | 'timeout' | 'connection_error' | 'stream_error';
+}
+
 /**
  * Everything the gateway decided about one request.
  *
@@ -163,6 +174,8 @@ export interface RequestTrace {
   budget?:        TraceBudget;
   usage?:         TraceUsage;
   timing:         TraceTiming;
+  /** Provider calls in dispatch order. The current router makes one; the shape is ready for retries. */
+  attempts:       TraceAttempt[];
   /** The outcome the metrics recorded — `success`, `blocked`, `no_capacity`, `upstream_error`, … */
   outcome?:       string;
   /** Set when the gateway refused: the status it answered with, and which gate refused it. */
@@ -183,5 +196,6 @@ export function newTrace(): RequestTrace {
     stream:         false,
     cache:          'disabled',
     timing:         {},
+    attempts:       [],
   };
 }

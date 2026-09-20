@@ -52,7 +52,17 @@ describe('Playground', () => {
       callbacks.onDelta(' from Nexus');
       callbacks.onResult({
         response: { status: 200, headers: {}, streamed: true, truncated: false },
-        trace: { route: { modelString: 'gpt-test', provider: 'openai' }, outcome: 'success' },
+        trace: {
+          requestedModel: 'alayra-nexus-1', resolution: 'auto', stream: true, cache: 'bypassed',
+          timing: { ttfbMs: 42, upstreamMs: 110, totalMs: 125 },
+          route: {
+            modelString: 'gpt-test', modelId: 'gpt-test', provider: 'openai', tier: 'standard',
+            keyId: 'key-1', keyMask: '••••test', sticky: false, byok: false, downgraded: false, probe: false,
+          },
+          usage: { inputTokens: 8, outputTokens: 3, estimatedUsd: 0.0002, savedUsd: 0, priced: true },
+          attempts: [{ provider: 'openai', modelString: 'gpt-test', tier: 'standard', keyMask: '••••test', status: 200, ttfbMs: 42, outcome: 'success' }],
+          outcome: 'success',
+        },
       });
     });
 
@@ -64,6 +74,9 @@ describe('Playground', () => {
     expect(await screen.findByText('Say hello')).toBeInTheDocument();
     expect(await screen.findByText('Hello from Nexus')).toBeInTheDocument();
     expect(await screen.findByText('gpt-test · routed')).toBeInTheDocument();
+    expect(screen.getByText('Routing details')).toBeInTheDocument();
+    expect(screen.getByText('125 ms')).toBeInTheDocument();
+    expect(screen.getByText('$0.0002')).toBeInTheDocument();
 
     expect(mocks.runPlayground).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -241,6 +241,13 @@ export async function handleProxy(
   // response cache namespace, and pool discovery. Deriving them from one value is what
   // keeps a response paid for by one team's private key out of another scope's cache, and
   // what stops an isolated team being offered a model it can never reach.
+  // Ordinary traffic keeps analytics off the response path. A traced caller waits only for the
+  // registry lookup that stamps the exact cost before the Playground serialises its final event.
+  const recordUsage = async (params: Parameters<typeof recordTokenUsage>[0]): Promise<void> => {
+    const recording = recordTokenUsage(params, trace).catch(() => {});
+    if (trace) await recording;
+  };
+
   const scope = await resolveRequestScope(team);
   if (trace) {
     trace.requestedModel = typeof body.model === 'string' ? body.model : null;
@@ -439,6 +446,10 @@ export async function handleProxy(
     downgraded: route.wasDowngrade,
     probe:      route.isProbe,
   };
+  const traceAttempt: RequestTrace['attempts'][number] | undefined = trace ? {
+    provider: route.providerSlug, modelString: route.modelString, tier: route.tier, keyMask: route.keyMask,
+  } : undefined;
+  if (traceAttempt) trace!.attempts.push(traceAttempt);
   metrics.providerRequest(route.providerSlug);
   if (route.sticky) metrics.cacheHit();
   // Only a key-owning team can produce a BYOK outcome; pooled callers are not counted.
@@ -494,6 +505,7 @@ export async function handleProxy(
     metrics.providerError(route.providerSlug, 'timeout');
     span.recordException(err as Error); span.setStatus({ code: SpanStatusCode.ERROR }); span.end();
     const aborted = err instanceof Error && err.name === 'AbortError';
+    if (traceAttempt) traceAttempt.outcome = aborted ? 'timeout' : 'connection_error';
     if (trace) trace.refusal = { status: 504, reason: aborted
       ? `The provider sent no response headers within ${UPSTREAM_TTFT_MS}ms.`
       : 'The connection to the provider failed.' };
@@ -501,7 +513,9 @@ export async function handleProxy(
     return reply.code(504).send({ error: aborted ? 'Upstream timed out before responding.' : 'Upstream connection failed.' });
   }
   clearTimeout(ttftTimer);
-  if (trace) trace.timing.ttfbMs = Date.now() - tFetch;
+  const ttfbMs = Date.now() - tFetch;
+  if (trace) trace.timing.ttfbMs = ttfbMs;
+  if (traceAttempt) traceAttempt.ttfbMs = ttfbMs;
   metrics.observeTtfb((Date.now() - tFetch) / 1000);
   span.setAttribute('http.status_code', upstream.status);
 
@@ -515,11 +529,17 @@ export async function handleProxy(
     else if (upstream.status >= 500)                         { await reportServerFailure(keyId, route.isProbe); metrics.providerError(route.providerSlug, 'server'); }
     span.setStatus({ code: SpanStatusCode.ERROR }); span.end();
     refundReservation(); // rejected upstream — return the reserved budget
+    if (traceAttempt) {
+      traceAttempt.status = upstream.status;
+      traceAttempt.outcome = upstream.status === 429 ? 'rate_limited'
+        : upstream.status === 401 || upstream.status === 403 ? 'auth_error' : 'provider_error';
+    }
     if (trace) trace.refusal = { status: upstream.status, reason: `The provider answered ${upstream.status}.` };
     // 4xx (other than 429) is the caller's bad request; 429/auth/5xx is an upstream fault.
     observe(upstream.status >= 500 || upstream.status === 429 || upstream.status === 401 || upstream.status === 403 ? 'upstream_error' : 'client_error');
     return reply.code(upstream.status).send(errText);
   }
+  if (traceAttempt) traceAttempt.status = upstream.status;
   span.end(); // upstream responded OK
 
   const nexusHeaders: Record<string, string> = {
@@ -549,6 +569,7 @@ export async function handleProxy(
     } catch {
       clearTimeout(bodyTimer);
       refundReservation();
+      if (traceAttempt) traceAttempt.outcome = 'provider_error';
       observe('upstream_error');
       return reply.code(504).send({ error: 'Upstream response timed out or was malformed.' });
     }
@@ -577,7 +598,8 @@ export async function handleProxy(
     observe('success'); metrics.addTokens(inputTokens, outputTokens);
     storeInCache(cacheStoreKey, data, route.providerSlug, cacheCfg.ttlSeconds);
     void reconcileTpm(keyId, reserve, inputTokens + outputTokens).catch(() => {});
-    void recordTokenUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0 }, trace).catch(() => {});
+    if (traceAttempt) traceAttempt.outcome = 'success';
+    await recordUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0 });
     return;
   }
 
@@ -639,6 +661,7 @@ export async function handleProxy(
     // the real outcome — hence persist: false here (see the observe comment).
     if (streamFailed) { void reportServerFailure(keyId, route.isProbe).catch(() => {}); metrics.providerError(route.providerSlug, 'server'); observe('upstream_error', false); }
     else { onHealthy(); observe('success'); }
+    if (traceAttempt) traceAttempt.outcome = streamFailed ? 'stream_error' : 'success';
 
     const usage        = tally.usage();
     const answer       = tally.content();
@@ -652,7 +675,7 @@ export async function handleProxy(
     // leaves a hole in the answer, and a cached hole is served to everyone who asks again.
     if (!streamFailed && !tally.degraded()) storeStreamInCache(cacheStoreKey, answer, route.modelString, route.providerSlug, inputTokens, outputTokens, cacheCfg.ttlSeconds);
     void reconcileTpm(keyId, reserve, inputTokens + outputTokens).catch(() => {});
-    void recordTokenUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0, outcome: streamFailed ? 'upstream_error' : 'success' }, trace).catch(() => {});
+    await recordUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0, outcome: streamFailed ? 'upstream_error' : 'success' });
     return;
   }
 
@@ -664,6 +687,7 @@ export async function handleProxy(
   } catch {
     clearTimeout(bodyTimer);
     refundReservation();
+    if (traceAttempt) traceAttempt.outcome = 'provider_error';
     observe('upstream_error');
     return reply.code(504).send({ error: 'Upstream response timed out or was malformed.' });
   }
@@ -685,7 +709,8 @@ export async function handleProxy(
   observe('success'); metrics.addTokens(inputTokens, outputTokens);
   storeInCache(cacheStoreKey, data, route.providerSlug, cacheCfg.ttlSeconds); // cache the post-guardrails response
   void reconcileTpm(keyId, reserve, inputTokens + outputTokens).catch(() => {});
-  void recordTokenUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0 }, trace).catch(() => {});
+  if (traceAttempt) traceAttempt.outcome = 'success';
+  await recordUsage({ sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug, inputTokens, outputTokens, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0 });
 
   for (const [k, v] of Object.entries(nexusHeaders)) reply.header(k, v);
   return reply.code(200).send(data);
