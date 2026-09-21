@@ -11,6 +11,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **A focused Playground workspace for single and comparison runs.** Configuration now lives in a
+  compact rail, single runs gain a dedicated inspector, and comparison results use an adaptive grid
+  with aligned latency, token, and cost summaries. The searchable model picker reports the current
+  selection, caps a comparison at four models, and arranges four responses as a balanced two-by-two
+  view rather than stretching them across the screen.
+
 - **Side-by-side Playground model comparison.** Owners and admins can switch from single chat to
   comparison mode, select two to four currently servable models, and send one prompt to every lane
   concurrently. Each lane streams independently, retains its own conversational history and routing
