@@ -11,6 +11,13 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **Side-by-side Playground model comparison.** Owners and admins can switch from single chat to
+  comparison mode, select two to four currently servable models, and send one prompt to every lane
+  concurrently. Each lane streams independently, retains its own conversational history and routing
+  diagnostics, and can fail without interrupting successful models. The shared stop control cancels
+  every active lane, model choices lock once a conversation begins, and the lowest selected output
+  limit protects the comparison from requesting more tokens than one of its models supports.
+
 - **Per-response Playground routing diagnostics.** Every completed run can now explain the requested
   and resolved model, provider, tier, masked key, routing mode, BYOK/sticky/downgrade decisions,
   cache verdict, provider-attempt outcome, time to first byte, upstream and total latency, token

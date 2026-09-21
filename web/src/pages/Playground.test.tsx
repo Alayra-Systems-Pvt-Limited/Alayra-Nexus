@@ -57,10 +57,10 @@ describe('Playground', () => {
           timing: { ttfbMs: 42, upstreamMs: 110, totalMs: 125 },
           route: {
             modelString: 'gpt-test', modelId: 'gpt-test', provider: 'openai', tier: 'standard',
-            keyId: 'key-1', keyMask: '••••test', sticky: false, byok: false, downgraded: false, probe: false,
+            keyId: 'key-1', keyMask: 'masked-test', sticky: false, byok: false, downgraded: false, probe: false,
           },
           usage: { inputTokens: 8, outputTokens: 3, estimatedUsd: 0.0002, savedUsd: 0, priced: true },
-          attempts: [{ provider: 'openai', modelString: 'gpt-test', tier: 'standard', keyMask: '••••test', status: 200, ttfbMs: 42, outcome: 'success' }],
+          attempts: [{ provider: 'openai', modelString: 'gpt-test', tier: 'standard', keyMask: 'masked-test', status: 200, ttfbMs: 42, outcome: 'success' }],
           outcome: 'success',
         },
       });
@@ -73,7 +73,7 @@ describe('Playground', () => {
 
     expect(await screen.findByText('Say hello')).toBeInTheDocument();
     expect(await screen.findByText('Hello from Nexus')).toBeInTheDocument();
-    expect(await screen.findByText('gpt-test · routed')).toBeInTheDocument();
+    expect(await screen.findByText(/gpt-test.*routed/)).toBeInTheDocument();
     expect(screen.getByText('Routing details')).toBeInTheDocument();
     expect(screen.getByText('125 ms')).toBeInTheDocument();
     expect(screen.getByText('$0.0002')).toBeInTheDocument();
@@ -111,6 +111,43 @@ describe('Playground', () => {
       expect.any(Object),
       expect.any(AbortSignal),
     );
+  });
+  it('runs selected models together and isolates a failed comparison lane', async () => {
+    ready();
+    mocks.runPlayground.mockImplementation(async (input, callbacks) => {
+      if (input.model === 'alayra-nexus-1') throw new Error('Auto route unavailable');
+      callbacks.onDelta('GPT comparison answer');
+      callbacks.onResult({
+        response: { status: 200, headers: {}, streamed: true, truncated: false },
+        trace: {
+          requestedModel: input.model, resolution: 'pinned', stream: true, cache: 'bypassed',
+          timing: { totalMs: 90 },
+          route: {
+            modelString: input.model, modelId: input.model, provider: 'openai', tier: 'standard',
+            keyId: 'key-1', keyMask: 'masked-key', sticky: false, byok: false, downgraded: false, probe: false,
+          },
+          attempts: [{ provider: 'openai', modelString: input.model, tier: 'standard', keyMask: 'masked-key', status: 200, outcome: 'success' }],
+          outcome: 'success',
+        },
+      });
+    });
+
+    render(<Playground />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    expect(screen.getByText('Compare models side by side')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Nexus Auto/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /GPT Test/ })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.type(screen.getByLabelText('Message'), 'Compare this prompt');
+    await user.click(screen.getByRole('button', { name: 'Run 2 models' }));
+
+    expect(await screen.findByText('GPT comparison answer')).toBeInTheDocument();
+    expect(await screen.findByText('Auto route unavailable')).toBeInTheDocument();
+    expect(mocks.runPlayground).toHaveBeenCalledTimes(2);
+    expect(new Set(mocks.runPlayground.mock.calls.map(([input]) => input.model)))
+      .toEqual(new Set(['alayra-nexus-1', 'gpt-test']));
+    expect(screen.getByRole('button', { name: 'Compare' })).toBeDisabled();
   });
   it('shows a useful empty state when no chat model is ready', () => {
     mocks.useApi.mockReturnValue({ data: { models: [] }, loading: false, error: null, reload: vi.fn() });
