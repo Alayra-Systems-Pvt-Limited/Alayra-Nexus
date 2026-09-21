@@ -74,7 +74,7 @@ that routes, so it can never advertise a model the gateway would refuse.
 | `GET` | `/admin/models` | List model registry |
 | `PUT` | `/admin/models` | Add or update a model in the registry |
 | `GET` | `/admin/playground/models` | List currently servable chat models for the dashboard Playground |
-| `POST` | `/admin/playground/run` | Stream one Playground request through the real proxy path (owner/admin only; response cache bypassed) |
+| `POST` | `/admin/playground/run` | Stream one Playground lane through the real proxy path (owner/admin only; response cache bypassed) |
 | `GET` | `/admin/teams` | List teams with key counts and current-period spend |
 | `POST` | `/admin/teams` | Create a team (name, budget cap + period, status) |
 | `PATCH` | `/admin/teams/:id` | Update a team (budget, status, tier, `byokFallback`) |
@@ -100,5 +100,9 @@ outcome, cache state, timing, token usage, recorded estimated cost, guardrail an
 and any refusal reason. The endpoint does not
 persist prompt or reply content. Because a run consumes provider capacity, viewers can list models
 but receive `403` if they try to execute one.
+
+Comparison mode invokes this endpoint once per selected model, concurrently. Lanes remain isolated:
+one provider failure does not cancel successful responses, while the shared stop action aborts all
+active lane requests.
 
 </details>
