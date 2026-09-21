@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { Check, Columns3, Eraser, MessageSquare, RotateCcw, Send, ShieldCheck, SlidersHorizontal, Square, Sparkles } from 'lucide-preact';
+import { Columns3, Eraser, MessageSquare, RotateCcw, Send, ShieldCheck, SlidersHorizontal, Square, Sparkles } from 'lucide-preact';
 import { PageHeader, Button, Field, Input, Select, Spinner } from '../ui';
 import { useApi } from '../hooks/useApi';
 import { canWrite } from '../lib/access';
 import { runPlayground, type PlaygroundMessage, type PlaygroundModel, type PlaygroundModelsResponse, type PlaygroundResult } from '../lib/playground';
 import { PlaygroundResponse, type PlaygroundAssistant } from './playground/PlaygroundResponse';
+import { PlaygroundModelPicker } from './playground/PlaygroundModelPicker';
+import { PlaygroundInspector } from './playground/PlaygroundInspector';
 import s from './playground/playground.module.css';
 
 interface UserMessage extends PlaygroundMessage { id: string }
@@ -169,6 +171,8 @@ export function Playground() {
   const selectionLocked = running || turns.length > 0;
   const comparisonReady = comparisonModels.length >= 2;
 
+  const latestTrace = mode === 'single' ? turns.at(-1)?.responses[0]?.diagnostics : undefined;
+
   return (
     <div class={s.page}>
       <PageHeader
@@ -181,165 +185,168 @@ export function Playground() {
         }
       />
 
-      <section class={s.controls} aria-label="Request settings">
-        <div class={s.modeControl} role="group" aria-label="Playground mode">
-          <Button size="sm" variant={mode === 'single' ? 'primary' : 'ghost'} aria-pressed={mode === 'single'}
-            disabled={selectionLocked} onClick={() => changeMode('single')}>
-            <MessageSquare size={14} /> Single
-          </Button>
-          <Button size="sm" variant={mode === 'compare' ? 'primary' : 'ghost'} aria-pressed={mode === 'compare'}
-            disabled={selectionLocked} onClick={() => changeMode('compare')}>
-            <Columns3 size={14} /> Compare
-          </Button>
-        </div>
-
-        {mode === 'single' ? (
-          <Field label="Model">
-            <Select value={model} disabled={loading || models.length === 0 || selectionLocked}
-              onChange={(event) => setModel(event.currentTarget.value)}>
-              {models.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.auto ? 'Auto - Nexus routing' : item.displayName + ' - ' + item.provider}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        ) : (
-          <div class={s.modelSelection}>
-            <span class={s.controlLabel}>Models <small>{comparisonModels.length}/{MAX_COMPARISON_MODELS}</small></span>
-            <div class={s.modelChoices} role="group" aria-label="Comparison models">
-              {models.map((item) => {
-                const chosen = comparisonModels.includes(item.id);
-                const atLimit = comparisonModels.length >= MAX_COMPARISON_MODELS;
-                return (
-                  <button type="button" key={item.id} aria-pressed={chosen}
-                    disabled={selectionLocked || (!chosen && atLimit)}
-                    class={chosen ? s.modelChoiceActive : s.modelChoice}
-                    onClick={() => toggleComparisonModel(item.id)}>
-                    <span class={s.choiceCheck}>{chosen && <Check size={11} />}</span>
-                    <span><strong>{item.auto ? 'Nexus Auto' : item.displayName}</strong><small>{item.provider}</small></span>
-                  </button>
-                );
-              })}
-            </div>
-            {!comparisonReady && <span class={s.selectionHint}>Select at least two models.</span>}
-          </div>
-        )}
-
-        <Field label="Temperature">
-          <div class={s.rangeRow}>
-            <input class={s.range} type="range" min="0" max="2" step="0.1" value={temperature}
-              disabled={running}
-              onInput={(event) => setTemperature(Number(event.currentTarget.value))} />
-            <output class={s.number}>{temperature.toFixed(1)}</output>
-          </div>
-        </Field>
-
-        <Field label="Max tokens">
-          <Input type="number" min="1" max={maxTokenLimit} value={maxTokens}
-            disabled={running}
-            onInput={(event) => setMaxTokens(Math.max(1, Number(event.currentTarget.value) || 1))} />
-        </Field>
-
-        <div class={s.systemControl}>
-          <Button size="sm" variant={systemOpen ? 'secondary' : 'ghost'} onClick={() => setSystemOpen((open) => !open)}>
-            <SlidersHorizontal size={14} /> System prompt
-          </Button>
-        </div>
-
-        {systemOpen && (
-          <label class={s.systemPrompt}>
-            <span>System prompt</span>
-            <textarea value={systemPrompt} disabled={running} rows={2}
-              placeholder="Give the model instructions for this conversation."
-              onInput={(event) => setSystemPrompt(event.currentTarget.value)} />
-          </label>
-        )}
-      </section>
-
-      <section class={s.workspace}>
-        {loading && <div class={s.state}><Spinner /> <span>Loading available models...</span></div>}
-        {modelsError && (
-          <div class={s.state} role="alert">
-            <span>Couldn't load models - {modelsError}</span>
-            <Button size="sm" onClick={reload}>Retry</Button>
-          </div>
-        )}
-        {!loading && !modelsError && models.length === 0 && (
-          <div class={s.empty}>
-            <Sparkles size={24} />
-            <strong>No chat models are ready</strong>
-            <p>Add an active provider key and chat model in Nexus, then return here to test it.</p>
-          </div>
-        )}
-        {!loading && !modelsError && models.length > 0 && turns.length === 0 && (
-          <div class={s.empty}>
-            <Sparkles size={24} />
-            <strong>{mode === 'compare' ? 'Compare models side by side' : 'Test your gateway'}</strong>
-            <p>{mode === 'compare'
-              ? 'Choose two to four models, then send one prompt to every lane at the same time.'
-              : 'Choose a model or leave Nexus routing on Auto, then send your first prompt.'}</p>
-          </div>
-        )}
-
-        {turns.length > 0 && (
-          <div class={s.conversation} ref={conversation} aria-live="polite">
-            {turns.map((turn) => (
-              <div class={s.turn} key={turn.id}>
-                <article class={s.userMessage}>
-                  <div class={s.avatar} aria-hidden="true">Y</div>
-                  <div class={s.messageMain}>
-                    <div class={s.messageHead}><strong>You</strong></div>
-                    <div class={s.messageText}>{text(turn.user)}</div>
-                  </div>
-                </article>
-                {mode === 'compare' || turn.responses.length > 1 ? (
-                  <div class={s.comparisonGrid} data-lanes={turn.responses.length}>
-                    {turn.responses.map((response) => (
-                      <PlaygroundResponse key={response.id} response={response} comparison />
-                    ))}
-                  </div>
-                ) : turn.responses[0] ? <PlaygroundResponse response={turn.responses[0]} /> : null}
+      <div class={mode === 'single' ? s.studioSingle : s.studioCompare}>
+        <aside class={s.configuration} aria-label="Request configuration">
+          <header><SlidersHorizontal size={15} /><span>Configuration</span></header>
+          <div class={s.configurationBody}>
+            <div>
+              <span class={s.controlLabel}>Run mode</span>
+              <div class={s.modeControl} role="group" aria-label="Playground mode">
+                <Button size="sm" variant={mode === 'single' ? 'primary' : 'ghost'} aria-pressed={mode === 'single'}
+                  disabled={selectionLocked} onClick={() => changeMode('single')}>
+                  <MessageSquare size={14} /> Single
+                </Button>
+                <Button size="sm" variant={mode === 'compare' ? 'primary' : 'ghost'} aria-pressed={mode === 'compare'}
+                  disabled={selectionLocked} onClick={() => changeMode('compare')}>
+                  <Columns3 size={14} /> Compare
+                </Button>
               </div>
-            ))}
-            {!running && turns.length > 0 && (
-              <div class={s.regenerate}>
-                <Button size="sm" onClick={regenerate}><RotateCcw size={14} /> Regenerate</Button>
+            </div>
+
+            {mode === 'single' ? (
+              <Field label="Model">
+                <Select value={model} disabled={loading || models.length === 0 || selectionLocked}
+                  onChange={(event) => setModel(event.currentTarget.value)}>
+                  {models.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.auto ? 'Auto - Nexus routing' : item.displayName + ' - ' + item.provider}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : (
+              <PlaygroundModelPicker models={models} selectedIds={comparisonModels}
+                disabled={loading || models.length === 0 || selectionLocked}
+                max={MAX_COMPARISON_MODELS} onToggle={toggleComparisonModel} />
+            )}
+
+            <Field label="Temperature">
+              <div class={s.rangeRow}>
+                <input class={s.range} type="range" min="0" max="2" step="0.1" value={temperature}
+                  disabled={running} onInput={(event) => setTemperature(Number(event.currentTarget.value))} />
+                <output class={s.number}>{temperature.toFixed(1)}</output>
+              </div>
+            </Field>
+
+            <Field label="Max tokens">
+              <Input type="number" min="1" max={maxTokenLimit} value={maxTokens}
+                disabled={running} onInput={(event) => setMaxTokens(Math.max(1, Number(event.currentTarget.value) || 1))} />
+            </Field>
+
+            <Button size="sm" variant={systemOpen ? 'secondary' : 'ghost'} class={s.systemButton}
+              onClick={() => setSystemOpen((open) => !open)}>
+              <SlidersHorizontal size={14} /> System prompt
+            </Button>
+            {systemOpen && (
+              <label class={s.systemPrompt}>
+                <span>System prompt</span>
+                <textarea value={systemPrompt} disabled={running} rows={4}
+                  placeholder="Give the model instructions for this conversation."
+                  onInput={(event) => setSystemPrompt(event.currentTarget.value)} />
+              </label>
+            )}
+            {mode === 'compare' && !comparisonReady && <span class={s.selectionHint}>Select at least two models.</span>}
+          </div>
+          <footer><ShieldCheck size={13} /> Guardrails and gateway policies apply</footer>
+        </aside>
+
+        <div class={s.stage}>
+          <section class={s.workspace}>
+            {loading && <div class={s.state}><Spinner /> <span>Loading available models...</span></div>}
+            {modelsError && (
+              <div class={s.state} role="alert">
+                <span>Couldn't load models - {modelsError}</span>
+                <Button size="sm" onClick={reload}>Retry</Button>
               </div>
             )}
-          </div>
-        )}
-      </section>
+            {!loading && !modelsError && models.length === 0 && (
+              <div class={s.empty}>
+                <Sparkles size={24} />
+                <strong>No chat models are ready</strong>
+                <p>Add an active provider key and chat model in Nexus, then return here to test it.</p>
+              </div>
+            )}
+            {!loading && !modelsError && models.length > 0 && turns.length === 0 && (
+              <div class={s.empty}>
+                <Sparkles size={24} />
+                <strong>{mode === 'compare' ? 'Compare models side by side' : 'Test your gateway'}</strong>
+                <p>{mode === 'compare'
+                  ? 'Select two to four models, then send one prompt to every model at the same time.'
+                  : 'Choose a model or leave Nexus routing on Auto, then send your first prompt.'}</p>
+              </div>
+            )}
 
-      <section class={s.composer}>
-        <textarea
-          value={prompt}
-          rows={2}
-          disabled={running || models.length === 0 || !writable || (mode === 'compare' && !comparisonReady)}
-          placeholder={!writable ? 'Viewer access cannot run provider requests.'
-            : mode === 'compare' && !comparisonReady ? 'Select at least two models to compare.'
-              : mode === 'compare' ? `Ask ${comparisonModels.length} models the same question...` : 'Write a message...'}
-          aria-label="Message"
-          onInput={(event) => setPrompt(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-              event.preventDefault();
-              send();
-            }
-          }}
-        />
-        <div class={s.composerActions}>
-          {running ? (
-            <Button onClick={stop}><Square size={13} fill="currentColor" /> Stop all</Button>
-          ) : (
-            <Button variant="primary" onClick={send}
-              disabled={!prompt.trim() || models.length === 0 || !writable || (mode === 'compare' && !comparisonReady)}>
-              <Send size={15} /> {mode === 'compare' ? `Run ${comparisonModels.length} models` : 'Send'}
-            </Button>
-          )}
+            {turns.length > 0 && (
+              <div class={s.conversation} ref={conversation} aria-live="polite">
+                {turns.map((turn) => {
+                  const comparing = turn.responses.length > 1;
+                  return (
+                    <div class={s.turn} key={turn.id}>
+                      {comparing && (
+                        <div class={s.comparisonTurnHead}>
+                          <span><Columns3 size={13} /> Shared request</span>
+                          <small>{turn.responses.length} active models</small>
+                        </div>
+                      )}
+                      <article class={comparing ? s.sharedPrompt : s.userMessage}>
+                        <div class={s.avatar} aria-hidden="true">Y</div>
+                        <div class={s.messageMain}>
+                          <div class={s.messageHead}><strong>You</strong>{comparing && <span>shared prompt</span>}</div>
+                          <div class={s.messageText}>{text(turn.user)}</div>
+                        </div>
+                      </article>
+                      {comparing ? (
+                        <div class={s.comparisonGrid} data-lanes={turn.responses.length} data-testid="comparison-grid">
+                          {turn.responses.map((response) => (
+                            <PlaygroundResponse key={response.id} response={response} comparison />
+                          ))}
+                        </div>
+                      ) : turn.responses[0] ? <PlaygroundResponse response={turn.responses[0]} /> : null}
+                    </div>
+                  );
+                })}
+                {!running && turns.length > 0 && (
+                  <div class={s.regenerate}>
+                    <Button size="sm" onClick={regenerate}><RotateCcw size={14} /> Regenerate</Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section class={s.composer}>
+            <textarea
+              value={prompt}
+              rows={2}
+              disabled={running || models.length === 0 || !writable || (mode === 'compare' && !comparisonReady)}
+              placeholder={!writable ? 'Viewer access cannot run provider requests.'
+                : mode === 'compare' && !comparisonReady ? 'Select at least two models to compare.'
+                  : mode === 'compare' ? 'Ask all ' + comparisonModels.length + ' models the same question...' : 'Write a message...'}
+              aria-label="Message"
+              onInput={(event) => setPrompt(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault();
+                  send();
+                }
+              }}
+            />
+            <div class={s.composerActions}>
+              {running ? (
+                <Button variant="danger" onClick={stop}><Square size={13} fill="currentColor" /> Stop all</Button>
+              ) : (
+                <Button variant="primary" onClick={send}
+                  disabled={!prompt.trim() || models.length === 0 || !writable || (mode === 'compare' && !comparisonReady)}>
+                  <Send size={15} /> {mode === 'compare' ? 'Run ' + comparisonModels.length + ' models' : 'Send'}
+                </Button>
+              )}
+            </div>
+          </section>
+          <div class={s.privacy}><ShieldCheck size={14} /> Prompts pass through your gateway and are not stored.</div>
         </div>
-      </section>
-      <div class={s.privacy}><ShieldCheck size={14} /> Prompts pass through your gateway and are not stored.</div>
+
+        {mode === 'single' && <PlaygroundInspector trace={latestTrace} />}
+      </div>
     </div>
   );
 }

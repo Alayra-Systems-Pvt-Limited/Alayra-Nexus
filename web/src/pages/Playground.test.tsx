@@ -25,6 +25,9 @@ const models = {
       id: 'gpt-test', displayName: 'GPT Test', provider: 'openai',
       auto: false, contextWindow: 8192, maxTokens: 2048,
     },
+    { id: 'claude-test', displayName: 'Claude Test', provider: 'anthropic', auto: false, contextWindow: 8192, maxTokens: 2048 },
+    { id: 'gemini-test', displayName: 'Gemini Test', provider: 'google', auto: false, contextWindow: 8192, maxTokens: 2048 },
+    { id: 'mistral-test', displayName: 'Mistral Test', provider: 'mistral', auto: false, contextWindow: 8192, maxTokens: 2048 },
   ],
 };
 
@@ -75,8 +78,8 @@ describe('Playground', () => {
     expect(await screen.findByText('Hello from Nexus')).toBeInTheDocument();
     expect(await screen.findByText(/gpt-test.*routed/)).toBeInTheDocument();
     expect(screen.getByText('Routing details')).toBeInTheDocument();
-    expect(screen.getByText('125 ms')).toBeInTheDocument();
-    expect(screen.getByText('$0.0002')).toBeInTheDocument();
+    expect(screen.getAllByText('125 ms')).toHaveLength(2);
+    expect(screen.getAllByText('$0.0002')).toHaveLength(2);
 
     expect(mocks.runPlayground).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -136,8 +139,9 @@ describe('Playground', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Compare' }));
     expect(screen.getByText('Compare models side by side')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Nexus Auto/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /GPT Test/ })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: '2 models selected' }));
+    expect(screen.getByRole('checkbox', { name: /Nexus Auto/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /GPT Test/ })).toBeChecked();
 
     await user.type(screen.getByLabelText('Message'), 'Compare this prompt');
     await user.click(screen.getByRole('button', { name: 'Run 2 models' }));
@@ -148,6 +152,46 @@ describe('Playground', () => {
     expect(new Set(mocks.runPlayground.mock.calls.map(([input]) => input.model)))
       .toEqual(new Set(['alayra-nexus-1', 'gpt-test']));
     expect(screen.getByRole('button', { name: 'Compare' })).toBeDisabled();
+  });
+  it('searches model choices, caps comparison at four, and renders four results as one adaptive grid', async () => {
+    ready();
+    mocks.runPlayground.mockImplementation(async (input, callbacks) => {
+      callbacks.onDelta(input.model + ' answer');
+      callbacks.onResult({
+        response: { status: 200, headers: {}, streamed: true, truncated: false },
+        trace: {
+          requestedModel: input.model, resolution: 'pinned', stream: true, cache: 'bypassed',
+          timing: { totalMs: 120 },
+          usage: { inputTokens: 10, outputTokens: 20, estimatedUsd: 0.001, savedUsd: 0, priced: true },
+          route: {
+            modelString: input.model, modelId: input.model, provider: 'test', tier: 'standard',
+            keyId: 'key-1', keyMask: 'masked-key', sticky: false, byok: false, downgraded: false, probe: false,
+          },
+          attempts: [{ provider: 'test', modelString: input.model, tier: 'standard', keyMask: 'masked-key', status: 200, outcome: 'success' }],
+          outcome: 'success',
+        },
+      });
+    });
+
+    render(<Playground />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    await user.click(screen.getByRole('button', { name: '2 models selected' }));
+    await user.type(screen.getByRole('textbox', { name: 'Search models' }), 'Claude');
+    await user.click(screen.getByRole('checkbox', { name: /Claude Test/ }));
+    await user.click(screen.getByRole('button', { name: 'Clear model search' }));
+    await user.click(screen.getByRole('checkbox', { name: /Gemini Test/ }));
+
+    expect(screen.getByRole('button', { name: '4 models selected' })).toBeInTheDocument();
+    expect(screen.getByText('Maximum 4 models')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Mistral Test/ })).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Message'), 'Compare four');
+    await user.click(screen.getByRole('button', { name: 'Run 4 models' }));
+
+    await waitFor(() => expect(mocks.runPlayground).toHaveBeenCalledTimes(4));
+    expect(screen.getByTestId('comparison-grid')).toHaveAttribute('data-lanes', '4');
+    expect(screen.getAllByLabelText(/Run metrics for/)).toHaveLength(4);
   });
   it('shows a useful empty state when no chat model is ready', () => {
     mocks.useApi.mockReturnValue({ data: { models: [] }, loading: false, error: null, reload: vi.fn() });
