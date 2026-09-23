@@ -5,6 +5,7 @@ import s from './playground.module.css';
 interface Props { trace?: PlaygroundTrace }
 
 const duration = (value?: number) => value == null ? '--' : value < 1000 ? value + ' ms' : (value / 1000).toFixed(2) + ' s';
+const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 const cost = (trace?: PlaygroundTrace) => {
   if (!trace?.usage) return '--';
   if (trace.usage.priced === false) return 'Unpriced';
@@ -26,11 +27,11 @@ export function PlaygroundInspector({ trace }: Props) {
             <section><Gauge size={13} /><span>Latency</span><strong>{duration(trace.timing.totalMs)}</strong><small>TTFT {duration(trace.timing.ttfbMs)}</small></section>
             <section><Coins size={13} /><span>Cost</span><strong>{cost(trace)}</strong><small>estimated</small></section>
             <section><Activity size={13} /><span>Tokens</span><strong>{usage ? (usage.inputTokens + usage.outputTokens).toLocaleString() : '--'}</strong><small>{usage ? usage.inputTokens + ' in / ' + usage.outputTokens + ' out' : 'not reported'}</small></section>
-            <section><KeyRound size={13} /><span>Credential</span><strong>{route?.byok ? 'Team BYOK' : 'Shared pool'}</strong><small>{trace.attempts.length} provider attempt{trace.attempts.length === 1 ? '' : 's'}</small></section>
+            <section><KeyRound size={13} /><span>Capacity</span><strong>{route?.rpmLimit != null ? route.rpmLimit.toLocaleString() + ' RPM' : route?.byok ? 'Team BYOK' : 'Shared pool'}</strong><small>{route?.tpmLimit != null ? route.tpmLimit.toLocaleString() + ' TPM configured' : trace.attempts.length + ' provider attempt' + (trace.attempts.length === 1 ? '' : 's')}</small></section>
           </div>
           <div class={s.inspectorPolicy}>
             <span><ShieldCheck size={12} /> {trace.guardrails?.active ? 'Guardrails active' : 'Policy checked'}</span>
-            <span>{trace.budget?.checked ? (trace.budget.allowed ? 'Budget allowed' : 'Budget blocked') : 'Cache ' + trace.cache}</span>
+            <span>{trace.strategy ? titleCase(trace.strategy.applied) + ' routing' : trace.budget?.checked ? (trace.budget.allowed ? 'Budget allowed' : 'Budget blocked') : 'Cache ' + trace.cache}</span><span>Cache {trace.cache}{trace.usage?.savedUsd ? ' · saved $' + trace.usage.savedUsd.toFixed(4) : ''}</span>
           </div>
         </div>
       )}

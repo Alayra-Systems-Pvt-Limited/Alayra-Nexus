@@ -75,6 +75,19 @@ export interface TraceRoute {
   downgraded:  boolean;
   /** This request is the single half-open probe for a key the breaker is recovering. */
   probe:       boolean;
+  /** Health state and configured capacity observed on the selected key at dispatch time. */
+  keyStatus?:  string;
+  rpmLimit?:   number;
+  tpmLimit?:   number;
+}
+
+export type TraceRoutingStrategy = 'fastest' | 'balanced' | 'cheapest';
+
+export interface TraceStrategy {
+  requested:   TraceRoutingStrategy;
+  applied:     TraceRoutingStrategy | 'direct';
+  costWeight:  number | null;
+  explanation: string;
 }
 
 export interface TraceGuardrails {
@@ -161,6 +174,7 @@ export interface RequestTrace {
   stream:         boolean;
   scope?:         { namespace: string; byok: boolean; isolated: boolean };
   route?:         TraceRoute;
+  strategy?:      TraceStrategy;
   cache:          CacheState;
   /**
    * On a cache hit, what produced the stored entry.

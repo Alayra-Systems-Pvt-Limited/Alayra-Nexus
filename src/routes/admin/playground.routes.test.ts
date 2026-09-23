@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   handleProxy: vi.fn(),
   listServableModels: vi.fn(),
   resolveRequestScope: vi.fn(),
+  getModelRegistry: vi.fn(),
+  getNexusOverview: vi.fn(),
 }));
 
 vi.mock('../../services/completionsProxy.service', () => ({
@@ -25,6 +27,8 @@ vi.mock('../../services/modelCatalog.service', () => ({
 vi.mock('../../services/byok.service', () => ({
   resolveRequestScope: mocks.resolveRequestScope,
 }));
+vi.mock('../../services/model.service', () => ({ getModelRegistry: mocks.getModelRegistry }));
+vi.mock('../../services/nexusOverview.service', () => ({ getNexusOverview: mocks.getNexusOverview }));
 
 import adminPlaygroundRoutes from './playground.routes';
 
@@ -42,6 +46,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   role = 'owner';
   mocks.resolveRequestScope.mockResolvedValue({ namespace: 'shared' });
+  mocks.getModelRegistry.mockResolvedValue([{
+    id: 'chat-model', modelString: 'chat-model', displayName: 'Chat model', provider: 'groq',
+    capabilities: ['chat'], status: 'active', pricingSource: 'catalog', inputCostPer1M: 1, outputCostPer1M: 2,
+  }]);
+  mocks.getNexusOverview.mockResolvedValue({
+    summary: { providers: 1, activeKeys: 1, coolingKeys: 0, bannedKeys: 0, totalKeys: 1 }, routing: { costWeight: 0.5 },
+    tiers: [{ tier: 'fast', providers: [{ provider: 'groq', keys: [{ status: 'active', coolingUntil: null, rpmLimit: 60, tpmLimit: 60000 }] }] }],
+  });
   mocks.listServableModels.mockResolvedValue([
     {
       id: 'alayra-nexus-1', displayName: 'Auto — Nexus routing', provider: 'alayra-nexus',
@@ -84,6 +96,19 @@ describe('Playground model discovery', () => {
       .toEqual(['alayra-nexus-1', 'chat-model']);
   });
 
+  it('returns a read-only preflight cost estimate and configured capacity', async () => {
+    role = 'viewer';
+    const response = await app.inject({ method: 'POST', url: '/admin/playground/preflight', payload: {
+      model: 'chat-model', messages: [{ role: 'user', content: [{ type: 'text', text: 'Estimate this' }] }], maxTokens: 100,
+    } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      inputTokens: expect.any(Number),
+      estimate: { kind: 'exact', minimumUsd: expect.any(Number), maximumUsd: expect.any(Number) },
+      capacity: { healthyKeys: 1, totalKeys: 1, configuredRpm: 60, configuredTpm: 60000 },
+    });
+    expect(mocks.handleProxy).not.toHaveBeenCalled();
+  });
   it('still requires a signed-in dashboard session', async () => {
     role = null;
     expect((await app.inject({ method: 'GET', url: '/admin/playground/models' })).statusCode).toBe(401);
@@ -135,5 +160,17 @@ describe('running the Playground', () => {
       max_tokens: 256,
     });
     expect(headers).toMatchObject({ 'x-nexus-cache-bypass': '1' });
+    expect(mocks.handleProxy.mock.calls[0][6]).toEqual({ routingStrategy: 'fastest' });
+  });
+  it('can allow cache reuse and apply a per-run cost strategy', async () => {
+    const response = await app.inject({
+      method: 'POST', url: '/admin/playground/run',
+      payload: { ...payload, strategy: 'cheapest', cacheMode: 'use' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [, , , headers, , , options] = mocks.handleProxy.mock.calls[0];
+    expect(headers).not.toHaveProperty('x-nexus-cache-bypass');
+    expect(options).toEqual({ routingStrategy: 'cheapest' });
   });
 });
