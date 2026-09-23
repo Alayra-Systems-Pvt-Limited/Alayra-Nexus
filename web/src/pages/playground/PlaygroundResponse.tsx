@@ -1,11 +1,12 @@
 import { CircleAlert, CircleCheck, LoaderCircle } from 'lucide-preact';
-import type { PlaygroundMessage, PlaygroundTrace } from '../../lib/playground';
+import type { PlaygroundMessage, PlaygroundStrategy, PlaygroundTrace } from '../../lib/playground';
 import { PlaygroundDiagnostics } from './PlaygroundDiagnostics';
 import s from './playground.module.css';
 
 export interface PlaygroundAssistant extends PlaygroundMessage {
   id: string;
   requestedModel: string;
+  requestedStrategy: PlaygroundStrategy;
   requestedLabel: string;
   provider: string;
   status: 'streaming' | 'complete' | 'error' | 'stopped';

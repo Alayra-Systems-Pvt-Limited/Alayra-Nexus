@@ -7,6 +7,15 @@ export interface PlaygroundModel {
   auto: boolean;
   contextWindow: number;
   maxTokens: number;
+  pricing: { inputPer1M: number; outputPer1M: number; source: string } | null;
+  capacity: PlaygroundCapacity;
+}
+
+export interface PlaygroundCapacity {
+  healthyKeys: number;
+  totalKeys: number;
+  configuredRpm: number;
+  configuredTpm: number;
 }
 
 export interface PlaygroundModelsResponse {
@@ -25,11 +34,24 @@ export interface PlaygroundMessage {
   content: Array<Extract<PlaygroundPart, { type: 'text' }>>;
 }
 
+export type PlaygroundStrategy = 'fastest' | 'balanced' | 'cheapest';
+export type PlaygroundCacheMode = 'fresh' | 'use';
+
 export interface PlaygroundRunInput {
   model: string;
   messages: PlaygroundMessage[];
   temperature: number;
   maxTokens: number;
+  strategy: PlaygroundStrategy;
+  cacheMode: PlaygroundCacheMode;
+}
+
+export interface PlaygroundPreflight {
+  inputTokens: number;
+  maxOutputTokens: number;
+  estimate: { kind: 'exact' | 'range' | 'unpriced'; minimumUsd: number | null; maximumUsd: number | null; unpricedCandidates: number };
+  capacity: PlaygroundCapacity;
+  note: string;
 }
 
 export interface PlaygroundResult {
@@ -51,7 +73,9 @@ export interface PlaygroundTrace {
   route?: {
     provider: string; modelString: string; modelId: string | null; tier: string;
     keyId: string; keyMask: string; sticky: boolean; byok: boolean; downgraded: boolean; probe: boolean;
+    keyStatus?: string; rpmLimit?: number; tpmLimit?: number;
   };
+  strategy?: { requested: PlaygroundStrategy; applied: PlaygroundStrategy | 'direct'; costWeight: number | null; explanation: string };
   cache: 'hit' | 'miss' | 'disabled' | 'not-cacheable' | 'bypassed';
   guardrails?: { active: boolean; input: string; inputMatched: string[]; output: string; outputMatched: string[] };
   budget?: { checked: boolean; allowed: boolean; action: string; downgraded: boolean; spendUsd?: number; budgetUsd?: number | null };
@@ -135,6 +159,22 @@ function parseOuterEvent(block: string): { name: string; data: unknown } | null 
   return { name, data: JSON.parse(data.join('\n')) };
 }
 
+
+export async function preflightPlayground(input: Pick<PlaygroundRunInput, 'model' | 'messages' | 'maxTokens'>, signal?: AbortSignal): Promise<PlaygroundPreflight> {
+  const response = await fetch('/admin/playground/preflight', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (response.status === 401) {
+    clearToken();
+    window.dispatchEvent(new CustomEvent('nx:unauthorized'));
+  }
+  const body = await response.json().catch(() => null) as PlaygroundPreflight | { error?: string } | null;
+  if (!response.ok) throw new Error(readableError(body, 'The Playground estimate failed.'));
+  return body as PlaygroundPreflight;
+}
 export async function runPlayground(
   input: PlaygroundRunInput,
   callbacks: PlaygroundRunCallbacks,

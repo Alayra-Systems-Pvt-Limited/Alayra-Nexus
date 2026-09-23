@@ -37,7 +37,7 @@ import { createClientWriter } from '../lib/clientWriter';
 import { resolveRequestScope }         from './byok.service';
 import { isByok, isIsolated }          from '../lib/scope';
 import { resolveRequestedModel, unknownModelError, noCapacityMessage } from './modelCatalog.service';
-import type { RequestTrace }          from '../lib/requestTrace';
+import type { RequestTrace, TraceRoutingStrategy } from '../lib/requestTrace';
 
 export interface TeamContext {
   id:           string;
@@ -186,6 +186,16 @@ function storeStreamInCache(key: string | null, content: string, model: string, 
   void setCached(key, entry, ttl).catch(() => {});
 }
 
+export interface ProxyRunOptions {
+  routingStrategy?: TraceRoutingStrategy;
+}
+
+const ROUTING_STRATEGY_WEIGHT: Record<TraceRoutingStrategy, number> = {
+  fastest: 0,
+  balanced: 0.5,
+  cheapest: 1,
+};
+
 export async function handleProxy(
   body: CompletionsBody,
   reply: FastifyReply,
@@ -196,6 +206,7 @@ export async function handleProxy(
   // Anthropic wrapper both pass nothing and behave exactly as before. Pass one and it is filled in
   // as the request proceeds; see lib/requestTrace.ts for what may and may not go in it.
   trace?: RequestTrace,
+  options: ProxyRunOptions = {},
 ): Promise<FastifyReply | void> {
   // Metrics: measure the whole request and record its outcome at each exit.
   const t0 = Date.now();
@@ -267,6 +278,23 @@ export async function handleProxy(
     return reply.code(400).send(unknownModelError(requestedModel));
   }
   const pinnedModelId = requestedModel.kind === 'pinned' ? requestedModel.model.id : null;
+  const requestedStrategy = options.routingStrategy ?? 'fastest';
+  const strategyWeight = ROUTING_STRATEGY_WEIGHT[requestedStrategy];
+  if (trace) trace.strategy = pinnedModelId ? {
+    requested: requestedStrategy,
+    applied: 'direct',
+    costWeight: null,
+    explanation: 'A specific model was selected, so Nexus routed directly to an eligible key for that model.',
+  } : {
+    requested: requestedStrategy,
+    applied: requestedStrategy,
+    costWeight: strategyWeight,
+    explanation: requestedStrategy === 'cheapest'
+      ? 'Cost has maximum weight after capability, health, and tier eligibility checks.'
+      : requestedStrategy === 'balanced'
+        ? 'Provider priority and model cost have equal routing weight after eligibility checks.'
+        : 'Nexus follows provider priority and selects the first eligible capacity; this is not predictive latency routing.',
+  };
 
   // ── Team budget gate — enforced before any provider work happens. Requests
   // already in flight when the cap is crossed may overshoot by their own cost
@@ -368,12 +396,12 @@ export async function handleProxy(
       observe('success');
       // A cache hit is a $0 provider call, still attributed to the team so cost
       // and analytics numbers stay honest.
-      void recordTokenUsage({
+      await recordUsage({
         sessionId: `cache-${Date.now()}`, modelId: hit.model, modelName: hit.model, provider: hit.provider,
         inputTokens: hit.promptTokens, outputTokens: hit.completionTokens,
         nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd,
         cached: true, latencyMs: Date.now() - t0,
-      }, trace).catch(() => {});
+      });
       const completion = toCompletionJson(hit);
       const hitHeaders = { 'X-Nexus-Model': hit.model, 'X-Nexus-Provider': hit.provider, 'X-Nexus-Cache': 'hit' };
       if (isStream) {
@@ -406,7 +434,9 @@ export async function handleProxy(
   // An over-budget team on the "downgrade" action is routed to the fast (cheapest) tier regardless of
   // its normal preference, so it keeps working at the lowest cost rather than being cut off.
   const preferredTier = overBudgetDowngrade ? 'fast' : (team?.assignedTier ?? null);
-  const route = await discoverBestPool(reserve, session, scope, 'chat', userId, preferredTier, pinnedModelId);
+  const route = pinnedModelId
+    ? await discoverBestPool(reserve, session, scope, 'chat', userId, preferredTier, pinnedModelId)
+    : await discoverBestPool(reserve, session, scope, 'chat', userId, preferredTier, null, strategyWeight);
   if (!route) {
     if (trace) trace.refusal = { status: 503, reason: pinnedModelId
       ? 'No key had capacity for the model that was pinned.'
@@ -445,6 +475,9 @@ export async function handleProxy(
     byok:       route.byok,
     downgraded: route.wasDowngrade,
     probe:      route.isProbe,
+    keyStatus:  route.keyStatus,
+    rpmLimit:   route.rpmLimit,
+    tpmLimit:   route.tpmLimit,
   };
   const traceAttempt: RequestTrace['attempts'][number] | undefined = trace ? {
     provider: route.providerSlug, modelString: route.modelString, tier: route.tier, keyMask: route.keyMask,

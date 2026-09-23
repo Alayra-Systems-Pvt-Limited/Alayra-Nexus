@@ -5,12 +5,13 @@ import userEvent from '@testing-library/user-event';
 const mocks = vi.hoisted(() => ({
   useApi: vi.fn(),
   runPlayground: vi.fn(),
+  preflightPlayground: vi.fn(),
 }));
 
 vi.mock('../hooks/useApi', () => ({ useApi: mocks.useApi }));
 vi.mock('../lib/playground', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/playground')>();
-  return { ...actual, runPlayground: mocks.runPlayground };
+  return { ...actual, runPlayground: mocks.runPlayground, preflightPlayground: mocks.preflightPlayground };
 });
 
 import { Playground } from './Playground';
@@ -36,7 +37,15 @@ function ready() {
 }
 
 describe('Playground', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.preflightPlayground.mockResolvedValue({
+      inputTokens: 12, maxOutputTokens: 2048,
+      estimate: { kind: 'range', minimumUsd: 0.0001, maximumUsd: 0.002, unpricedCandidates: 0 },
+      capacity: { healthyKeys: 2, totalKeys: 3, configuredRpm: 120, configuredTpm: 120000 },
+      note: 'Estimate only',
+    });
+  });
   it('renders the single-chat controls and the prompt privacy promise', () => {
     ready();
     render(<Playground />);
@@ -192,6 +201,21 @@ describe('Playground', () => {
     await waitFor(() => expect(mocks.runPlayground).toHaveBeenCalledTimes(4));
     expect(screen.getByTestId('comparison-grid')).toHaveAttribute('data-lanes', '4');
     expect(screen.getAllByLabelText(/Run metrics for/)).toHaveLength(4);
+  });
+  it('compares fastest, balanced, and cheapest routing with one shared prompt', async () => {
+    ready();
+    mocks.runPlayground.mockResolvedValue(undefined);
+    render(<Playground />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    await user.selectOptions(screen.getByLabelText('Compare'), 'strategies');
+    expect(screen.getByText('3 strategy lanes')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Message'), 'Choose a route');
+    await user.click(screen.getByRole('button', { name: 'Run 3 strategies' }));
+    await waitFor(() => expect(mocks.runPlayground).toHaveBeenCalledTimes(3));
+    expect(new Set(mocks.runPlayground.mock.calls.map(([input]) => input.strategy)))
+      .toEqual(new Set(['fastest', 'balanced', 'cheapest']));
+    expect(mocks.runPlayground.mock.calls.every(([input]) => input.model === 'alayra-nexus-1')).toBe(true);
   });
   it('shows a useful empty state when no chat model is ready', () => {
     mocks.useApi.mockReturnValue({ data: { models: [] }, loading: false, error: null, reload: vi.fn() });

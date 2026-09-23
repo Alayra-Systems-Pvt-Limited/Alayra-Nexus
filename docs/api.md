@@ -73,8 +73,9 @@ that routes, so it can never advertise a model the gateway would refuse.
 | `GET` | `/admin/keys/:id/metrics` | Live RPM and status for a key |
 | `GET` | `/admin/models` | List model registry |
 | `PUT` | `/admin/models` | Add or update a model in the registry |
-| `GET` | `/admin/playground/models` | List currently servable chat models for the dashboard Playground |
-| `POST` | `/admin/playground/run` | Stream one Playground lane through the real proxy path (owner/admin only; response cache bypassed) |
+| `GET` | `/admin/playground/models` | List servable chat models with pricing availability and healthy configured capacity |
+| `POST` | `/admin/playground/preflight` | Estimate prompt tokens, maximum cost/range, and configured capacity without calling a provider |
+| `POST` | `/admin/playground/run` | Stream one Playground lane through the real proxy path with per-run strategy and cache policy (owner/admin only) |
 | `GET` | `/admin/teams` | List teams with key counts and current-period spend |
 | `POST` | `/admin/teams` | Create a team (name, budget cap + period, status) |
 | `PATCH` | `/admin/teams/:id` | Update a team (budget, status, tier, `byokFallback`) |
@@ -92,16 +93,18 @@ or an admin API token for scripts and CI. On a gateway that has not been claimed
 `ADMIN_PASSWORD` is still accepted, exactly as it was before Phase 7.13a; creating an owner account
 closes that door. See [Accounts and roles](../README.md#accounts-and-roles).
 
-The Playground run endpoint accepts OpenAI-style roles with text content-part arrays and returns an
+The Playground preflight endpoint accepts the selected model, text content-part messages, and maximum output tokens. It returns a provider-neutral input-token estimate, an exact pinned-model maximum or auto-route price range where configured pricing exists, and healthy-key configured RPM/TPM totals. It does not call a provider, and its capacity values are configured limits rather than remaining quota.
+
+The Playground run endpoint accepts OpenAI-style roles with text content-part arrays plus `strategy` (`fastest`, `balanced`, or `cheapest`) and `cacheMode` (`fresh` or `use`), then returns an
 outer server-sent event stream. `upstream` events contain the provider's original stream chunks; the
 final `result` event contains the captured response metadata and request trace. The trace includes
-the requested and resolved model, routing mode, provider, tier, masked key, provider-attempt
+the requested and resolved model, applied routing strategy and explanation, provider, tier, masked key, selected-key health and configured RPM/TPM, provider-attempt
 outcome, cache state, timing, token usage, recorded estimated cost, guardrail and budget decisions,
 and any refusal reason. The endpoint does not
 persist prompt or reply content. Because a run consumes provider capacity, viewers can list models
 but receive `403` if they try to execute one.
 
-Comparison mode invokes this endpoint once per selected model, concurrently. Lanes remain isolated:
+Comparison mode invokes this endpoint concurrently for two to four selected models, or for the fastest, balanced, and cheapest strategies against Nexus Auto. Lanes remain isolated:
 one provider failure does not cancel successful responses, while the shared stop action aborts all
 active lane requests.
 

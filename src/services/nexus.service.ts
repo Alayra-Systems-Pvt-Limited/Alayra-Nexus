@@ -81,6 +81,10 @@ export interface NexusRoute {
   // True when the key is privately owned by the calling team (BYOK) rather than
   // drawn from the shared pool.
   byok:         boolean;
+  /** Key state and configured limits at the instant the route was selected. */
+  keyStatus:    string;
+  rpmLimit:     number;
+  tpmLimit:     number;
 }
 
 // Provider fields the router needs to build a route from a picked key.
@@ -104,7 +108,7 @@ const KEY_ROW_SELECT = {
 } satisfies Record<keyof CachedKeyRow, true>;
 
 function buildRoute(
-  key: { id: string; encryptedKey: string; ownerTeamId: string | null },
+  key: { id: string; encryptedKey: string; ownerTeamId: string | null; status: string; rpmLimit: number; tpmLimit: number },
   provider: ProviderRow,
   gate: breaker.BreakerGate,
   model: RouteModel,
@@ -126,6 +130,9 @@ function buildRoute(
     extraHeaders: provider.extraHeaders,
     isProbe:      gate === 'probe',
     byok:         key.ownerTeamId !== null,
+    keyStatus:    key.status,
+    rpmLimit:     key.rpmLimit,
+    tpmLimit:     key.tpmLimit,
   };
 }
 
@@ -369,8 +376,9 @@ export async function discoverBestPool(
   userId: string | null = null,
   preferredTier: string | null = null,
   pinnedModelId: string | null = null,
+  costWeightOverride?: number,
 ): Promise<NexusRoute | null> {
-  const costWeight = await getCostWeight();
+  const costWeight = costWeightOverride ?? await getCostWeight();
   const registry   = await getModelRegistry();
 
   // Model-first candidate list (Phase 6.1): the registry, filtered to this capability

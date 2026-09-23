@@ -11,6 +11,15 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **Advanced gateway testing in the Playground.** Auto-route runs can select fastest eligible,
+  balanced, or cheapest eligible routing, while comparison mode can execute all three strategies
+  side by side. A read-only preflight estimates input tokens and maximum cost (or an honest range),
+  reports healthy-key counts and configured RPM/TPM capacity, and never presents those limits as
+  remaining quota. Runs can request a fresh response or allow response-cache reuse; diagnostics
+  explain the applied strategy, cache status and savings, selected-key health and configured limits,
+  and the actual provider execution path. Pinned models remain direct routes, and fastest eligible
+  is explicitly described as priority-and-capacity routing rather than predictive latency.
+
 - **A focused Playground workspace for single and comparison runs.** Configuration now lives in a
   compact rail, single runs gain a dedicated inspector, and comparison results use an adaptive grid
   with aligned latency, token, and cost summaries. The searchable model picker reports the current
