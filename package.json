@@ -85,7 +85,9 @@
     "verify:providers": "tsx scripts/verify-providers.ts",
     "gate:e2e": "tsx scripts/release-gate.ts",
     "docs:providers": "tsx scripts/docs/providerTable.ts",
-    "check:lines": "tsx scripts/lint/checkLines.ts"
+    "check:lines": "tsx scripts/lint/checkLines.ts",
+    "tokens:build": "tsx scripts/tokens/build.ts",
+    "check:tokens": "tsx scripts/tokens/build.ts --check && tsx scripts/lint/checkTokens.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",
