@@ -1,6 +1,6 @@
 {
   "name": "@alayrasystems/nexus-core",
-  "version": "1.6.5",
+  "version": "1.6.6",
   "description": "The Alayra Nexus gateway core: OpenAI- and Anthropic-compatible request handling, routing, rate windows and usage accounting, with storage supplied by the host through five small ports.",
   "license": "Apache-2.0",
   "repository": {
