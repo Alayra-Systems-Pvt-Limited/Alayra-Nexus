@@ -16,14 +16,16 @@
 
 import Redis from 'ioredis';
 import { MemoryKv } from './kv/memory';
+import { createLazyKv } from './kv/select';
 import { createRedisClient } from './redisClient';
 
 const REDIS_URL = process.env.REDIS_URL?.trim();
 
 /**
- * The key-value store, chosen once at import (S1).
+ * The key-value store, chosen once, on first use (S1; lazy since P0.5b — see kv/select.ts).
  *
- * With REDIS_URL set this is ioredis, byte for byte what it always was. Without it, an in-process
+ * A host that embeds the core installs its own client first with `configureCoreKv()`. Otherwise,
+ * with REDIS_URL set this is ioredis, byte for byte what it always was. Without it, an in-process
  * store answering the same commands — which is what makes running with no Redis a real option
  * rather than a crash. `lib/mode.ts` decides what the gateway REPORTS; this decides what it USES,
  * and both read the same variable so they cannot disagree.
@@ -89,18 +91,45 @@ const REDIS_URL = process.env.REDIS_URL?.trim();
  */
 const KV_COMMAND_TIMEOUT_MS = parseInt(process.env.NEXUS_KV_COMMAND_TIMEOUT_MS ?? '2000', 10);
 
-export const redis = (REDIS_URL
-  ? createRedisClient(REDIS_URL,
-      // Two seconds rather than one, deliberately. A healthy command measured p50 0.9ms, p99 1.7ms,
-      // worst 2.45ms — so even one second is six hundred times the observed ceiling, and the choice
-      // is not about Redis. It is about THIS process: the gateway is CPU-bound at saturation, and
-      // this timer fires on its event loop. Too tight a budget starts rejecting commands that Redis
-      // answered perfectly well while the loop was busy — a false timeout, which costs a spurious
-      // 503 and a reservation for a request that never happened. One extra second during a genuine
-      // wedge is the cheaper mistake.
-      KV_COMMAND_TIMEOUT_MS,
-    )
-  : new MemoryKv()) as unknown as Redis;
+/** The open-source default: REDIS_URL, or the in-process store. Runs on first use, not at import. */
+function clientFromEnv(): Redis {
+  const client = (REDIS_URL
+    ? createRedisClient(REDIS_URL,
+        // Two seconds rather than one, deliberately. A healthy command measured p50 0.9ms, p99 1.7ms,
+        // worst 2.45ms — so even one second is six hundred times the observed ceiling, and the choice
+        // is not about Redis. It is about THIS process: the gateway is CPU-bound at saturation, and
+        // this timer fires on its event loop. Too tight a budget starts rejecting commands that Redis
+        // answered perfectly well while the loop was busy — a false timeout, which costs a spurious
+        // 503 and a reservation for a request that never happened. One extra second during a genuine
+        // wedge is the cheaper mistake.
+        KV_COMMAND_TIMEOUT_MS,
+      )
+    : new MemoryKv()) as unknown as Redis;
+  // Our collapsed error log is attached only to a client we created. A host that installs its own
+  // client owns that client's logging.
+  client.on('error', logRedisError);
+  return client;
+}
+
+const lazyKv = createLazyKv(clientFromEnv);
+
+export const redis: Redis = lazyKv.kv;
+
+/**
+ * Install the key-value client the core should use (P0.5b). For a host embedding the core — the
+ * hosted gateway — and called once at boot, before the first core call. The open-source server
+ * never calls it and keeps the REDIS_URL behaviour. Give the core its own Redis database (for
+ * example `redis://host:6379/1`): its keys carry no host prefix, and a key prefix on the client is
+ * not applied to the SCAN patterns the cache purge uses.
+ */
+export function configureCoreKv(client: Redis): void {
+  lazyKv.configure(client);
+}
+
+/** Test-only: forget the chosen client so the next use chooses again. */
+export function resetCoreKvForTests(): void {
+  lazyKv.reset();
+}
 
 /**
  * Every command this codebase actually issues, as a shape MemoryKv must satisfy.
@@ -137,8 +166,10 @@ interface UsedCommands {
 const _memoryCoversEveryCommandWeUse: UsedCommands = new MemoryKv();
 void _memoryCoversEveryCommandWeUse;
 
-/** True when the in-process store is in use. Read by health reporting; nothing else should care. */
-export const usingMemoryKv = !REDIS_URL;
+/** True when the in-process store is in use. Read at boot (rate-limit store, cluster check). */
+export function usingMemoryKv(): boolean {
+  return lazyKv.current() instanceof MemoryKv;
+}
 
 // ── Error logging ─────────────────────────────────────────────────────────────
 // ioredis emits an `error` per reconnection attempt. Logging the full object each
@@ -159,7 +190,7 @@ export function suppressRedisErrorLog(): () => void {
   return () => { silenced = Math.max(0, silenced - 1); };
 }
 
-redis.on('error', (err: Error & { code?: string }) => {
+function logRedisError(err: Error & { code?: string }): void {
   if (silenced) return;
   const now = Date.now();
   if (now - lastLoggedAt < ERROR_LOG_INTERVAL_MS) { suppressedCount++; return; }
@@ -167,7 +198,7 @@ redis.on('error', (err: Error & { code?: string }) => {
   lastLoggedAt = now;
   suppressedCount = 0;
   console.error(`Redis ${err.code ?? 'error'}: ${err.message}${repeats}`);
-});
+}
 
 export async function setWithExpiry(key: string, value: string, ttlSeconds: number): Promise<void> {
   await redis.set(key, value, 'EX', ttlSeconds);

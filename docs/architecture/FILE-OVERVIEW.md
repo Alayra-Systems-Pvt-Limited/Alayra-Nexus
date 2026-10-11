@@ -29,7 +29,8 @@ for the layering rule and the request path.
 | `metrics.ts` | Prometheus registry and every recording helper |
 | `tracing.ts` | OpenTelemetry span for the upstream call; a no-op without an SDK |
 | `rateLimitKey.ts` | Per-credential key for the abuse guard |
-| `prisma.ts`, `redis.ts` | Client singletons |
+| `prisma.ts` | The database client singleton |
+| `redis.ts`, `kv/select.ts` | The key-value client: chosen on first use — a host's client from `configureCoreKv()`, else `REDIS_URL`, else the in-process store (`kv/memory.ts`) |
 
 ## `src/core/` — the gateway core's public surface
 
