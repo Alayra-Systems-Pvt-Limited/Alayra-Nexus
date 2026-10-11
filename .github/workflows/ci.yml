@@ -160,6 +160,11 @@ jobs:
       # the first would leave every engine-parity check unable to load its other half.
       - run: npm run db:generate
       - run: npm run build
+      # @alayrasystems/nexus-core, as a host would meet it: built from src/, packed, installed into an
+      # empty directory beside fastify alone, then loaded from CommonJS and ES modules, run against
+      # the storage conformance checks, and compiled against by a strict TypeScript consumer.
+      - name: Core package (build, pack, install, drive)
+        run: npm run smoke:core
 
   audit:
     name: Security audit
