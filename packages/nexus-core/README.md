@@ -16,7 +16,16 @@ are embedding Nexus routing in your own service and need it to use your own stor
 | **Key-value store** | `configureCoreKv(redisClient)` | An `ioredis` client, installed once at boot **before any other core call**. Installing it later throws. Without it, the core uses `REDIS_URL`, or an in-process store when that is unset. |
 | **The caller** | `TeamContext` / `CallerContext` | The core never authenticates. Your server checks the API key and passes the resolved team. |
 | **HTTP** | a Fastify 5 `reply` | `handleProxy(body, reply, teamKeyId, headers, team)` writes the response, streaming included. |
-| **`MASTER_ENCRYPTION_KEY`** | environment | 64 hex characters (32 bytes). `KeyRow.encryptedKey` is decrypted with it (AES-256-GCM, as the open-source gateway stores keys). **The core refuses to load without it.** |
+| **Key cipher** (optional) | `configureCoreCipher({ decrypt })` | How `KeyRow.encryptedKey` becomes the provider credential. `decrypt(ciphertext, { keyId, ownerTeamId })` is synchronous and runs on every routed request. Install it once at boot, before any other core call; installing it later, or twice, throws. |
+| **`MASTER_ENCRYPTION_KEY`** | environment | Only without a key cipher: 64 hex characters (32 bytes), and the default cipher opens `KeyRow.encryptedKey` with it (AES-256-GCM, as the open-source gateway stores keys). The core loads without it; the first key it opens then fails with a message naming the variable. |
+
+`TeamContext.isolation: 'byok-only'` serves a team only from keys it owns (`KeyRow.ownerTeamId`),
+never from the shared pool, even when it owns none. A request none of its keys can serve is answered
+403 with an OpenAI-style error whose `code` is `byok_key_required`, and `/v1/models` lists only the
+providers it holds a key for. Usage rows carry `teamId` (null for the master key).
+
+`PROVIDER_PRESETS` and `presetFor(slug)` are the gateway's table of known providers: default base
+URL, auth header and prefix, model-list path and key prefixes.
 
 Give the core its **own Redis database** (for example `redis://host:6379/1`). Its keys carry no
 prefix of yours, and an `ioredis` `keyPrefix` is not applied to the `SCAN` patterns the response-cache

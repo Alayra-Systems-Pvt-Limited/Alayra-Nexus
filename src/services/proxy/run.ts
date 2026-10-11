@@ -68,6 +68,7 @@ export function observe(run: ProxyRun, outcome: metrics.RequestOutcome, persist 
   if (outcome !== 'success' && persist) {
     void recordOutcome({
       outcome, latencyMs: elapsed, provider: run.routeProvider, modelName: run.routeModel, nexusTeamKeyId: run.teamKeyId,
+      teamId: run.team?.id,
     }).catch(() => {});
   }
 }

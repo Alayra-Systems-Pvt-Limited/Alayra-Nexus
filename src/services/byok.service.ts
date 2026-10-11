@@ -39,6 +39,8 @@ export async function countOwnedKeys(teamId: string): Promise<number> {
  */
 export async function resolveRequestScope(team: ScopeTeam | undefined | null): Promise<RoutingScope> {
   if (!team) return resolveScope(null, 0);
+  // A byok-only team's scope does not depend on how many keys it owns, so it costs no lookup.
+  if (team.isolation === 'byok-only') return resolveScope(team, 0);
   const owned = await countOwnedKeys(team.id);
   return resolveScope(team, owned);
 }

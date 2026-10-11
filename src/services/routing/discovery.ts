@@ -191,10 +191,11 @@ export async function discoverBestPool(
     if (scope.ownerTeamId) {
       const owned = await sweepModels(candidates, reserveTokens, scope.ownerTeamId, userId);
       if (owned) return owned;
-      // Hard isolation: exhausting your own keys is a 503, not a silent hand-off to
-      // credentials you did not bring.
-      if (!scope.fallbackToShared) return null;
     }
+    // Hard isolation: exhausting your own keys is a 503, not a silent hand-off to
+    // credentials you did not bring. Checked outside the owner test so that a scope which
+    // forbids the pool never reaches it, whatever its owner id (byok-only, P1.1).
+    if (!scope.fallbackToShared) return null;
     // Pass 2 — the shared pool.
     return sweepModels(candidates, reserveTokens, null, userId);
   }
@@ -223,7 +224,7 @@ export async function discoverBestPool(
   if (scope.ownerTeamId) {
     const owned = await legacySweepTiers(reserveTokens, scope.ownerTeamId, costWeight, priceOf, userId);
     if (owned) return owned;
-    if (!scope.fallbackToShared) return null;
   }
+  if (!scope.fallbackToShared) return null;
   return legacySweepTiers(reserveTokens, null, costWeight, priceOf, userId);
 }

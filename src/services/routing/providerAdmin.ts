@@ -15,6 +15,10 @@
  */
 
 import { coreStores } from '../../core/stores';
+// The open-source AES cipher directly, not the core's installable one (P1.1). Everything here is an
+// operator button in this gateway's own dashboard and is not part of the core's public surface, and
+// the check rows the ports return (KeyCheck, ProviderCheck) carry no key id or owner to hand a host
+// cipher. A host that installs its own cipher tests keys in its own vault instead.
 import { decrypt } from '../../lib/encryption';
 import { stripTrailingSlash, assertSafeUrl } from '../../lib/url';
 import { safeFetch } from '../../lib/safeFetch';

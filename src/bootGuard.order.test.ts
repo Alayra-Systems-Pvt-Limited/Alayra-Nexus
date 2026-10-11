@@ -38,11 +38,19 @@ function importsOf(source: string): string[] {
 }
 
 describe('bootGuard runs before anything can load an env file', () => {
-  it('imports nothing but lib/mode', () => {
+  it('imports nothing but lib/mode and lib/encryption', () => {
     // Anything else could reach @prisma/client transitively, and would then be evaluated BEFORE the
     // pin regardless of where the pin sits in this file. lib/mode is safe because it imports only
     // node:path — a property its own header commits to.
-    expect(importsOf(read('bootGuard.ts'))).toEqual(['./lib/mode']);
+    //
+    // lib/encryption joined in P1.1: the master-key check moved out of its import (so the core can
+    // load without the key) and into this guard (so the server still refuses to start without it).
+    // It is safe for the same reason, held by the next test: it imports node's crypto and nothing else.
+    expect(importsOf(read('bootGuard.ts'))).toEqual(['./lib/mode', './lib/encryption']);
+  });
+
+  it('lib/encryption, which it imports, imports nothing but node crypto', () => {
+    expect(importsOf(read('lib/encryption.ts'))).toEqual(['crypto']);
   });
 
   it('calls pinStorageEnv at module scope, not from an exported function', () => {

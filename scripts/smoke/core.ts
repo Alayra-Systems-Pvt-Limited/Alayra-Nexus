@@ -27,13 +27,13 @@
 //   3. both entries load from CommonJS and from ES modules, with the public names present
 //   4. the conformance checks pass against the in-memory stores, from the installed copy
 //   5. loading the package opens nothing: the process exits on its own
-//   6. without MASTER_ENCRYPTION_KEY it refuses to load, with the message the README promises
+//   6. without MASTER_ENCRYPTION_KEY it still loads and passes (P1.1): the key is needed only when
+//      the default cipher first opens a provider key, and a host may install its own cipher instead
 //   7. a strict TypeScript consumer compiles against the shipped declarations
 //
 // The temporary directory is this run's own scratch space and is removed at the end.
 
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -61,7 +61,7 @@ function run(cmd: string, args: string[], cwd: string, timeoutMs = 300_000, env:
 const PUBLIC_NAMES = [
   'configureCoreStores', 'coreStores', 'configureCoreKv', 'handleProxy', 'ProxyError',
   'withProviderStreamUsage', 'dispatchProxy', 'anthropicToOpenAI', 'createAnthropicReply',
-  'listServableModels', 'resolveRequestScope',
+  'listServableModels', 'resolveRequestScope', 'configureCoreCipher', 'PROVIDER_PRESETS', 'presetFor',
 ];
 const TESTING_NAMES = ['coreStoresConformance', 'runCoreStoresConformance', 'createMemoryCoreStores', 'CONFORMANCE_FIXTURE'];
 
@@ -76,6 +76,12 @@ const harness = {
   setup: async (f) => { const m = testing.createMemoryCoreStores(f); notes = m.notifications; return m.stores; },
   notifications: async () => notes,
 };
+// A host cipher installs once; a second install is refused (P1.1).
+core.configureCoreCipher({ decrypt: (_c, ctx) => 'plain-' + ctx.keyId });
+let refused = false;
+try { core.configureCoreCipher({ decrypt: () => '' }); } catch { refused = true; }
+if (!refused) { console.error('configureCoreCipher accepted a second cipher'); process.exit(5); }
+if (!Array.isArray(core.PROVIDER_PRESETS) || !core.presetFor('openai')) { console.error('provider presets missing'); process.exit(6); }
 testing.runCoreStoresConformance(harness).then((failed) => {
   console.log('conformance: ' + (testing.coreStoresConformance.length - failed.length) + '/' + testing.coreStoresConformance.length);
   for (const f of failed) console.error('  failed: ' + f.name + ': ' + (f.error && f.error.message));
@@ -92,8 +98,9 @@ console.log('esm named imports: ok');
 
 const TS_CONSUMER = `
 import {
-  configureCoreStores, configureCoreKv, handleProxy, ProxyError,
+  configureCoreStores, configureCoreKv, configureCoreCipher, handleProxy, ProxyError, PROVIDER_PRESETS,
   type CoreStores, type TeamContext, type CallerContext, type CompletionsBody, type KeyStore,
+  type KeyCipher, type ProviderPreset, type UsageRow,
 } from '@alayrasystems/nexus-core';
 import { createMemoryCoreStores, CONFORMANCE_FIXTURE, type CoreStoresHarness } from '@alayrasystems/nexus-core/testing';
 
@@ -101,11 +108,15 @@ const { stores } = createMemoryCoreStores(CONFORMANCE_FIXTURE);
 const typed: CoreStores = stores;
 const keys: KeyStore = typed.keys;
 configureCoreStores(() => typed);
-const team: TeamContext = { id: 'team-a', name: 'Alpha', budgetUsd: null, budgetPeriod: 'monthly' };
+const team: TeamContext = { id: 'team-a', name: 'Alpha', budgetUsd: null, budgetPeriod: 'monthly', isolation: 'byok-only' };
+const cipher: KeyCipher = { decrypt: (_c, ctx) => \`plain-\${ctx.keyId}-\${ctx.ownerTeamId ?? 'shared'}\` };
+configureCoreCipher(cipher);
+const presets: readonly ProviderPreset[] = PROVIDER_PRESETS;
+const teamOfRow = (r: UsageRow): string | null => r.teamId;
 const caller: CallerContext = { teamKeyId: 'tk-a', team };
 const body = { model: 'gpt-x', messages: [] } satisfies Partial<CompletionsBody>;
 const harness: CoreStoresHarness = { setup: async () => typed, notifications: async () => [] };
-export const used = [configureCoreKv, handleProxy, ProxyError, keys, caller, body, harness];
+export const used = [configureCoreKv, handleProxy, ProxyError, keys, caller, body, harness, presets, teamOfRow];
 `;
 
 const TS_CONFIG = JSON.stringify({
@@ -151,19 +162,17 @@ function main(): void {
     check('no database client is installed', dbClients.length === 0, dbClients.join(', '));
     console.log(`        ${readdirSync(nm).filter((d) => !d.startsWith('.')).length} top-level packages in node_modules`);
 
-    // 3–6. Load it, run the checks, and exit on our own. The core decrypts provider keys with a
-    // 64-hex MASTER_ENCRYPTION_KEY and refuses to load without one; a throwaway test key is used here.
-    const withKey = { ...process.env, MASTER_ENCRYPTION_KEY: randomBytes(32).toString('hex') };
+    // 3–6. Load it, run the checks, and exit on our own — with MASTER_ENCRYPTION_KEY UNSET. Until
+    // P1.1 this asserted the opposite: the package refused to load without the key. The check now
+    // runs on the default cipher's first use, so a host with its own cipher never needs the key.
     const noKey = { ...process.env };
     delete noKey.MASTER_ENCRYPTION_KEY;
     writeFileSync(join(work, 'check.cjs'), CJS_CHECK);
-    const bare = run(process.execPath, ['check.cjs'], work, 60_000, noKey);
-    check('without MASTER_ENCRYPTION_KEY it refuses to load, and says why', !bare.ok && bare.out.includes('MASTER_ENCRYPTION_KEY must be exactly 64 hex characters'));
-    const cjs = run(process.execPath, ['check.cjs'], work, 60_000, withKey);
-    check('CommonJS: every public name loads and the conformance checks pass', cjs.ok, cjs.out.trim());
+    const cjs = run(process.execPath, ['check.cjs'], work, 60_000, noKey);
+    check('CommonJS, without MASTER_ENCRYPTION_KEY: every public name loads, a host cipher installs once, and the conformance checks pass', cjs.ok, cjs.out.trim());
     check('loading the package leaves nothing open (the process exited by itself)', cjs.status !== null);
     writeFileSync(join(work, 'check.mjs'), ESM_CHECK);
-    const esm = run(process.execPath, ['check.mjs'], work, 60_000, withKey);
+    const esm = run(process.execPath, ['check.mjs'], work, 60_000, noKey);
     check('ES modules: named imports resolve', esm.ok, esm.out.trim());
 
     // 7. A strict TypeScript consumer

@@ -43,6 +43,13 @@ export interface UsageRow {
   cached:         boolean;
   savedUsd:       number;
   nexusTeamKeyId: string | null;
+  /**
+   * The team the request was made for (P1.1): `TeamContext.id`, or null for the gateway's own master
+   * key. Carried so a host can attribute usage to a team (a hosted workspace) directly instead of
+   * through the team key. A store may persist it or not — the open-source TokenUsage table has no
+   * such column and attributes through `nexusTeamKeyId`; on every row the core writes the two agree.
+   */
+  teamId:         string | null;
   createdAt:      Date;
 }
 

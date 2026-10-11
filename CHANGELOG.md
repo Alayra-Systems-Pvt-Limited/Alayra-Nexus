@@ -9,6 +9,34 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+
+- **`@alayrasystems/nexus-core`: hosts can open provider keys their own way** (issue #196). A new
+  key-cipher port, installed once at boot with `configureCoreCipher({ decrypt })`, turns a stored
+  key into the credential sent upstream; it is handed the key's id and owning team. Without one, the
+  core uses the gateway's AES-256-GCM cipher, so existing keys open exactly as before. Installing a
+  cipher twice, or after the core has opened a key, throws.
+- **`@alayrasystems/nexus-core`: byok-only teams.** `TeamContext.isolation: 'byok-only'` serves a team
+  only from provider keys it owns, never from the shared pool, even when it owns none (sticky
+  routing included). When none of its keys can serve a request, the answer is a 403 with an
+  OpenAI-style error, code `byok_key_required`, naming the provider to add a key for, instead of a
+  503 that says to retry. If its own keys are only busy, the 503 stays. `/v1/models` lists only the
+  providers it holds a key for (the auto-route entry is always listed). Teams without the setting,
+  which is every team in the open-source gateway, behave exactly as before.
+- **`@alayrasystems/nexus-core`: usage rows carry the team.** `UsageRow.teamId` is the caller's team,
+  or null for the gateway's own master key, so a host can attribute usage without going through team
+  keys. The open-source database stores exactly the columns it stored before (no migration); the
+  conformance kit checks the field is accepted, and kept by a store that keeps it.
+- **`@alayrasystems/nexus-core` exports the provider presets** (`PROVIDER_PRESETS`, `presetFor`), so a
+  host's provider list is the gateway's own table rather than a copy.
+
+### Changed
+
+- **`@alayrasystems/nexus-core` loads without `MASTER_ENCRYPTION_KEY`.** The key is now checked the
+  first time it is needed, with the same error message. The gateway server still refuses to start
+  without a valid key: it now checks before anything starts listening and prints how to generate one,
+  instead of exiting with a stack trace.
+
 ### Fixed
 
 - **A new provider key now takes traffic straight away on PostgreSQL** (issue #195). Routing
@@ -23,6 +51,10 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   npm now takes a few minutes to list a new version, and the 1.6.6 release failed on that wait
   although both packages had published correctly. Both checks (gateway and core) stop at the
   first success, so a normal release is no slower.
+- **`smoke:core` now loads the packed core with `MASTER_ENCRYPTION_KEY` unset** and requires it to
+  load, install a key cipher once and pass the conformance checks. It used to assert the opposite
+  (that the package refused to load). A new test runs the server's boot guard in a child process to
+  prove the server still refuses to start without the key.
 
 ## [1.6.6] - 2026-10-11
 

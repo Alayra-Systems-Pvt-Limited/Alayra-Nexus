@@ -153,7 +153,8 @@ function legacyPoolEntries(providers: Awaited<ReturnType<typeof getActiveProvide
  * Auto is always present, even on a gateway with nothing configured. It is the honest
  * answer to "what can I send you" — the request will 503 with a message about configuring
  * a provider, which is a far better failure than an empty list that reads as a broken
- * endpoint.
+ * endpoint. The same holds for a byok-only team with no keys (P1.1): auto is listed, and sending
+ * it is answered 403 `byok_key_required`, which tells the caller exactly what to add.
  */
 export async function listServableModels(scope?: RoutingScope | null): Promise<CatalogEntry[]> {
   const models = await servableRegistryModels(scope);
@@ -173,7 +174,10 @@ export async function listServableModels(scope?: RoutingScope | null): Promise<C
   // embedding model registered alongside a chat pool serve chat from that pool while this
   // listing denied any chat model existed.
   if (!models.some((m) => m.capabilities.includes('chat'))) {
-    entries.push(...legacyPoolEntries(await getActiveProviders()));
+    const legacy = legacyPoolEntries(await getActiveProviders());
+    // A byok-only team (P1.1) is shown only pools of providers it holds a key for; with no keys, none.
+    const owned = scope?.byokOnly && scope.ownerTeamId ? await ownedProviderSlugs(scope.ownerTeamId) : null;
+    entries.push(...(owned ? legacy.filter((e) => owned.has(e.provider)) : legacy));
   }
 
   return [

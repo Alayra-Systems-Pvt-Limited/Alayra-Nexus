@@ -131,6 +131,22 @@ describe('recordOutcome — a request that did not succeed', () => {
   });
 });
 
+// The row carries the caller's team itself (P1.1), so a host attributes usage to a hosted
+// workspace without joining through a team key. The gateway's own master key has no team.
+describe('usage rows carry the team', () => {
+  it('a team request records its team id, success or failure', async () => {
+    await recordTokenUsage({ ...base, nexusTeamKeyId: 'tk-1', teamId: 'team-1' });
+    await recordOutcome({ outcome: 'client_error', latencyMs: 2, nexusTeamKeyId: 'tk-1', teamId: 'team-1' });
+    expect(vi.mocked(emit).mock.calls.map(([row]) => row.teamId)).toEqual(['team-1', 'team-1']);
+  });
+
+  it('a master-key request records null, never an empty string', async () => {
+    await recordTokenUsage({ ...base });
+    await recordOutcome({ outcome: 'no_capacity', latencyMs: 2 });
+    expect(vi.mocked(emit).mock.calls.map(([row]) => row.teamId)).toEqual([null, null]);
+  });
+});
+
 // The team name arrives with the caller (P0.5a) instead of a team-table read inside the core, so
 // a budget alert is worded the same way while the request path stays free of a database client.
 describe('recordTokenUsage — a budget threshold alert', () => {

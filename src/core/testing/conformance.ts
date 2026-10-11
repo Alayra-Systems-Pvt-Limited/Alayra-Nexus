@@ -27,13 +27,16 @@ import { CONFORMANCE_FIXTURE as F, NEVER_USED_FIXTURE, T0, hoursAfterT0 } from '
 import { keyStoreCases } from './conformanceKeys';
 import type { ConformanceCase, CoreStoresHarness } from './conformanceTypes';
 
+/** The team each fixture team key belongs to: a row's teamId always agrees with its key (P1.1). */
+const TEAM_OF_KEY: Record<string, string> = Object.fromEntries(F.teamKeys.map((k) => [k.id, k.teamId]));
+
 /** A usage row with every column filled; only what a check varies is passed in. */
 function usageRow(id: string, nexusTeamKeyId: string | null, estimatedUsd: number, createdAt: Date): UsageRow {
   return {
     id, sessionId: `s-${id}`, modelId: 'gpt-x', modelName: 'gpt-x', provider: 'openai',
     inputTokens: 10, outputTokens: 5, totalTokens: 15, unit: 'token', quantity: 0,
     estimatedUsd, outcome: 'success', latencyMs: 120, cached: false, savedUsd: 0,
-    nexusTeamKeyId, createdAt,
+    nexusTeamKeyId, teamId: nexusTeamKeyId === null ? null : TEAM_OF_KEY[nexusTeamKeyId] ?? null, createdAt,
   };
 }
 
@@ -128,6 +131,20 @@ const recordCases: ConformanceCase[] = [
       await s.usage.insertBatch(USAGE.slice(0, 2));
       await s.usage.insertBatch(USAGE);                           // u-1 and u-2 again, with the rest
       assert.equal(await s.usage.teamSpendSince('team-a', T0), 2.5);
+    },
+  },
+  {
+    // P1.1. Every store must accept the column; one that keeps it must hand it back unchanged. A store
+    // with nowhere to keep it (no `usageRows` in its harness) is held to the first half only.
+    name: "usage.insertBatch: a row's teamId is accepted, and kept by a store that keeps it",
+    run: async (h) => {
+      const s = await h.setup(F);
+      await s.usage.insertBatch(USAGE);
+      assert.equal(await s.usage.teamSpendSince('team-a', T0), 2.5);
+      if (!h.usageRows) return;
+      const stored = new Map((await h.usageRows()).map((r) => [r.id, r.teamId]));
+      assert.deepEqual(USAGE.map((r) => stored.get(r.id)), USAGE.map((r) => r.teamId));
+      assert.deepEqual(USAGE.map((r) => r.teamId), ['team-a', 'team-a', 'team-a', 'team-a', 'team-b', null]);
     },
   },
   {
