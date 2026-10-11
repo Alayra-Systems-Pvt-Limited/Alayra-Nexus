@@ -101,7 +101,7 @@ export function routeUsage(
 ): Parameters<typeof recordTokenUsage>[0] {
   return {
     sessionId, modelId: route.modelId ?? route.modelString, modelName: route.modelString, provider: route.providerSlug,
-    inputTokens, outputTokens, nexusTeamKeyId: run.teamKeyId, teamId: run.team?.id,
+    inputTokens, outputTokens, nexusTeamKeyId: run.teamKeyId, teamId: run.team?.id, teamName: run.team?.name,
     teamBudgetPeriod: run.team?.budgetPeriod, teamBudgetUsd: run.team?.budgetUsd, latencyMs: Date.now() - run.t0,
   };
 }

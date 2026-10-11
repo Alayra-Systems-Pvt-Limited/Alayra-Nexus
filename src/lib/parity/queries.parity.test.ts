@@ -28,8 +28,8 @@ import {
   ANALYTICS_TOTALS, ANALYTICS_BY_DAY, ANALYTICS_BY_MODEL,
   ANALYTICS_BY_PROVIDER, ANALYTICS_BY_MODALITY, ANALYTICS_BY_OUTCOME,
 } from '../../services/analytics.service';
-import { CACHE_STATS } from '../../services/cache.service';
-import { USAGE_BY_DAY, USAGE_BY_TEAM, USAGE_BY_MODEL } from '../../services/token.service';
+import { CACHE_STATS } from '../../services/cacheStats.service';
+import { USAGE_BY_DAY, USAGE_BY_TEAM, USAGE_BY_MODEL } from '../../services/tokenAnalytics.service';
 import { TEAM_TOTALS, TEAM_BY_DAY, TEAM_BY_MODEL, TEAM_MEMBERS } from '../../services/teamStats.service';
 import { toDate } from '../dialect';
 

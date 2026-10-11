@@ -33,11 +33,10 @@ vi.mock('./notifications.service', () => ({ notificationsArmed: vi.fn(async () =
 vi.mock('./model.service',        () => ({ getModelRegistry: vi.fn(async () => []) }));
 vi.mock('./usagePipeline',        () => ({ emit: vi.fn() }));
 vi.mock('./budget.service',       () => ({ addSpend: vi.fn(async () => null), periodKey: vi.fn(() => 'w') }));
-vi.mock('./audit.service',        () => ({ isUsageAnonymized: vi.fn(async () => false) }));
+vi.mock('./usagePrivacy.service', () => ({ isUsageAnonymized: vi.fn(async () => false) }));
 
-import {
-  getUsageSummary, getUsageByTeamKey, getTimeSeriesByTeam, getTimeSeriesByModel, recordTokenUsage,
-} from './token.service';
+import { getUsageSummary, getUsageByTeamKey, getTimeSeriesByTeam, getTimeSeriesByModel } from './tokenAnalytics.service';
+import { recordTokenUsage } from './token.service';
 import { emit } from './usagePipeline';
 
 beforeEach(() => { vi.clearAllMocks(); });

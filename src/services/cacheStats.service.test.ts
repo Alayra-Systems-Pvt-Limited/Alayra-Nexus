@@ -25,12 +25,12 @@ const { queryRaw, countKeys, deleteKeys, getSetting, setSetting } = vi.hoisted((
 }));
 vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: { $queryRaw: queryRaw } }));
 vi.mock('../lib/redisScan', () => ({ countKeys, deleteKeys }));
-// cache.service transitively imports lib/responseCache, which imports the real ioredis client.
+// cacheStats.service transitively imports lib/responseCache, which imports the real ioredis client.
 // It is never called here, so an empty stub keeps module load from opening a connection.
 vi.mock('../lib/redis', () => ({ redis: {} }));
 vi.mock('./settings.service', () => ({ getSetting, setSetting }));
 
-import { getCacheStats, purgeResponseCache } from './cache.service';
+import { getCacheStats, purgeResponseCache } from './cacheStats.service';
 
 beforeEach(() => {
   queryRaw.mockReset(); countKeys.mockReset(); deleteKeys.mockReset();

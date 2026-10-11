@@ -278,8 +278,8 @@ export async function dispatchProxy(
 
   const usage = {
     sessionId: `${capability}-${Date.now()}`, modelId: route.modelId ?? route.modelString, modelName: route.modelString,
-    provider: route.providerSlug, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd,
-    latencyMs: Date.now() - t0,
+    provider: route.providerSlug, nexusTeamKeyId: teamKeyId, teamId: team?.id, teamName: team?.name,
+    teamBudgetPeriod: team?.budgetPeriod, teamBudgetUsd: team?.budgetUsd, latencyMs: Date.now() - t0,
   };
   if (billing) {
     // Non-token modality (image, speech): bill per unit, not per token. No admission

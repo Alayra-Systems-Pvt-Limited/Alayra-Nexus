@@ -23,7 +23,7 @@
 import { getSetting, setSetting } from './settings.service';
 import { safeFetch } from '../lib/safeFetch';
 import { redis }                  from '../lib/redis';
-import { recordNotification }     from './notificationFeed.service';
+import { recordNotification }     from './notificationRecord.service';
 import { encrypt, decrypt, maskKey } from '../lib/encryption';
 import {
   normalizeNotificationConfig, coalesceRedisKey,

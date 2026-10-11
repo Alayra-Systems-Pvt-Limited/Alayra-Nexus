@@ -21,7 +21,7 @@
 // audit data is produced lives here.
 
 import { prisma } from '../lib/prisma';
-import { getUsageSummary, getUsageByTeamKey } from './token.service';
+import { getUsageSummary, getUsageByTeamKey } from './tokenAnalytics.service';
 import { queryAuditLogs } from './audit.service';
 import { getModelRegistry } from './model.service';
 import { lastNDates, fillSeries } from '../lib/series';

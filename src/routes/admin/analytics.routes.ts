@@ -16,7 +16,7 @@
 
 // Usage totals, per-team breakdowns, and daily time series.
 import { FastifyInstance }      from 'fastify';
-import { getUsageSummary, getUsageByTeamKey, getTimeSeriesByTeam, getTimeSeriesByModel } from '../../services/token.service';
+import { getUsageSummary, getUsageByTeamKey, getTimeSeriesByTeam, getTimeSeriesByModel } from '../../services/tokenAnalytics.service';
 import { getAnalyticsOverview, type AnalyticsPeriod } from '../../services/analytics.service';
 import { prisma }              from '../../lib/prisma';
 import { adminGuard }           from './guard';

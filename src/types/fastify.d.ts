@@ -36,6 +36,8 @@ declare module 'fastify' {
     /** Present when the key belongs to a Team — carries what budget enforcement and BYOK scoping need. */
     team?: {
       id:           string;
+      /** Display name, carried so a budget alert needs no team lookup (P0.5a). */
+      name:         string;
       budgetUsd:    number | null;
       budgetPeriod: string;
       byokFallback: boolean;

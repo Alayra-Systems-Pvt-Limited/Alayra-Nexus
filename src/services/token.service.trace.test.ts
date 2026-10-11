@@ -37,7 +37,7 @@ vi.mock('../lib/prisma', () => ({
 }));
 // Reached via `isUsageAnonymized`, which reads a setting. Nothing to do with pricing, and stubbing
 // it is what keeps this file about the one thing it is about.
-vi.mock('./audit.service', () => ({ isUsageAnonymized: vi.fn(async () => false) }));
+vi.mock('./usagePrivacy.service', () => ({ isUsageAnonymized: vi.fn(async () => false) }));
 vi.mock('./usagePipeline',        () => ({ emit: vi.fn() }));
 vi.mock('./budget.service',       () => ({ addSpend: vi.fn(async () => 0), periodKey: () => 'k' }));
 vi.mock('./notifications.service', () => ({ notify: vi.fn(async () => {}) }));

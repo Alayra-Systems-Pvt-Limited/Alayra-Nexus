@@ -23,6 +23,8 @@
 /** The team (or hosted tenant) a request is billed and scoped to. */
 export interface TeamContext {
   id:           string;
+  /** Display name, used only to word a budget alert (P0.5a). Absent = the alert names the id. */
+  name?:        string;
   budgetUsd:    number | null;
   budgetPeriod: string;
   byokFallback?: boolean;
