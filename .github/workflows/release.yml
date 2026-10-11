@@ -497,21 +497,25 @@ jobs:
         # correctly to both registries and this step still failed on a 404, reporting a complete
         # release as a broken one. A check that cannot tell "not public" from "not replicated yet"
         # is worse than no check at all, because the first thing anyone learns is to distrust it.
+        #
+        # Ten minutes (40 × 15 s), not two and a half: npm now answers a publish with "your package
+        # is being processed and may take a few minutes", and 1.6.6 took longer than 2.5 minutes to
+        # appear. The loop stops at the first success, so a fast registry costs nothing extra.
         run: |
           set -euo pipefail
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
 
-          for attempt in $(seq 1 10); do
+          for attempt in $(seq 1 40); do
             if npm --userconfig=/dev/null view "$NAME@$VERSION" version; then
               echo "::notice::$NAME@$VERSION is publicly visible."
               exit 0
             fi
-            echo "not visible yet (attempt $attempt/10) — waiting for the registry to replicate"
+            echo "not visible yet (attempt $attempt/40) — waiting for the registry to replicate"
             sleep 15
           done
 
-          # Two and a half minutes is long past replication, so this is a real visibility problem.
+          # Ten minutes is long past even npm's slow processing, so this is a real visibility problem.
           echo "::error::$NAME@$VERSION is not publicly visible."
           echo "If it did publish, the package is probably restricted: check 'npm access list packages'."
           exit 1
@@ -580,12 +584,12 @@ jobs:
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
 
-          for attempt in $(seq 1 10); do
+          for attempt in $(seq 1 40); do
             if npm --userconfig=/dev/null view "$NAME@$VERSION" version; then
               echo "::notice::$NAME@$VERSION is publicly visible."
               exit 0
             fi
-            echo "not visible yet (attempt $attempt/10) — waiting for the registry to replicate"
+            echo "not visible yet (attempt $attempt/40) — waiting for the registry to replicate"
             sleep 15
           done
 
