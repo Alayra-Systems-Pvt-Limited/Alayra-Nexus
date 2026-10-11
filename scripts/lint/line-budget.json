@@ -45,7 +45,6 @@
   "src/services/proxyDispatch.service.test.ts": 315,
   "src/services/proxyDispatch.service.ts": 306,
   "src/services/sso.service.ts": 389,
-  "src/services/token.service.ts": 454,
   "web/src/api.ts": 911,
   "web/src/pages/Health.test.tsx": 405,
   "web/src/pages/admin/People.tsx": 313,

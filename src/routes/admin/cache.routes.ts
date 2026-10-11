@@ -22,7 +22,7 @@
 // are audited under different slugs (cache.purge here, cache.flush there), so flush is
 // left exactly as it is for the old dashboard's parity.
 import { FastifyInstance } from 'fastify';
-import { getCacheStats, purgeResponseCache } from '../../services/cache.service';
+import { getCacheStats, purgeResponseCache } from '../../services/cacheStats.service';
 import { adminGuard, adminWriteGuard } from './guard';
 
 export default async function adminCacheRoutes(fastify: FastifyInstance) {

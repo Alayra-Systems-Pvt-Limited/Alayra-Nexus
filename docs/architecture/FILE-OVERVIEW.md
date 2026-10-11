@@ -31,6 +31,15 @@ for the layering rule and the request path.
 | `rateLimitKey.ts` | Per-credential key for the abuse guard |
 | `prisma.ts`, `redis.ts` | Client singletons |
 
+## `src/core/` — the gateway core's public surface
+
+| File | Responsibility |
+|---|---|
+| `index.ts` | The core's public entry: storage ports, caller context, and the request handlers. `npm run check:core-boundary` fails if anything reachable from it loads a database client, an adapter, a route or the server |
+| `ports/` | The five storage interfaces a host implements (keys, providers, usage, settings, notifications) |
+| `stores.ts` | Where a host installs its storage (`configureCoreStores`) and where the core finds it |
+| `context.ts` | The caller as the core sees it, already authenticated by the host |
+
 ## `src/services/` — side effects and configuration
 
 | File | Responsibility |
@@ -42,14 +51,19 @@ for the layering rule and the request path.
 | `adminAuth.service.ts` | Sessions, login lockout, TOTP enrolment, recovery codes, admin API tokens |
 | `preflight.service.ts` | Verifies Postgres and Redis are reachable before the server starts |
 | `budget.service.ts` | Per-team period spend, Redis-tracked and seeded from usage history |
-| `token.service.ts` | Costs a request and emits a usage event; analytics queries |
+| `token.service.ts` | Costs a request, charges the team budget, raises a threshold alert, and emits a usage event (request path) |
+| `tokenAnalytics.service.ts` | Usage summaries, per-team-key totals and day-bucketed series for the dashboard (never on the request path) |
 | `usagePipeline.ts` | Buffers usage events and writes them in batches off the request path |
 | `settings.service.ts` | Settings read/write with a Redis cache |
 | `ssrf.service.ts`, `guardrails.service.ts`, `routing.service.ts`, `cache.service.ts` | Feature config: settings + env, off/neutral by default |
+| `cacheStats.service.ts` | The Caching section's live entry count, recent savings and purge |
 | `model.service.ts` | The model registry and its cache |
 | `notifications.service.ts` | Notification config (encrypted Resend key) + delivery: one email/webhook per event per window, fire-and-forget, off the request path |
+| `notificationRecord.service.ts` | Records a raised alert in the in-app feed, coalesced per window, through the notification port |
+| `notificationFeed.service.ts` | The alert feed's reads, read-state and retention prune |
 | `sso.service.ts` | Enterprise SSO (OIDC): IdP config (encrypted client secret), SSRF-guarded discovery, the redirect handshake, `jose` ID-token verification, and role-mapped session mint |
 | `audit.service.ts` | Audit trail: a buffered append-only writer (the usage-pipeline pattern), the filtered read, the compliance config (retention windows + anonymization), and the retention prune |
+| `usagePrivacy.service.ts` | The usage anonymization flag, memoized for the request path |
 
 ## `src/routes/` — HTTP surface
 

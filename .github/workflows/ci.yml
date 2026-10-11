@@ -44,6 +44,11 @@ jobs:
       # dashboard writes a colour literal that bypasses the tokens.
       - name: Check design tokens (contrast + no stray colours)
         run: npm run check:tokens
+      # The gateway core (src/core/index.ts and everything it loads) is what the hosted gateway and
+      # @alayrasystems/nexus-core run. This fails if any import chain from it reaches a database
+      # client, a host adapter, a route, the server, or a package not on its allowlist.
+      - name: Check the core boundary (no database client on the request path)
+        run: npm run check:core-boundary
 
   typecheck:
     name: Typecheck

@@ -48,7 +48,7 @@ vi.mock('../lib/encryption', () => ({
 // config and delivery. Recording is asserted, not exercised — what matters at this seam is that an
 // alert reaches the feed even when nothing is delivered.
 const recordNotification = vi.fn(async () => true);
-vi.mock('./notificationFeed.service', () => ({
+vi.mock('./notificationRecord.service', () => ({
   recordNotification: (...a: unknown[]) => recordNotification(...(a as [])),
 }));
 

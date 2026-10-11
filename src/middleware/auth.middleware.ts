@@ -54,6 +54,7 @@ export async function verifyApiKey(request: FastifyRequest, reply: FastifyReply)
     if (teamKey.team) {
       request.team = {
         id:           teamKey.team.id,
+        name:         teamKey.team.name,
         budgetUsd:    teamKey.team.budgetUsd,
         budgetPeriod: teamKey.team.budgetPeriod,
         byokFallback: teamKey.team.byokFallback,

@@ -100,6 +100,17 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   `hsl()` colour written anywhere in `web/src` outside the token file. The undefined
   `--radius-md` the security page relied on is now defined.
 
+- **The request path no longer loads the database client.** Four services each mixed a request-path
+  write with dashboard queries, so the proxy pulled in Prisma through them. Each is split in two:
+  usage recording stays in `token.service` and its analytics move to `tokenAnalytics.service`;
+  cache settings stay in `cache.service` and its stats and purge move to `cacheStats.service`;
+  recording an alert moves to `notificationRecord.service`; and the anonymization flag moves to
+  `usagePrivacy.service`. A budget alert now takes the team's name from the caller context, which
+  auth already loads, instead of reading the team table. `src/core/index.ts` is the core's public
+  entry, and a new `npm run check:core-boundary` CI step walks every runtime import from it and
+  fails on a database client, an adapter, a route, the server, or a package outside a four-entry
+  allowlist. No behaviour change.
+
 ## [1.6.5] - 2026-09-20
 
 ### Added

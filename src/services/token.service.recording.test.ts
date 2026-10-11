@@ -26,17 +26,17 @@ const REGISTRY = [
   { id: 'openai-tts',    modelString: 'tts-1',  speechPricePer1MChars: 15 },
 ];
 
-vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: { team: { findUnique: vi.fn(async () => null) } } }));
 vi.mock('../lib/redis', () => ({ redis: {} }));
 vi.mock('./notifications.service', () => ({ notificationsArmed: vi.fn(async () => false), notify: vi.fn(async () => {}) }));
 vi.mock('./model.service',        () => ({ getModelRegistry: vi.fn(async () => REGISTRY) }));
 vi.mock('./usagePipeline',        () => ({ emit: vi.fn() }));
 vi.mock('./budget.service',       () => ({ addSpend: vi.fn(async () => null), periodKey: vi.fn(() => 'w') }));
-vi.mock('./audit.service',        () => ({ isUsageAnonymized: vi.fn(async () => false) }));
+vi.mock('./usagePrivacy.service', () => ({ isUsageAnonymized: vi.fn(async () => false) }));
 
 import { recordTokenUsage, recordOutcome } from './token.service';
 import { emit } from './usagePipeline';
 import { addSpend } from './budget.service';
+import { notify } from './notifications.service';
 
 const lastEvent = () => vi.mocked(emit).mock.calls[0][0];
 
@@ -46,7 +46,7 @@ const base = {
   inputTokens: 1000, outputTokens: 500,
 };
 
-beforeEach(() => { vi.mocked(emit).mockReset(); vi.mocked(addSpend).mockReset(); });
+beforeEach(() => { vi.mocked(emit).mockReset(); vi.mocked(addSpend).mockReset(); vi.mocked(notify).mockClear(); });
 
 describe('recordTokenUsage — a normal (uncached) request', () => {
   it('bills the model price and saves nothing', async () => {
@@ -128,5 +128,28 @@ describe('recordOutcome — a request that did not succeed', () => {
   it('attributes the failure to the calling team key', async () => {
     await recordOutcome({ outcome: 'no_capacity', latencyMs: 7, nexusTeamKeyId: 'tk-1' });
     expect(lastEvent()).toMatchObject({ outcome: 'no_capacity', nexusTeamKeyId: 'tk-1' });
+  });
+});
+
+// The team name arrives with the caller (P0.5a) instead of a team-table read inside the core, so
+// a budget alert is worded the same way while the request path stays free of a database client.
+describe('recordTokenUsage — a budget threshold alert', () => {
+  // $8.00 spent of a $10 cap, reached by this request: the 80% line is crossed here.
+  const crossing = { ...base, teamId: 't-1', teamBudgetPeriod: 'monthly', teamBudgetUsd: 10 };
+  const alertTitle = async (): Promise<string> => {
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    return (vi.mocked(notify).mock.calls[0][0] as { title: string }).title;
+  };
+
+  it('names the team the caller resolved', async () => {
+    vi.mocked(addSpend).mockResolvedValueOnce(8);
+    await recordTokenUsage({ ...crossing, teamName: 'Growth' });
+    expect(await alertTitle()).toContain('team "Growth" reached 80%');
+  });
+
+  it('falls back to the team id when the host sent no name', async () => {
+    vi.mocked(addSpend).mockResolvedValueOnce(8);
+    await recordTokenUsage(crossing);
+    expect(await alertTitle()).toContain('team "t-1" reached 80%');
   });
 });

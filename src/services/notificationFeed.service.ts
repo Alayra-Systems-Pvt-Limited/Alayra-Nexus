@@ -21,50 +21,16 @@
 // default install. So recording is deliberately independent of delivery: every raised alert lands
 // here, and the email/webhook config gates only whether it *also* leaves the building.
 //
-// This module owns storage and read-state only. Config and delivery stay in notifications.service,
-// which calls in here — the dependency runs one way, so there is no cycle and the coalescing
-// window is passed in rather than read back out of the config.
+// This module owns reading, read-state and pruning. Recording an alert lives in
+// notificationRecord.service.ts (P0.5a), which notifications.service calls with the coalescing
+// window — the dependency runs one way, so there is no cycle. Config and delivery stay in
+// notifications.service.
 
-import { randomUUID } from 'crypto';
 import { prisma }     from '../lib/prisma';
-import { coreStores } from '../core/stores';
-import { redis }      from '../lib/redis';
-import { sectionFor, type NotifyMessage } from '../lib/notify';
-
-// A separate namespace from the send guard (`nexus:notify:sent:`) on purpose. The send path
-// *releases* its claim when a configured channel failed, so the next occurrence can retry the
-// email — sharing one key would make that release re-insert a duplicate feed entry for an alert
-// already sitting in the bell.
-const FEED_CLAIM_PREFIX = 'nexus:notify:feed:';
 
 export interface NotificationRow {
   id: string; type: string; severity: string; title: string; body: string;
   section: string | null; read: boolean; createdAt: string;
-}
-
-/**
- * Record an alert in the feed, coalesced per window by its `dedupeKey` exactly as delivery is, so a
- * flapping key leaves one entry rather than a storm. Returns whether a row was actually written
- * (false = an identical alert is already in this window). Never throws: the feed is an operator
- * convenience and must never disturb the caller, which is always fire-and-forget off the hot path.
- */
-export async function recordNotification(msg: NotifyMessage, windowSeconds: number): Promise<boolean> {
-  try {
-    const claimed = await redis.set(`${FEED_CLAIM_PREFIX}${msg.dedupeKey}`, '1', 'EX', windowSeconds, 'NX');
-    if (claimed === null) return false;
-    await (await coreStores()).notifications.record({
-      id:        randomUUID(),
-      type:      msg.type,
-      severity:  msg.severity,
-      title:     msg.title,
-      body:      msg.body,
-      section:   sectionFor(msg.type),
-      dedupeKey: msg.dedupeKey,
-    });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 const MAX_LIMIT = 100;

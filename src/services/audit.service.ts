@@ -26,12 +26,13 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { createManyIgnoringDuplicates } from '../lib/bulkInsert';
 import { getSetting, setSetting } from './settings.service';
+import { SETTING_ANONYMIZE_USAGE, isUsageAnonymized, rememberUsageAnonymized } from './usagePrivacy.service';
 import { pruneNotifications } from './notificationFeed.service';
 import { anonymizeIp, clampRetentionDays, DEFAULT_RETENTION_DAYS, MAX_RETENTION_DAYS } from '../lib/audit';
 
 export const SETTING_AUDIT_RETENTION = 'AUDIT_RETENTION_DAYS';
 export const SETTING_USAGE_RETENTION = 'USAGE_RETENTION_DAYS';
-export const SETTING_ANONYMIZE_USAGE = 'ANONYMIZE_USAGE';
+export { SETTING_ANONYMIZE_USAGE, isUsageAnonymized };
 export const SETTING_NOTIFICATION_RETENTION = 'NOTIFICATION_RETENTION_DAYS';
 
 // The alert feed is operational noise, not a record: a months-old "a key was banned" is stale, and
@@ -80,20 +81,6 @@ export interface ComplianceConfig {
 
 const isOn = (v: string | null): boolean => /^(1|true|yes|on)$/i.test((v ?? '').trim());
 
-// The anonymization flag is read on the usage hot path (per request, to decide whether to hash
-// a session id), so it is memoized in-process for a few seconds on top of the Redis-cached
-// setting — a config change still takes effect promptly, but a request never blocks on it.
-let anonMemo = { value: false, at: 0 };
-const ANON_MEMO_MS = 30_000;
-
-/** Whether usage records should be de-identified. Cheap enough to call per request. */
-export async function isUsageAnonymized(): Promise<boolean> {
-  const now = Date.now();
-  if (now - anonMemo.at < ANON_MEMO_MS) return anonMemo.value;
-  anonMemo = { value: isOn(await getSetting(SETTING_ANONYMIZE_USAGE)), at: now };
-  return anonMemo.value;
-}
-
 export async function getComplianceConfig(): Promise<ComplianceConfig> {
   const [audit, usage, notif, anon] = await Promise.all([
     getSetting(SETTING_AUDIT_RETENTION),
@@ -124,7 +111,7 @@ export async function setComplianceConfig(input: {
       setSetting(SETTING_NOTIFICATION_RETENTION, String(clampRetentionDays(input.notificationRetentionDays))),
     ]),
   ]);
-  anonMemo = { value: input.anonymizeUsage, at: Date.now() }; // reflect the change at once
+  rememberUsageAnonymized(input.anonymizeUsage); // reflect the change at once
 }
 
 // ── Buffered append-only writer ───────────────────────────────────────────────

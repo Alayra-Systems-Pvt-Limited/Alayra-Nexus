@@ -33,7 +33,7 @@ const { getUsageSummary, getUsageByTeamKey, queryAuditLogs, getModelRegistry } =
   queryAuditLogs:   vi.fn(),
   getModelRegistry: vi.fn(),
 }));
-vi.mock('./token.service', () => ({ getUsageSummary, getUsageByTeamKey }));
+vi.mock('./tokenAnalytics.service', () => ({ getUsageSummary, getUsageByTeamKey }));
 vi.mock('./audit.service', () => ({ queryAuditLogs }));
 vi.mock('./model.service', () => ({ getModelRegistry }));
 

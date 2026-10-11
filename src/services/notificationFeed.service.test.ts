@@ -41,8 +41,9 @@ const { claimed, redisSet, prismaMock } = vi.hoisted(() => {
 vi.mock('../lib/redis',  () => ({ redis: { set: (...a: unknown[]) => redisSet(...(a as [string])) } }));
 vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: prismaMock }));
 
+import { recordNotification } from './notificationRecord.service';
 import {
-  recordNotification, listNotifications, markNotificationRead, markAllNotificationsRead, pruneNotifications,
+  listNotifications, markNotificationRead, markAllNotificationsRead, pruneNotifications,
 } from './notificationFeed.service';
 import { keyBannedMessage, budgetThresholdMessage } from '../lib/notify';
 
