@@ -64,6 +64,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   clients out of `src/core/`. This is the seam the hosted gateway uses to run the same core on its
   own tenant storage; there is no behaviour change for self-hosted gateways.
 
+- **The proxy and the router are split into one module per stage.** `handleProxy` is now a short
+  orchestrator over `src/services/proxy/`: admission, input guardrails, the response cache, the
+  provider call, and three delivery paths (JSON, buffered-safe, live stream). The router behind
+  `nexus.service` is split the same way into `src/services/routing/`: the route, key picking,
+  discovery, key health, and the operator checks. `nexus.service` and `completionsProxy.service`
+  keep every export they had, so no caller or test changed. The dashboard's key test, model check
+  and model fetch now read through the key and provider ports instead of the database client. A
+  new `npm run check:lines` CI step fails any source file over 300 lines; the 58 files already over
+  it are listed in `scripts/lint/line-budget.json` and may only shrink.
+
 ## [1.6.5] - 2026-09-20
 
 ### Added

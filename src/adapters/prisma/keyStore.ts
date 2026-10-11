@@ -21,6 +21,7 @@
 
 import { prisma } from '../../lib/prisma';
 import type { KeyRow, KeyStore } from '../../core/ports';
+import { PROVIDER_CHECK_SELECT } from './providerStore';
 
 /** Usable = may be routed to. Banned keys never are; cooling keys may probe via the breaker. */
 const USABLE = { in: ['active', 'cooling'] };
@@ -93,4 +94,10 @@ export const prismaKeyStore: KeyStore = {
   countUsable: () => prisma.nexusKey.count({ where: { status: USABLE } }),
 
   listStates: () => prisma.nexusKey.findMany({ select: { status: true, coolingUntil: true } }),
+
+  // ── Operator checks ───────────────────────────────────────────────────────
+  findForCheck: (keyId) => prisma.nexusKey.findUnique({
+    where:  { id: keyId },
+    select: { encryptedKey: true, provider: { select: PROVIDER_CHECK_SELECT } },
+  }),
 };

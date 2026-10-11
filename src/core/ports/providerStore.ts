@@ -30,6 +30,23 @@ export interface ProviderRow {
   extraHeaders: string | null;
 }
 
+/** What an operator's credential and model checks read from a pool. */
+export interface ProviderCheckRow {
+  baseUrl: string | null;
+  provider: string;
+  authHeader: string;
+  authPrefix: string | null;
+  extraHeaders: string | null;
+  modelFetchUrl: string | null;
+  modelIdPath: string;
+}
+
+/** A pool for an operator check, with the ciphertext of its least-recently-used active key. */
+export interface ProviderCheck extends ProviderCheckRow {
+  /** Still encrypted; null when the pool has no active key. */
+  activeKey: string | null;
+}
+
 /** A pool that names a preferred model, as the model registry merges it in. */
 export interface PreferredModelPool {
   provider: string;
@@ -47,4 +64,7 @@ export interface ProviderStore {
 
   /** How many pools are active, for the pool gauge. */
   countActive(): Promise<number>;
+
+  /** One pool for an operator check (validate a model, fetch its models), or null when gone. */
+  findForCheck(providerId: string): Promise<ProviderCheck | null>;
 }
