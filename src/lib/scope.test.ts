@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveScope, isIsolated, isByok, SHARED_NAMESPACE } from './scope';
+import { resolveScope, isIsolated, isByok, isByokOnly, SHARED_NAMESPACE } from './scope';
 
 describe('resolveScope', () => {
   it('sends a request with no team to the shared pool', () => {
@@ -42,5 +42,28 @@ describe('resolveScope', () => {
 
   it('keeps a shared-pool team on the shared namespace', () => {
     expect(resolveScope({ id: 't1' }, 0).namespace).toBe(SHARED_NAMESPACE);
+  });
+});
+
+// ── byok-only (P1.1) ──
+describe('resolveScope — a byok-only team', () => {
+  it('is scoped to its own keys with no fall-back, even when it owns none', () => {
+    for (const owned of [0, 3]) {
+      const scope = resolveScope({ id: 't1', isolation: 'byok-only' }, owned);
+      expect(scope).toEqual({ ownerTeamId: 't1', fallbackToShared: false, namespace: 'team:t1', byokOnly: true });
+      expect(isIsolated(scope)).toBe(true);
+      expect(isByokOnly(scope)).toBe(true);
+    }
+  });
+
+  it('ignores byokFallback: true — byok-only is the stronger setting', () => {
+    expect(resolveScope({ id: 't1', byokFallback: true, isolation: 'byok-only' }, 2).fallbackToShared).toBe(false);
+  });
+
+  it('leaves every other team exactly as before', () => {
+    expect(isByokOnly(resolveScope({ id: 't1' }, 0))).toBe(false);
+    expect(isByokOnly(resolveScope({ id: 't1', byokFallback: false }, 1))).toBe(false);
+    expect(resolveScope({ id: 't1' }, 0)).toEqual({ ownerTeamId: null, fallbackToShared: true, namespace: SHARED_NAMESPACE });
+    expect(isByokOnly(resolveScope(null, 0))).toBe(false);
   });
 });

@@ -29,6 +29,8 @@ export type { ProviderStore, ProviderRow, PreferredModelPool, ProviderCheckRow, 
 export type { UsageStore, UsageRow } from './usageStore';
 export type { SettingsStore } from './settingsStore';
 export type { NotificationSink, NotificationRow } from './notificationSink';
+// Not a store, so not part of CoreStores: the cipher is installed on its own (core/cipher.ts).
+export type { KeyCipher, KeyCipherContext } from './keyCipher';
 
 export interface CoreStores {
   keys:          KeyStore;

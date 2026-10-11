@@ -26,9 +26,12 @@
 // the file, and it is why the import must stay in first position.
 //
 // It deliberately holds no logic. Resolution lives in lib/mode.ts, which is pure and exhaustively
-// tested; this only prints and exits, so there is nothing here worth a unit test.
+// tested; this only prints and exits. bootGuard.test.ts runs it in a child process, because the one
+// promise worth pinning is that the process exits: since P1.1 this is what refuses to start a
+// gateway without a valid MASTER_ENCRYPTION_KEY.
 
 import { resolveMode, describeMode, ephemeralWarning, pinStorageEnv, type ResolvedMode } from './lib/mode';
+import { assertMasterKey } from './lib/encryption';
 
 // Before anything else, and before `check()` below reads the environment.
 //
@@ -80,6 +83,24 @@ function check(): ResolvedMode {
       '  REDIS_URL=redis://host:6379',
       '',
       'The three-line Docker Compose quick start in the README brings both up for you.',
+    ]);
+  }
+
+  // ── The master key (P1.1) ──
+  // lib/encryption.ts used to throw on import without it, which stopped this server before it
+  // could listen — with a bare stack trace. It now checks on first use, so a library host can load
+  // the core without the variable; this keeps the server's refusal, and runs before any import that
+  // could open a port. Every stored provider key is sealed with it, so there is nothing to serve.
+  try {
+    assertMasterKey();
+  } catch {
+    die([
+      'MASTER_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes).',
+      'It encrypts every provider key this gateway stores. Generate one with:',
+      '',
+      `  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`,
+      '',
+      'and keep it safe: keys stored under one master key cannot be read with another.',
     ]);
   }
 

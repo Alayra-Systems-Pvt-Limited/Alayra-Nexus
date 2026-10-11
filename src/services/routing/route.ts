@@ -14,7 +14,8 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-import { decrypt, maskKey } from '../../lib/encryption';
+import { maskKey } from '../../lib/encryption';
+import { coreCipher } from '../../core/cipher';
 import type * as breaker from '../../lib/breaker';
 import { providerDefaultUrl } from '../../data/providers';
 import { SHARED_NAMESPACE, type RoutingScope } from '../../lib/scope';
@@ -84,7 +85,8 @@ export function buildRoute(
 ): Omit<NexusRoute, 'wasDowngrade' | 'sticky'> {
   // Decrypted once and masked from that, rather than read from the `maskedKey` column: the mask
   // then describes the key this route will actually authenticate with, and cannot drift from it.
-  const decryptedKey = decrypt(key.encryptedKey);
+  // Opened by the host's cipher when one is installed (P1.1), else the open-source AES default.
+  const decryptedKey = coreCipher().decrypt(key.encryptedKey, { keyId: key.id, ownerTeamId: key.ownerTeamId });
   return {
     keyId:        key.id,
     decryptedKey,

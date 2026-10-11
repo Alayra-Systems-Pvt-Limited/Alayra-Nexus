@@ -28,6 +28,8 @@ export interface MemoryCoreStores {
   stores: CoreStores;
   /** Every notification recorded, oldest first. The sink port itself is write-only. */
   notifications: NotificationRow[];
+  /** Every usage row stored, in insertion order, exactly as stored (teamId included). */
+  usageRows(): UsageRow[];
 }
 
 const usable = (k: FixtureKey): boolean => k.status === 'active' || k.status === 'cooling';
@@ -126,10 +128,12 @@ export function createMemoryCoreStores(fixture: CoreFixture): MemoryCoreStores {
     },
 
     // ── Usage: idempotent on id, as the pipeline's retries require ──
+    // A row is the team's by its own `teamId` when it carries one (P1.1), else through its team key —
+    // so a host with no team keys at all can still use these stores for budgets in its tests.
     usage: {
       insertBatch: async (rows) => { for (const r of rows) if (!usage.has(r.id)) usage.set(r.id, { ...r }); },
       teamSpendSince: async (teamId, since) => [...usage.values()]
-        .filter((u) => u.nexusTeamKeyId !== null && teamOfKey.get(u.nexusTeamKeyId) === teamId
+        .filter((u) => (u.teamId ?? (u.nexusTeamKeyId !== null ? teamOfKey.get(u.nexusTeamKeyId) : undefined)) === teamId
           && u.createdAt.getTime() >= since.getTime())
         .reduce((sum, u) => sum + u.estimatedUsd, 0),
     },
@@ -146,5 +150,5 @@ export function createMemoryCoreStores(fixture: CoreFixture): MemoryCoreStores {
     },
   };
 
-  return { stores, notifications };
+  return { stores, notifications, usageRows: () => [...usage.values()].map((u) => ({ ...u })) };
 }

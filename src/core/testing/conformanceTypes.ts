@@ -16,7 +16,7 @@
 
 // ── What an adapter author supplies, and what a check is (P0.5c) ─────────────────────────────
 
-import type { CoreStores, NotificationRow } from '../ports';
+import type { CoreStores, NotificationRow, UsageRow } from '../ports';
 import type { CoreFixture } from './fixture';
 
 /**
@@ -28,6 +28,12 @@ export interface CoreStoresHarness {
   setup(fixture: CoreFixture): Promise<CoreStores>;
   /** Every notification stored since the last setup, oldest first. The sink port is write-only. */
   notifications(): Promise<NotificationRow[]>;
+  /**
+   * Optional (P1.1): every usage row stored since the last setup, as the store would hand them back.
+   * Supply it when your store keeps `UsageRow.teamId`; the teamId round-trip check is then held to it.
+   * A store with nowhere to keep it (the open-source TokenUsage table) leaves this out.
+   */
+  usageRows?(): Promise<UsageRow[]>;
 }
 
 /** One check. Throws (a node:assert AssertionError) when the adapter does not conform. */

@@ -32,7 +32,10 @@ export const INSERT_CHUNK = 500;
 export const prismaUsageStore: UsageStore = {
   insertBatch: async (rows) => {
     for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
-      await createManyIgnoringDuplicates(prisma.tokenUsage, rows.slice(i, i + INSERT_CHUNK));
+      // `teamId` is left out (P1.1): TokenUsage has no such column, and a row is attributed to its
+      // team through the team key, exactly as before. The written columns are unchanged.
+      const chunk = rows.slice(i, i + INSERT_CHUNK).map(({ teamId: _teamId, ...row }) => row);
+      await createManyIgnoringDuplicates(prisma.tokenUsage, chunk);
     }
   },
 

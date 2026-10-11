@@ -16,12 +16,33 @@
 
 import crypto from 'crypto';
 
-const MASTER_ENCRYPTION_KEY = process.env.MASTER_ENCRYPTION_KEY || '';
 const ALGORITHM = 'aes-256-gcm';
 
-// 64 hex characters == 32 bytes
-if (MASTER_ENCRYPTION_KEY.length !== 64) {
-  throw new Error('CRITICAL FATAL: MASTER_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes).');
+// ── The master key, read and checked on first use (P1.1, #196) ──────────────────────────────────
+// This module used to read and check MASTER_ENCRYPTION_KEY the moment it was imported, and throw.
+// The gateway core loads it, so `@alayrasystems/nexus-core` could not even be imported by a host
+// that decrypts provider keys its own way (see core/cipher.ts). The check now runs on the first
+// call that needs the key, with the same message. The open-source server still refuses to start
+// without a valid key: bootGuard.ts calls `assertMasterKey()` before anything is imported that
+// could listen. Once read, the value is kept, exactly as the import-time read kept it.
+
+const MASTER_KEY_ERROR = 'CRITICAL FATAL: MASTER_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes).';
+
+let masterKeyHex: string | undefined;
+
+function masterKey(): string {
+  if (masterKeyHex === undefined) {
+    const value = process.env.MASTER_ENCRYPTION_KEY || '';
+    // 64 hex characters == 32 bytes
+    if (value.length !== 64) throw new Error(MASTER_KEY_ERROR);
+    masterKeyHex = value;
+  }
+  return masterKeyHex;
+}
+
+/** Throws the master-key error now, rather than on the first encrypt or decrypt. For boot checks. */
+export function assertMasterKey(): void {
+  masterKey();
 }
 
 /**
@@ -46,13 +67,13 @@ export function deriveSubKey(info: string, bytes = 32): Buffer {
   // random rather than a password, so the extract step has nothing to strengthen. The `info` label
   // is what separates one subkey from another.
   return Buffer.from(
-    crypto.hkdfSync('sha256', Buffer.from(MASTER_ENCRYPTION_KEY, 'hex'), Buffer.alloc(0), info, bytes),
+    crypto.hkdfSync('sha256', Buffer.from(masterKey(), 'hex'), Buffer.alloc(0), info, bytes),
   );
 }
 
 export function encrypt(plaintext: string): string {
   const iv = crypto.randomBytes(16);
-  const key = Buffer.from(MASTER_ENCRYPTION_KEY, 'hex');
+  const key = Buffer.from(masterKey(), 'hex');
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
   
   let encrypted = cipher.update(plaintext, 'utf8', 'hex');
@@ -63,13 +84,14 @@ export function encrypt(plaintext: string): string {
 }
 
 export function decrypt(ciphertext: string): string {
+  // The key first, so a missing master key is reported as that rather than as a format problem.
+  const key = Buffer.from(masterKey(), 'hex');
   const parts = ciphertext.split(':');
   if (parts.length !== 3) {
     throw new Error('Invalid ciphertext format. Expected iv:authTag:encrypted');
   }
   
   const [ivHex, authTagHex, encryptedHex] = parts;
-  const key = Buffer.from(MASTER_ENCRYPTION_KEY, 'hex');
   
   const decipher = crypto.createDecipheriv(ALGORITHM, key, Buffer.from(ivHex, 'hex'));
   decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));

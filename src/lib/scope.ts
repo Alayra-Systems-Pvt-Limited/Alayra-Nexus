@@ -34,11 +34,18 @@ export interface RoutingScope {
   fallbackToShared: boolean;
   /** Cache namespace. Folded into the response-cache key so scopes cannot collide. */
   namespace: string;
+  /**
+   * The team is byok-only (P1.1): routed by its own keys alone, even with none, and a request no
+   * own key can serve is a 403 asking for a key rather than a 503. Implies fallbackToShared false.
+   */
+  byokOnly?: true;
 }
 
 export interface ScopeTeam {
   id:            string;
   byokFallback?: boolean;
+  /** See TeamContext.isolation. */
+  isolation?:    'byok-only';
 }
 
 /**
@@ -53,6 +60,11 @@ export interface ScopeTeam {
  * pool, so a shared caller can never be handed a team's private credential.
  */
 export function resolveScope(team: ScopeTeam | undefined | null, ownedKeyCount: number): RoutingScope {
+  // A byok-only team (P1.1) is never a shared-pool caller, whatever it owns: with no keys it has
+  // nothing to route to, and that is answered as "add a key", never by borrowing the pool's.
+  if (team?.isolation === 'byok-only') {
+    return { ownerTeamId: team.id, fallbackToShared: false, namespace: `team:${team.id}`, byokOnly: true };
+  }
   if (!team || ownedKeyCount <= 0) {
     return { ownerTeamId: null, fallbackToShared: true, namespace: SHARED_NAMESPACE };
   }
@@ -68,6 +80,11 @@ export function resolveScope(team: ScopeTeam | undefined | null, ownedKeyCount: 
 /** True when this scope routes only to its own keys — a miss is a 503, not a fallback. */
 export function isIsolated(scope: RoutingScope): boolean {
   return scope.ownerTeamId !== null && !scope.fallbackToShared;
+}
+
+/** True when this scope is a byok-only team's (P1.1): own keys only, and "add a key" when none serve. */
+export function isByokOnly(scope: RoutingScope): boolean {
+  return scope.byokOnly === true;
 }
 
 /** True when this request is served from a team's own keys rather than the pool. */

@@ -28,6 +28,13 @@ export interface TeamContext {
   budgetUsd:    number | null;
   budgetPeriod: string;
   byokFallback?: boolean;
+  /**
+   * Key isolation (P1.1). 'byok-only' = this team is served ONLY by provider keys it owns: never by
+   * a shared-pool key, even when it owns none, and `byokFallback` is ignored. A request no own key
+   * can serve is answered 403 `byok_key_required` (add a provider key), not 503. Absent = the
+   * open-source behaviour: a team with no usable keys of its own routes the shared pool.
+   */
+  isolation?:   'byok-only';
   /** Preferred routing tier (Phase 8). null = no preference; routing uses the normal tier order. */
   assignedTier?: string | null;
   /** What happens at the budget cap (Phase 7.10): "block" | "notify" | "downgrade". Defaults to block. */

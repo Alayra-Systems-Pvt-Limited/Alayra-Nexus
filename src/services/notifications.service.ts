@@ -24,6 +24,9 @@ import { getSetting, setSetting } from './settings.service';
 import { safeFetch } from '../lib/safeFetch';
 import { redis }                  from '../lib/redis';
 import { recordNotification }     from './notificationRecord.service';
+// The email API key stays on the open-source AES cipher, not the core's installable one (P1.1): it is
+// this gateway's own setting, read only when email delivery is configured, and `safeDecrypt` below
+// turns a missing or wrong MASTER_ENCRYPTION_KEY into "no key" rather than an error.
 import { encrypt, decrypt, maskKey } from '../lib/encryption';
 import {
   normalizeNotificationConfig, coalesceRedisKey,

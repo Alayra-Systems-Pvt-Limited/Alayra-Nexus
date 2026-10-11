@@ -18,22 +18,25 @@
 // to fail, or a passing adapter proves nothing. Both halves are tested here.
 
 import { describe, it, expect } from 'vitest';
-import type { CoreStores, NotificationRow } from '../ports';
+import type { CoreStores, NotificationRow, UsageRow } from '../ports';
 import {
-  coreStoresConformance, runCoreStoresConformance, createMemoryCoreStores, CONFORMANCE_FIXTURE,
+  coreStoresConformance, runCoreStoresConformance, createMemoryCoreStores, CONFORMANCE_FIXTURE, T0,
   type CoreStoresHarness,
 } from '.';
 
 function memoryHarness(tamper?: (s: CoreStores) => void): CoreStoresHarness {
   let notifications: NotificationRow[] = [];
+  let usageRows: () => UsageRow[] = () => [];
   return {
     setup: async (fixture) => {
       const m = createMemoryCoreStores(fixture);
       notifications = m.notifications;
+      usageRows = m.usageRows;
       tamper?.(m.stores);
       return m.stores;
     },
     notifications: async () => notifications,
+    usageRows: async () => usageRows(),
   };
 }
 
@@ -66,9 +69,34 @@ describe('the conformance checks catch a broken adapter', () => {
     expect(names).toContain('usage.insertBatch: idempotent on id, so a retried batch is never counted twice');
   });
 
+  it('flags a store that keeps rows but drops their teamId (P1.1)', async () => {
+    const failures = await runCoreStoresConformance(memoryHarness((s) => {
+      const insertBatch = s.usage.insertBatch;
+      s.usage.insertBatch = (rows) => insertBatch(rows.map((r) => ({ ...r, teamId: null })));
+    }));
+    expect(failures.map((f) => f.name)).toEqual(["usage.insertBatch: a row's teamId is accepted, and kept by a store that keeps it"]);
+  });
+
   it('reports every check by name', async () => {
     const names = coreStoresConformance.map((c) => c.name);
     expect(new Set(names).size).toBe(names.length);
     expect(names.length).toBeGreaterThanOrEqual(20);
+  });
+});
+
+// ── teamId on usage rows (P1.1) ──
+describe('the in-memory usage store and teamId', () => {
+  const row = (id: string, teamId: string | null, nexusTeamKeyId: string | null): UsageRow => ({
+    id, sessionId: '', modelId: 'gpt-x', modelName: 'gpt-x', provider: 'openai', inputTokens: 0, outputTokens: 0,
+    totalTokens: 0, unit: 'token', quantity: 0, estimatedUsd: 1, outcome: 'success', latencyMs: 0, cached: false,
+    savedUsd: 0, nexusTeamKeyId, teamId, createdAt: T0,
+  });
+
+  it('attributes a row to its teamId even with no team key, as a host without team keys needs', async () => {
+    const m = createMemoryCoreStores(CONFORMANCE_FIXTURE);
+    await m.stores.usage.insertBatch([row('u-1', 'workspace-9', null), row('u-2', null, null), row('u-3', 'team-a', 'tk-a')]);
+    expect(await m.stores.usage.teamSpendSince('workspace-9', T0)).toBe(1);
+    expect(await m.stores.usage.teamSpendSince('team-a', T0)).toBe(1);
+    expect(m.usageRows().map((r) => r.teamId)).toEqual(['workspace-9', null, 'team-a']);
   });
 });

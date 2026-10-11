@@ -17,6 +17,7 @@
 import { resolveRequestScope } from '../byok.service';
 import { checkTeamBudget, type BudgetPeriod, type OverBudgetAction } from '../budget.service';
 import { resolveRequestedModel, unknownModelError } from '../modelCatalog.service';
+import { byokKeyRequired } from '../byokOnly.service';
 import { isByok, isIsolated, type RoutingScope } from '../../lib/scope';
 import type { TraceRoutingStrategy } from '../../lib/requestTrace';
 import { observe, type ProxyRun } from './run';
@@ -59,6 +60,14 @@ export async function admitRequest(run: ProxyRun, options: ProxyRunOptions): Pro
   if (trace) trace.resolution = requestedModel.kind === 'pinned' ? 'pinned'
     : requestedModel.kind === 'unknown' ? 'unknown' : 'auto';
   if (requestedModel.kind === 'unknown') {
+    // A byok-only team asking for a model the gateway serves through a provider it has no key for
+    // is told to add that key (P1.1); anything else unknown is the ordinary 400.
+    const needsKey = await byokKeyRequired(scope, 'chat', { unknownModel: requestedModel.requested });
+    if (needsKey) {
+      if (trace) trace.refusal = { status: 403, reason: 'The team has no provider key of its own for this model.' };
+      observe(run, 'client_error');
+      return answered(reply.code(403).send(needsKey));
+    }
     if (trace) trace.refusal = { status: 400, reason: 'The model asked for is not in the registry.' };
     observe(run, 'client_error');
     return answered(reply.code(400).send(unknownModelError(requestedModel)));

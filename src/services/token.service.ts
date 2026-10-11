@@ -169,6 +169,7 @@ export async function recordTokenUsage(p: RecordTokenUsageParams, trace?: Reques
     cached,
     savedUsd,
     nexusTeamKeyId: p.nexusTeamKeyId ?? null,
+    teamId:         p.teamId ?? null,
     createdAt:      new Date(),
   });
 }
@@ -181,6 +182,8 @@ export interface RecordOutcomeParams {
   modelName?:      string | null;
   provider?:       string | null;
   nexusTeamKeyId?: string;
+  /** The caller's team (P1.1), so a failure is attributed without joining through the team key. */
+  teamId?:         string;
 }
 
 /**
@@ -210,6 +213,7 @@ export async function recordOutcome(p: RecordOutcomeParams): Promise<void> {
     cached:         false,
     savedUsd:       0,
     nexusTeamKeyId: p.nexusTeamKeyId ?? null,
+    teamId:         p.teamId ?? null,
     createdAt:      new Date(),
   });
 }

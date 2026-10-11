@@ -155,9 +155,10 @@ export function schemaShape(models: readonly DmmfModel[] = dmmfModels()): Schema
 // identifiers — into a file that leaves the building. The prefixes below are the gateway's own
 // settings and nothing else.
 //
-// There is no master-key preflight here, and there does not need to be: lib/encryption.ts throws at
-// import unless MASTER_ENCRYPTION_KEY is exactly 64 hex characters, so a gateway that lacks one
-// cannot have started. A check for it could never fire.
+// There is no master-key preflight here, and there does not need to be: bootGuard.ts refuses to
+// start the server unless MASTER_ENCRYPTION_KEY is exactly 64 hex characters (lib/encryption.ts did
+// this at import before P1.1), so a gateway that lacks one cannot have started. A check for it could
+// never fire.
 
 /** Prefixes owned by this gateway. Anything else in the environment belongs to whoever runs it. */
 export const TRACKED_ENV_PREFIXES: readonly string[] = [

@@ -39,8 +39,20 @@ export { configureCoreStores, coreStores, type CoreStoresLoader } from './stores
 // the core falls back to REDIS_URL, or to an in-process store when that is unset.
 export { configureCoreKv } from '../lib/redis';
 
+// ── Provider keys: how stored keys are opened (P1.1, #196) ──
+// Install the host's cipher once at boot, before any other core call. Without it the core opens
+// keys with the open-source AES-256-GCM cipher, which needs MASTER_ENCRYPTION_KEY on first use.
+export type { KeyCipher, KeyCipherContext } from './ports';
+export { configureCoreCipher } from './cipher';
+
 // ── Who is calling: resolved by the host, never by the core ──
 export type { TeamContext, CallerContext } from './context';
+
+// ── Provider presets: the one table of known providers (P1.1) ──
+// Base URL, auth header and prefix, model-list path and key prefixes per provider slug. Exported so
+// a host's own provider catalogue is this list rather than a copy that drifts from it. Read-only:
+// the core fills in a pool's default base URL from these same objects.
+export { PROVIDER_PRESETS, presetFor, type ProviderPreset } from '../data/providers';
 
 // ── Chat completions (OpenAI shape) ──
 export {

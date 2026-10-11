@@ -31,16 +31,16 @@ import { resolveRequestScope }   from './byok.service';
 import { isByok, isIsolated }    from '../lib/scope';
 import type { Capability }       from '../lib/modelSelect';
 import { resolveRequestedModel, unknownModelError } from './modelCatalog.service';
+import { byokKeyRequired }       from './byokOnly.service';
 import type { TeamContext }      from './completionsProxy.service';
 import * as metrics              from '../lib/metrics';
 
 // ── Generic non-chat dispatcher (Phase 6.3) ───────────────────────────────────
-// Embeddings, completions, and the modalities that follow are JSON in / JSON out with
-// no `messages`, no conversation, and no chat SSE — so they cannot reuse the chat
-// handler's body. What they *do* reuse is everything that matters: the same model-first
-// routing, circuit breaker, atomic admission, BYOK isolation, budgets, usage pipeline,
-// and SSRF guard. This dispatcher composes those shared primitives; it is not a second
-// routing path, only a second, simpler transport for non-chat request shapes.
+// Embeddings, completions, and the modalities that follow are JSON in / JSON out with no `messages`,
+// no conversation, and no chat SSE — so they cannot reuse the chat handler's body. What they *do*
+// reuse is everything that matters: the same model-first routing, circuit breaker, atomic admission,
+// BYOK isolation, budgets, usage pipeline, and SSRF guard. This dispatcher composes those shared
+// primitives; it is not a second routing path, only a second, simpler transport for non-chat shapes.
 
 const UPSTREAM_TTFT_MS = parseInt(process.env.UPSTREAM_TTFT_MS ?? '20000', 10);
 const UPSTREAM_BODY_MS = parseInt(process.env.UPSTREAM_BODY_MS ?? '60000', 10);
@@ -142,11 +142,9 @@ export async function dispatchProxy(
   const observe = (o: metrics.RequestOutcome) => {
     const elapsed = Date.now() - t0;
     metrics.observeRequest(o, tier, elapsed / 1000);
-    if (o !== 'success') {
-      void recordOutcome({
-        outcome: o, latencyMs: elapsed, provider: routeProvider, modelName: routeModel, nexusTeamKeyId: teamKeyId,
-      }).catch(() => {});
-    }
+    if (o === 'success') return;
+    void recordOutcome({ outcome: o, latencyMs: elapsed, provider: routeProvider, modelName: routeModel,
+      nexusTeamKeyId: teamKeyId, teamId: team?.id }).catch(() => {});
   };
   const responseMode = opts.responseMode ?? 'json';
 
@@ -165,14 +163,14 @@ export async function dispatchProxy(
 
   const scope = await resolveRequestScope(team);
 
-  // These endpoints used to discard the caller's `model` silently and route by capability
-  // alone, so an operator with three embedding models had no way to choose between them.
-  // Resolution is shared with the chat path, which is what keeps one rule across every
-  // endpoint: an alias (or nothing) auto-routes, a real id pins, anything else is a 400.
+  // Resolution is shared with the chat path, so one rule holds on every endpoint: an alias (or nothing)
+  // auto-routes, a real id pins, anything else is a 400 — or, for a byok-only team with no key for
+  // that model's provider, a 403 asking for one (P1.1).
   const requestedModel = await resolveRequestedModel(body.model as string | undefined, capability, scope);
   if (requestedModel.kind === 'unknown') {
     observe('client_error');
-    return reply.code(400).send(unknownModelError(requestedModel));
+    const needsKey = await byokKeyRequired(scope, capability, { unknownModel: requestedModel.requested });
+    return needsKey ? reply.code(403).send(needsKey) : reply.code(400).send(unknownModelError(requestedModel));
   }
   const pinnedModelId = requestedModel.kind === 'pinned' ? requestedModel.model.id : null;
 
@@ -182,11 +180,13 @@ export async function dispatchProxy(
   const preferredTier = overBudgetDowngrade ? 'fast' : (team?.assignedTier ?? null);
   const route = await discoverBestPool(reserveTokens, null, scope, capability, userId, preferredTier, pinnedModelId);
   if (!route) {
+    // A byok-only team with no key of its own that could serve this is told to add one (P1.1).
+    const needsKey = await byokKeyRequired(scope, capability, { pinnedModelId });
+    if (needsKey) { observe('client_error'); return reply.code(403).send(needsKey); }
     observe('no_capacity');
     const isolated = isIsolated(scope);
     if (isolated) metrics.byokRequest('isolated_block');
-    // Operator alert (Phase 6.4b): no key can serve this capability. Same uniform tap as
-    // the chat path; fire-and-forget and coalesced.
+    // Operator alert (Phase 6.4b), as on the chat path; fire-and-forget and coalesced.
     void reportTierExhausted(capability, isolated).catch(() => {});
     const retryAfter = await getNextCooldownSeconds();
     return reply.code(503).header('Retry-After', String(retryAfter)).send({

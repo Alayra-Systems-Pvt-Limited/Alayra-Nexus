@@ -70,7 +70,7 @@ Two secrets are still required, and they fail differently:
 
 | | If missing |
 |---|---|
-| `MASTER_ENCRYPTION_KEY` | **The process will not start.** It exits with a Node stack trace rather than a guided message — the check runs at module load, before the startup checks that normally explain themselves |
+| `MASTER_ENCRYPTION_KEY` | **The process will not start.** It exits before listening, with a message that says how to generate one. A key that is not exactly 64 hex characters is refused the same way |
 | `ADMIN_PASSWORD` | Starts, but you cannot claim the owner account. The claim endpoint explains why |
 
 Both are the same requirements server mode has. Keep the encryption key backed up somewhere other

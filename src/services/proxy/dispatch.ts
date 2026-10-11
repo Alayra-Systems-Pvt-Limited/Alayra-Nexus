@@ -22,6 +22,7 @@ import {
 } from '../nexus.service';
 import { getSsrfPolicy } from '../ssrf.service';
 import { noCapacityMessage } from '../modelCatalog.service';
+import { byokKeyRequired } from '../byokOnly.service';
 import { computeReserve } from '../../lib/tokenizer';
 import { reconcileTpm } from '../../lib/admission';
 import { sessionHash } from '../../lib/sticky';
@@ -76,6 +77,13 @@ export async function dispatchUpstream(
     ? await discoverBestPool(reserve, session, scope, 'chat', userId, preferredTier, pinnedModelId)
     : await discoverBestPool(reserve, session, scope, 'chat', userId, preferredTier, null, strategyWeight);
   if (!route) {
+    // A byok-only team with no key of its own that could serve this is told to add one (P1.1).
+    const needsKey = await byokKeyRequired(scope, 'chat', { pinnedModelId });
+    if (needsKey) {
+      if (trace) trace.refusal = { status: 403, reason: 'The team has no provider key of its own that can serve this request.' };
+      observe(run, 'client_error');
+      return answered(reply.code(403).send(needsKey));
+    }
     if (trace) trace.refusal = { status: 503, reason: pinnedModelId
       ? 'No key had capacity for the model that was pinned.'
       : 'No pool had a key with capacity for this request.' };
