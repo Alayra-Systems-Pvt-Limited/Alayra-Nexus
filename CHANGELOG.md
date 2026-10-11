@@ -60,8 +60,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 - **Dependency advisories published 2026-10.**
   - `@fastify/busboy` 3.2.0 → 3.2.3, through `@fastify/multipart`: multipart DoS and header-injection advisories.
   - `ip-address` 10.4.0 → 10.7.3, through `@fastify/rate-limit`: IPv6 link-local and NAT64 classification and cross-family subnet checks.
-  - `brace-expansion` 5.0.9 → 5.0.12: the override floor is raised to match, so it cannot slip back.
-  - `npm audit --omit=dev` reports 0 vulnerabilities.
+  - `brace-expansion` 5.0.9 → 5.0.12: the override floor is raised to match in the root, `web/`
+    and `e2e/`, so it cannot slip back in any of them.
+  - Build and test tooling: `source-map-js` 1.2.1 → 1.2.2 (root and `web/`), and `undici`
+    7.29.0 → 7.30.0 in `web/` (six advisories, through `jsdom`).
+  - `npm audit` reports 0 vulnerabilities in the root, `web/` and `e2e/`, development
+    dependencies included, and GitHub shows no open Dependabot alert.
 
 ### Internal
 
@@ -82,6 +86,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   and model fetch now read through the key and provider ports instead of the database client. A
   new `npm run check:lines` CI step fails any source file over 300 lines; the 58 files already over
   it are listed in `scripts/lint/line-budget.json` and may only shrink.
+
+- **Dependency refresh.** Prisma 7.9.1 → 7.10.0 (client, CLI and both adapters), `zod` 4.6.5,
+  `@fastify/static` 10.1.6, `@fastify/multipart` 10.1.3, and the development toolchain
+  (`eslint` 10.12, `typescript-eslint` 8.71, `vitest` 5.0.3, `tsx` 4.23.15, `@types/node`
+  22.20.5, `globals` 17.13). CodeQL's action moves to 4.38.3. Apart from the override floors above, no
+  range in a `package.json` changed.
 
 - **Design tokens have one source.** `packages/ui-tokens` holds every colour, radius, font and
   motion token for both themes; `npm run tokens:build` generates `tokens.css` for the package and
