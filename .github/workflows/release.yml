@@ -85,6 +85,20 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      # First, because it is the cheapest way this release can fail and the only one that would fail
+      # LATE: trusted publishing can publish a new version of a package but cannot create one. If
+      # @alayrasystems/nexus-core has never been published, publish-core would fail after the images
+      # and the gateway package are already out. So refuse here, before anything is built.
+      - name: nexus-core exists on npm (trusted publishing cannot create a package)
+        run: |
+          set -euo pipefail
+          NAME=$(node -p "require('./packages/nexus-core/package.json').name")
+          if ! npm --userconfig=/dev/null view "$NAME" name >/dev/null 2>&1; then
+            echo "::error::$NAME has never been published. Its first version must be published by hand once, then trusted publishing configured (npm trust github $NAME --repo $GITHUB_REPOSITORY --file release.yml --allow-publish). See CONTRIBUTING.md, Releases."
+            exit 1
+          fi
+          echo "::notice::$NAME exists on npm; trusted publishing can add versions to it."
+
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
@@ -99,6 +113,9 @@ jobs:
 
       - name: The published package, installed and driven
         run: npm run smoke:npx
+
+      - name: The core package, installed and driven
+        run: npm run smoke:core
 
   build:
     name: Build ${{ matrix.platform }}
@@ -495,6 +512,83 @@ jobs:
           done
 
           # Two and a half minutes is long past replication, so this is a real visibility problem.
+          echo "::error::$NAME@$VERSION is not publicly visible."
+          echo "If it did publish, the package is probably restricted: check 'npm access list packages'."
+          exit 1
+
+  # ── npm: @alayrasystems/nexus-core, the same way ─────────────────────────────────────────────────
+  # The gateway's request-handling core, built from this commit's src/ (npm run core:build) and
+  # published through the same trusted-publishing link, configured separately for this package.
+  #
+  # After publish-npm, not beside it: if the gateway package fails to publish, the core must not
+  # appear at a version whose gateway does not exist. The reverse (gateway out, core failed) is
+  # fixed by re-running this workflow; both publishes skip a version that is already on npm.
+  publish-core:
+    name: Publish nexus-core to npm
+    needs: [publish-npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write        # trusted publishing; nothing else can sign for this repository
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      # Trusted publishing needs npm 11.5.1 or newer; Node 22 ships npm 10.
+      - run: npm install -g npm@latest
+
+      # The compiler and its config come from the root install; the package itself has no scripts.
+      - run: npm ci
+      - run: npm run core:build
+
+      # The core ships in lockstep with the gateway. check:core-boundary already enforces it on
+      # every PR; this is the last chance to catch a hand-edited release commit.
+      - name: The core and the gateway carry the same version
+        run: |
+          set -euo pipefail
+          GATEWAY=$(node -p "require('./package.json').version")
+          CORE=$(node -p "require('./packages/nexus-core/package.json').version")
+          if [ "$GATEWAY" != "$CORE" ]; then
+            echo "::error::nexus-core is $CORE but the gateway is $GATEWAY; they release together."
+            exit 1
+          fi
+
+      - name: Publish, unless this version is already on npm
+        working-directory: packages/nexus-core
+        run: |
+          set -euo pipefail
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::$NAME@$VERSION is already published — nothing to do."
+            exit 0
+          fi
+
+          npm publish
+          echo "::notice::published $NAME@$VERSION"
+
+      - name: Confirm the public can actually see it
+        # Asked anonymously and with retries, for the same reasons as the gateway package above.
+        working-directory: packages/nexus-core
+        run: |
+          set -euo pipefail
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+
+          for attempt in $(seq 1 10); do
+            if npm --userconfig=/dev/null view "$NAME@$VERSION" version; then
+              echo "::notice::$NAME@$VERSION is publicly visible."
+              exit 0
+            fi
+            echo "not visible yet (attempt $attempt/10) — waiting for the registry to replicate"
+            sleep 15
+          done
+
           echo "::error::$NAME@$VERSION is not publicly visible."
           echo "If it did publish, the package is probably restricted: check 'npm access list packages'."
           exit 1

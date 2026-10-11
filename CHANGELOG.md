@@ -9,7 +9,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.6.6] - 2026-10-11
+
 ### Added
+
+- **`@alayrasystems/nexus-core` on npm.** The gateway's request-handling core (the OpenAI- and
+  Anthropic-compatible proxy, routing, rate windows, budgets and usage accounting) is published as
+  its own package, for services that embed Nexus routing with their own storage. It is released
+  together with `@alayrasystems/nexus`, carries the same version, and is published from the release
+  workflow with npm provenance. `@alayrasystems/nexus-core/testing` holds the storage conformance
+  checks every adapter must pass. Nothing changes for anyone running the gateway itself.
 
 - **Advanced gateway testing in the Playground.** Auto-route runs can select fastest eligible,
   balanced, or cheapest eligible routing, while comparison mode can execute all three strategies
@@ -129,6 +138,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   that the checks pass from the installed copy, and that a strict TypeScript consumer compiles. The
   package's own `package.json` is now the core's runtime allowlist: `check:core-boundary` fails on an
   unused or unlisted dependency, a range that differs from the root, or a version out of step.
+
+- **The release workflow publishes `@alayrasystems/nexus-core`.** A new `publish-core` job publishes
+  it through npm trusted publishing (no token) after the gateway package, skips a version already
+  on npm, and checks it is publicly visible. The `verify` job now runs `smoke:core`, and it stops a
+  release before anything is built if the package does not exist on npm yet: trusted publishing
+  cannot create a package, so its first version has to be published by hand once.
 
 ## [1.6.5] - 2026-09-20
 
@@ -2632,7 +2647,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.5...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.6...HEAD
+[1.6.6]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.5...v1.6.6
 [1.6.5]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.0...v1.6.5
 [1.6.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.3...v1.6.0
 [1.5.3]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.5.2...v1.5.3

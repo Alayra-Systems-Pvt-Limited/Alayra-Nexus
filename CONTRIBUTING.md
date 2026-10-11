@@ -228,6 +228,22 @@ full suites run, the packed npm tarball is installed into an empty directory and
 and one container image per architecture is started with no database — all before anything is
 published.
 
+One tag releases two npm packages with the same version: `@alayrasystems/nexus` (the gateway) and
+`@alayrasystems/nexus-core` (its request-handling core, built from `src/` by `npm run core:build`).
+Both publish through npm trusted publishing, with no token in the repository, and carry provenance.
+
+Trusted publishing can add versions to a package but cannot create one. A **new** package therefore
+needs a one-time setup by a maintainer before its first tag. Publish a minimal `0.0.1` placeholder
+by hand. Then link the package to this repository and require 2FA for any manual publish:
+
+```bash
+npx -y npm@latest trust github <package> --repo Alayra-Systems-Pvt-Limited/Alayra-Nexus --file release.yml --allow-publish --yes
+npx -y npm@latest access set mfa=publish <package>
+```
+
+The release workflow checks that `@alayrasystems/nexus-core` exists on npm before it builds
+anything, so a missing setup fails the release at the start, not halfway through.
+
 ## Licensing
 
 By contributing, you agree that your contributions are licensed under the
