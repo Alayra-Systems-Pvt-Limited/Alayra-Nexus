@@ -46,6 +46,14 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   diagnostics planned next. Prompts and replies remain in browser memory only and are not stored by
   the Playground. Viewers may inspect the page and available models but cannot spend provider quota.
 
+### Security
+
+- **Dependency advisories published 2026-10.**
+  - `@fastify/busboy` 3.2.0 → 3.2.3, through `@fastify/multipart`: multipart DoS and header-injection advisories.
+  - `ip-address` 10.4.0 → 10.7.3, through `@fastify/rate-limit`: IPv6 link-local and NAT64 classification and cross-family subnet checks.
+  - `brace-expansion` 5.0.9 → 5.0.12: the override floor is raised to match, so it cannot slip back.
+  - `npm audit --omit=dev` reports 0 vulnerabilities.
+
 ## [1.6.5] - 2026-09-20
 
 ### Added
