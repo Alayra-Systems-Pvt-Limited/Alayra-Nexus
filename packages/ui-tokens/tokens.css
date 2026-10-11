@@ -1,0 +1,98 @@
+/*
+ * Alayra Nexus design tokens — GENERATED, do not edit.
+ * Source: packages/ui-tokens/src/tokens.ts · regenerate with `npm run tokens:build`.
+ * Dark is the default; <html data-theme="light"> switches to the light palette.
+ */
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg:             #071019;
+  --bg-accent:      #0b1824;
+  --surface:        rgba(255, 255, 255, 0.035);
+  --surface-2:      rgba(255, 255, 255, 0.06);
+  --surface-solid:  #0b1622;
+  --border:         rgba(255, 255, 255, 0.08);
+  --border-strong:  rgba(255, 255, 255, 0.14);
+  --text:           #f4f8fa;
+  --muted:          #9baab8;
+  --subtle:         #71818f;
+  --accent:         #5df0ee;
+  --accent-strong:  #9af7f5;
+  --accent-contrast:#06242a;
+  --accent-bg:      rgba(93, 240, 238, 0.14);
+  --primary:        #5df0ee;
+  --primary-strong: #9af7f5;
+  --on-primary:     #06242a;
+  --gold:           #d9b477;
+  --gold-bg:        rgba(217, 180, 119, 0.14);
+  --green:          #4fd1a5;
+  --green-bg:       rgba(79, 209, 165, 0.14);
+  --yellow:         #f2b84b;
+  --yellow-bg:      rgba(242, 184, 75, 0.14);
+  --red:            #f2727f;
+  --red-bg:         rgba(242, 114, 127, 0.14);
+  --blue:           #7cc4ff;
+  --blue-bg:        rgba(124, 196, 255, 0.14);
+  --orange:         #f59e5b;
+  --orange-bg:      rgba(245, 158, 91, 0.14);
+  --shadow:         0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.32);
+  --shadow-sm:      0 1px 2px rgba(0, 0, 0, 0.35);
+  --glow:           0 0 0 1px var(--accent-bg), 0 8px 30px rgba(93, 240, 238, 0.16);
+  --scrim:          rgba(0, 0, 0, 0.55);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg:             #f7f8f7;
+  --bg-accent:      #eef3f3;
+  --surface:        rgba(255, 255, 255, 0.72);
+  --surface-2:      rgba(255, 255, 255, 0.9);
+  --surface-solid:  #ffffff;
+  --border:         rgba(16, 27, 39, 0.1);
+  --border-strong:  rgba(16, 27, 39, 0.18);
+  --text:           #101b27;
+  --muted:          #5b6672;
+  --subtle:         #7b8692;
+  --accent:         #0b6f7a;
+  --accent-strong:  #085862;
+  --accent-contrast:#ffffff;
+  --accent-bg:      rgba(11, 111, 122, 0.1);
+  --primary:        #22d3ee;
+  --primary-strong: #1bbdd6;
+  --on-primary:     #06242a;
+  --gold:           #8a5a17;
+  --gold-bg:        rgba(138, 90, 23, 0.1);
+  --green:          #12805c;
+  --green-bg:       rgba(18, 128, 92, 0.1);
+  --yellow:         #a35c00;
+  --yellow-bg:      rgba(163, 92, 0, 0.1);
+  --red:            #c03d49;
+  --red-bg:         rgba(192, 61, 73, 0.1);
+  --blue:           #1f6fc4;
+  --blue-bg:        rgba(31, 111, 196, 0.1);
+  --orange:         #b4471a;
+  --orange-bg:      rgba(180, 71, 26, 0.1);
+  --shadow:         0 1px 2px rgba(16, 27, 39, 0.06), 0 10px 30px rgba(16, 27, 39, 0.08);
+  --shadow-sm:      0 1px 2px rgba(16, 27, 39, 0.08);
+  --glow:           0 0 0 1px var(--accent-bg), 0 8px 30px rgba(11, 111, 122, 0.12);
+  --scrim:          rgba(16, 27, 39, 0.45);
+}
+
+:root {
+  --radius:     10px;
+  --radius-sm:  7px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --blur:       14px;
+  --font-sans:  'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono:  'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --sidebar-w:  232px;
+  --topbar-h:   56px;
+  --content-max:1520px;
+  --ease:       cubic-bezier(0.16, 1, 0.3, 1);
+  --paper:      #ffffff;
+  --paper-ink:  #3f3f46;
+}

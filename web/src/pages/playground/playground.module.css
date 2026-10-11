@@ -324,7 +324,7 @@
   font-size: 12px;
   font-weight: 700;
 }
-.assistantMessage .avatar { color: var(--accent-contrast); background: var(--accent); border-color: var(--accent); }
+.assistantMessage .avatar { color: var(--on-primary); background: var(--primary); border-color: var(--primary); }
 .messageMain { min-width: 0; max-width: 980px; }
 .messageHead { min-height: 22px; display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
 .messageHead strong { color: var(--text); font-size: 13px; }

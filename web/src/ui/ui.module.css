@@ -12,8 +12,8 @@
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.primary   { background: var(--accent); color: var(--accent-contrast); box-shadow: var(--shadow-sm); }
-.primary:hover:not(:disabled)   { background: var(--accent-strong); }
+.primary   { background: var(--primary); color: var(--on-primary); box-shadow: var(--shadow-sm); }
+.primary:hover:not(:disabled)   { background: var(--primary-strong); }
 .secondary { background: var(--surface-2); color: var(--text); border-color: var(--border); }
 .secondary:hover:not(:disabled) { border-color: var(--border-strong); }
 .ghost     { background: transparent; color: var(--muted); }
@@ -75,7 +75,7 @@
 .tabs { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .tab { border: none; background: none; color: var(--muted); font-size: 12.5px; font-weight: 550; padding: 6px 14px; border-radius: 5px; cursor: pointer; transition: all .15s var(--ease); }
 .tab:hover { color: var(--text); }
-.tabActive { background: var(--accent); color: var(--accent-contrast); }
+.tabActive { background: var(--primary); color: var(--on-primary); }
 
 /* ── Copy field ── */
 .copy { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 12px; }
@@ -100,7 +100,7 @@
    size from the dialog's contents, so a wide child (a long field row, the model picker) grew the
    track past the viewport and the modal's `max-width: 100%` resolved against that oversized track
    instead of the screen. */
-.modalOverlay { position: fixed; inset: 0; z-index: 50; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 24px; background: rgba(0, 0, 0, .5); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: nxFade .15s var(--ease); }
+.modalOverlay { position: fixed; inset: 0; z-index: 50; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 24px; background: var(--scrim); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: nxFade .15s var(--ease); }
 .modal { width: 100%; min-width: 0; max-width: 470px; max-height: 88vh; overflow-y: auto; background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); animation: nxRise .2s var(--ease); }
 .modalHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface-solid); }
 .modalTitle { font-size: 15px; font-weight: 650; }
@@ -241,4 +241,4 @@
 .toggle:disabled { cursor: not-allowed; }
 .toggleOn { background: var(--accent); border-color: var(--accent); }
 .toggleKnob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text); transition: transform .15s var(--ease); }
-.toggleOn .toggleKnob { transform: translateX(16px); background: #fff; }
+.toggleOn .toggleKnob { transform: translateX(16px); background: var(--accent-contrast); }

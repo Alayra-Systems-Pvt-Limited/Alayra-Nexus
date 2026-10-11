@@ -39,6 +39,11 @@ jobs:
       # scripts/lint/line-budget.json and may only shrink; a new one cannot join them.
       - name: Check file sizes against the line budget
         run: npm run check:lines
+      # Colours live in packages/ui-tokens. This fails if the generated tokens.css is stale, if a
+      # declared text or mark pair misses its WCAG contrast minimum in either theme, or if the
+      # dashboard writes a colour literal that bypasses the tokens.
+      - name: Check design tokens (contrast + no stray colours)
+        run: npm run check:tokens
 
   typecheck:
     name: Typecheck

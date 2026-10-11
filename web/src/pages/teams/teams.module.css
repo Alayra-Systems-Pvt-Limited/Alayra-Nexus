@@ -127,5 +127,5 @@
   overflow: hidden;
 }
 .budgetFill { height: 100%; border-radius: 999px; background: var(--green); transition: width .2s ease; }
-.budgetFillWarn { background: var(--yellow, #d69e2e); }
+.budgetFillWarn { background: var(--yellow); }
 .budgetFillOver { background: var(--red); }

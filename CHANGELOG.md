@@ -46,6 +46,15 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   diagnostics planned next. Prompts and replies remain in browser memory only and are not stored by
   the Playground. Viewers may inspect the page and available models but cannot spend provider quota.
 
+### Changed
+
+- **A new look: Signal Cyan.** The dashboard now uses the brand's cyan on deep ink navy, with gold
+  kept for plan tiers and highlights, and the Geist and Geist Mono typefaces (self-hosted, no font
+  CDN). Primary buttons carry dark text on the bright cyan fill. The light theme uses a deep teal for
+  links, focus rings and toggles, because bright cyan on white is unreadable. Two contrast failures
+  in the old palette are fixed: white text on the violet button (3.27:1) and the light theme's green
+  status text (3.77:1); every text pair now meets WCAG AA (4.5:1) in both themes.
+
 ### Security
 
 - **Dependency advisories published 2026-10.**
@@ -73,6 +82,13 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   and model fetch now read through the key and provider ports instead of the database client. A
   new `npm run check:lines` CI step fails any source file over 300 lines; the 58 files already over
   it are listed in `scripts/lint/line-budget.json` and may only shrink.
+
+- **Design tokens have one source.** `packages/ui-tokens` holds every colour, radius, font and
+  motion token for both themes; `npm run tokens:build` generates `tokens.css` for the package and
+  the dashboard. `npm run check:tokens` (now a CI step) fails on a stale `tokens.css`, on any
+  declared pair below its WCAG minimum (34 pairs across both themes), and on a hex, `rgb()` or
+  `hsl()` colour written anywhere in `web/src` outside the token file. The undefined
+  `--radius-md` the security page relied on is now defined.
 
 ## [1.6.5] - 2026-09-20
 
