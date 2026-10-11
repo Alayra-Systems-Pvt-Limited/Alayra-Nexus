@@ -40,6 +40,9 @@ for the layering rule and the request path.
 | `ports/` | The five storage interfaces a host implements (keys, providers, usage, settings, notifications) |
 | `stores.ts` | Where a host installs its storage (`configureCoreStores`) and where the core finds it |
 | `context.ts` | The caller as the core sees it, already authenticated by the host |
+| `testing/` | `@alayrasystems/nexus-core/testing`: the storage conformance checks, their fixture, and the in-memory reference stores |
+
+The published package is built from these files by `npm run core:build` into `packages/nexus-core/dist`; `npm run smoke:core` packs and installs it.
 
 ## `src/services/` — side effects and configuration
 

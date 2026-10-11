@@ -22,7 +22,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { checkBoundary, runtimeImports, packageName, type BoundaryRules } from './coreBoundary';
-import { CORE_RULES } from './checkCoreBoundary';
+import { CORE_RULES, CORE_MANIFEST, manifestProblems } from './checkCoreBoundary';
 
 // ── Fixture trees ─────────────────────────────────────────────────────────────────────────────
 
@@ -125,9 +125,24 @@ describe('checkBoundary', () => {
 // ── The real core ─────────────────────────────────────────────────────────────────────────────
 
 describe('the gateway core', () => {
-  it('loads no database client, adapter, route, server code or unlisted package', () => {
-    const report = checkBoundary(resolve(__dirname, '..', '..'), 'src/core/index.ts', CORE_RULES);
-    expect(report.violations).toEqual([]);
-    expect(report.files).not.toContain('src/lib/prisma.ts');
+  const ROOT = resolve(__dirname, '..', '..');
+
+  it.each([['src/core/index.ts'], ['src/core/testing/index.ts']])(
+    '%s loads no database client, adapter, route, server code or unlisted package',
+    (entry) => {
+      const report = checkBoundary(ROOT, entry, CORE_RULES);
+      expect(report.violations).toEqual([]);
+      expect(report.files).not.toContain('src/lib/prisma.ts');
+    },
+  );
+
+  it('has a package manifest in step with the root and with what the core loads', () => {
+    const loaded = new Set(Object.keys(CORE_MANIFEST.dependencies ?? {}));
+    expect(manifestProblems(loaded)).toEqual([]);
+  });
+
+  it('names a declared dependency the core no longer loads', () => {
+    expect(manifestProblems(new Set(['ioredis', 'js-tiktoken', 'prom-client'])))
+      .toEqual(["dependency '@opentelemetry/api' is declared but the core never loads it"]);
   });
 });

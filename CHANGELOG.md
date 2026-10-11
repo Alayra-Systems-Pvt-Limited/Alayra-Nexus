@@ -119,6 +119,17 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   `usingMemoryKv` is now a function. The open-source server does not call `configureCoreKv()` and
   behaves as before.
 
+- **`@alayrasystems/nexus-core` can be built, and storage adapters have a conformance kit.**
+  `packages/nexus-core` builds the core straight from `src/` (`npm run core:build`) with type
+  declarations; it is not published yet. `@alayrasystems/nexus-core/testing` holds 22 storage checks
+  written with `node:assert` (so any test runner can run them), the fixed fixture they use, and an
+  in-memory reference store. The Prisma adapters now pass all 22 on both SQLite and PostgreSQL in CI.
+  `npm run smoke:core` (a new CI step) packs the real tarball, installs it beside Fastify alone, and
+  checks that no database client comes with it, that both entries load from CommonJS and ES modules,
+  that the checks pass from the installed copy, and that a strict TypeScript consumer compiles. The
+  package's own `package.json` is now the core's runtime allowlist: `check:core-boundary` fails on an
+  unused or unlisted dependency, a range that differs from the root, or a version out of step.
+
 ## [1.6.5] - 2026-09-20
 
 ### Added

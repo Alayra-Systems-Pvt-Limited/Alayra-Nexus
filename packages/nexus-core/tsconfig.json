@@ -1,0 +1,16 @@
+{
+  // Builds @alayrasystems/nexus-core from the repository's own source (P0.5c).
+  //
+  // Only the two public entries are named; tsc follows their imports, so the package holds exactly
+  // the core and what it loads. `npm run check:core-boundary` proves that set never reaches a
+  // database client, an adapter, a route or the server. Declarations are emitted so hosts get the
+  // same types the open-source server is checked against.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir":     "../../src",
+    "outDir":      "./dist",
+    "declaration": true
+  },
+  "files": ["../../src/core/index.ts", "../../src/core/testing/index.ts"],
+  "include": []
+}

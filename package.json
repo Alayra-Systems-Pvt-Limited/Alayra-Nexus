@@ -66,6 +66,8 @@
     "test:hunt": "tsx scripts/test/huntFlakes.ts",
     "backup:fixture": "tsx scripts/backup/makeFixture.ts",
     "smoke:npx": "tsx scripts/smoke/npx.ts",
+    "smoke:core": "tsx scripts/smoke/core.ts",
+    "core:build": "tsx scripts/core/build.ts",
     "postinstall": "node scripts/npm/postinstall.js",
     "prepack": "node scripts/npm/prepack.js",
     "db:column-facts": "tsx scripts/db/columnFacts.ts",

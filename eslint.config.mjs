@@ -12,7 +12,7 @@ export default tseslint.config(
     // `docs/**` covers the committed static demo (docs/demo): it is minified build output from the
     // dashboard, whose own source is linted in web/. Linting a bundle reports hundreds of errors
     // about generated code nobody wrote and nobody can fix.
-    ignores: ['dist/**', 'web/**', 'e2e/**', 'node_modules/**', 'coverage/**', 'prisma/migrations/**', 'brand/**', 'docs/**'],
+    ignores: ['dist/**', 'packages/*/dist/**', 'web/**', 'e2e/**', 'node_modules/**', 'coverage/**', 'prisma/migrations/**', 'brand/**', 'docs/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
