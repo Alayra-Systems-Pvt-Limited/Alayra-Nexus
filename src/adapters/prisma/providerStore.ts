@@ -20,6 +20,7 @@
 
 import { prisma } from '../../lib/prisma';
 import type { ProviderCheckRow, ProviderRow, ProviderStore } from '../../core/ports';
+import { KEY_ROUTING_ORDER } from './keyOrder';
 
 /** The routing projection. `satisfies` keeps it in step with ProviderRow at compile time. */
 const PROVIDER_SELECT = {
@@ -56,7 +57,7 @@ export const prismaProviderStore: ProviderStore = {
       where:  { id: providerId },
       select: {
         ...PROVIDER_CHECK_SELECT,
-        keys: { where: { status: 'active' }, take: 1, orderBy: { lastUsedAt: 'asc' }, select: { encryptedKey: true } },
+        keys: { where: { status: 'active' }, take: 1, orderBy: KEY_ROUTING_ORDER, select: { encryptedKey: true } },
       },
     });
     if (!row) return null;

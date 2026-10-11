@@ -23,7 +23,7 @@
 
 import assert from 'node:assert/strict';
 import type { UsageRow } from '../ports';
-import { CONFORMANCE_FIXTURE as F, T0, hoursAfterT0 } from './fixture';
+import { CONFORMANCE_FIXTURE as F, NEVER_USED_FIXTURE, T0, hoursAfterT0 } from './fixture';
 import { keyStoreCases } from './conformanceKeys';
 import type { ConformanceCase, CoreStoresHarness } from './conformanceTypes';
 
@@ -89,6 +89,13 @@ const providerCases: ConformanceCase[] = [
         extraHeaders: null, modelFetchUrl: null, modelIdPath: 'data[].id', activeKey: 'enc:shared-1',
       });
       assert.equal(await s.providers.findForCheck('no-such-pool'), null);
+    },
+  },
+  {
+    name: 'providers.findForCheck: a never-used active key is the one checked',
+    run: async (h) => {
+      const s = await h.setup(NEVER_USED_FIXTURE);
+      assert.equal((await s.providers.findForCheck('pool-openai'))?.activeKey, 'enc:new-a');
     },
   },
   {

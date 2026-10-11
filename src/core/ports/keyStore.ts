@@ -56,7 +56,8 @@ export interface KeyCheck {
 
 export interface KeyStore {
   /**
-   * Keys a pool may route to, least-recently-used first. Active and cooling keys are both
+   * Keys a pool may route to, least-recently-used first: a key never used comes before every used
+   * one, and keys with the same `lastUsedAt` (or none) are ordered by id. Active and cooling keys are both
    * returned: the circuit breaker, not this column, decides whether a cooling key may probe.
    * `ownerTeamId` is an equality filter: null is the shared pool, an id is that team's keys only.
    */

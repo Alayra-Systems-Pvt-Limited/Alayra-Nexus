@@ -15,13 +15,14 @@
  */
 
 // ── Prisma key store ──────────────────────────────────────────────────────────
-// The open-source gateway's answer to the core's KeyStore port. Every query here is byte-for-byte
-// the one the router issued inline before the port existed (same where, order and projection), so
-// moving behind the port changes nothing the database sees.
+// The open-source gateway's answer to the core's KeyStore port. Every query here is the one the
+// router issued inline before the port existed (same where and projection). The one deliberate
+// change since is the routing order's explicit NULL placement and id tie-break (#195).
 
 import { prisma } from '../../lib/prisma';
 import type { KeyRow, KeyStore } from '../../core/ports';
 import { PROVIDER_CHECK_SELECT } from './providerStore';
+import { KEY_ROUTING_ORDER } from './keyOrder';
 
 /** Usable = may be routed to. Banned keys never are; cooling keys may probe via the breaker. */
 const USABLE = { in: ['active', 'cooling'] };
@@ -36,7 +37,7 @@ export const prismaKeyStore: KeyStore = {
   // ── Routing reads ─────────────────────────────────────────────────────────
   listRoutable: (providerId, ownerTeamId) => prisma.nexusKey.findMany({
     where:   { providerId, status: USABLE, ownerTeamId },
-    orderBy: { lastUsedAt: 'asc' },
+    orderBy: KEY_ROUTING_ORDER,
     select:  KEY_ROW_SELECT,
   }),
 
