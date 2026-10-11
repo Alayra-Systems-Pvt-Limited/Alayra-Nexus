@@ -20,7 +20,7 @@
 // production defaults and every test here would sit for ten minutes waiting for a ceiling that had
 // already been raised. It did exactly that on the first run.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 // Both guards have to be able to win, or one of these tests is only ever measuring the other. The
 // gaps below are chosen against these: 30ms between chunks never reaches the 200ms idle guard, so
@@ -68,6 +68,7 @@ vi.mock('../lib/metrics', async (o) => ({ ...(await o<typeof import('../lib/metr
 vi.mock('../lib/tracing', async (o) => ({ ...(await o<typeof import('../lib/tracing')>()) }));
 
 import { handleProxy } from './completionsProxy.service';
+import { coreStores } from '../core/stores';
 
 const ROUTE = {
   keyId: 'key-1', decryptedKey: 'sk-test', keyMask: '●●●●1234',
@@ -136,6 +137,10 @@ function drippingUpstream(chunks: Uint8Array[], gapMs: number, hangAtEnd = false
   };
 }
 
+// The server resolves the core's storage at boot, before it listens (see server.ts). Do the same
+// here, so the first test's timer measures the stream ceiling rather than a one-off module load.
+beforeAll(async () => { await coreStores(); });
+
 beforeEach(() => {
   vi.clearAllMocks();
   discoverBestPool.mockResolvedValue(ROUTE);
@@ -146,14 +151,20 @@ describe('a request that runs too long', () => {
     // The exact shape of #126. Chunks arrive every 30ms against a 200ms idle guard, so the idle
     // guard never comes close to firing — and before the ceiling existed, nothing else would have.
     // A provider dripping like this held a connection, a slot and a token reservation indefinitely.
-    safeFetch.mockImplementation(drippingUpstream(Array.from({ length: 200 }, () => delta('word ')), 30));
+    //
+    // The bound is deliberately far from both ends. Uncut, this stream runs 400 × 30 ms = 12 s; cut,
+    // it ends just after the 500 ms ceiling. Asserting under 5 s proves the cut with seconds to spare
+    // in both directions, so a busy machine (the full suite runs 140 files in parallel) cannot fail
+    // it, while a ceiling that never fired still cannot pass it.
+    safeFetch.mockImplementation(drippingUpstream(Array.from({ length: 400 }, () => delta('word ')), 30));
 
     const reply = recordingReply();
     const started = Date.now();
     await handleProxy({ messages, stream: true } as never, reply as never, undefined, {}, undefined);
     const elapsed = Date.now() - started;
 
-    expect(elapsed, 'ran past the ceiling').toBeLessThan(1500);
+    expect(elapsed, 'ran past the ceiling').toBeLessThan(5000);
+    expect(reply.written()).toContain('stream_duration');
     expect(reply.ended).toBe(true);
   });
 

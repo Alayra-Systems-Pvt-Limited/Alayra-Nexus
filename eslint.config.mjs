@@ -34,6 +34,21 @@ export default tseslint.config(
     },
   },
   {
+    // The gateway core (Phase P0.3). It reaches storage only through the ports in src/core/ports,
+    // so a host can supply its own storage — the hosted gateway answers them from a tenant vault.
+    // A database client imported here would quietly tie the core back to one database, so it is an
+    // error rather than a review comment. Hosts wire storage in through src/adapters/.
+    files: ['src/core/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [
+        { group: ['**/lib/prisma', '**/lib/prisma.*', '@prisma/*', '.prisma/*'],
+          message: 'The core must not import a database client. Add a method to a port in src/core/ports and implement it in src/adapters/.' },
+        { group: ['**/adapters/**'],
+          message: 'The core must not depend on a host adapter. The host installs adapters through configureCoreStores().' },
+      ] }],
+    },
+  },
+  {
     // ESM helper scripts. Same situation as the CommonJS block below — untyped JavaScript run
     // standalone by Node, so `no-undef` needs Node's globals declared explicitly, which the
     // TypeScript blocks get for free from typescript-eslint disabling that rule. Separate from it

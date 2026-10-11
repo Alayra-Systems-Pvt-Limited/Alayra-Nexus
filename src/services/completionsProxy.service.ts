@@ -39,16 +39,10 @@ import { isByok, isIsolated }          from '../lib/scope';
 import { resolveRequestedModel, unknownModelError, noCapacityMessage } from './modelCatalog.service';
 import type { RequestTrace, TraceRoutingStrategy } from '../lib/requestTrace';
 
-export interface TeamContext {
-  id:           string;
-  budgetUsd:    number | null;
-  budgetPeriod: string;
-  byokFallback?: boolean;
-  /** Preferred routing tier (Phase 8). null = no preference; routing uses the normal tier order. */
-  assignedTier?: string | null;
-  /** What happens at the budget cap (Phase 7.10): "block" | "notify" | "downgrade". Defaults to block. */
-  overBudgetAction?: string;
-}
+// The caller's team now lives with the rest of the caller context in the core; re-exported here
+// because existing callers and tests import it from this module.
+import type { TeamContext } from '../core/context';
+export type { TeamContext };
 
 export interface CompletionsBody {
   model?:       string;

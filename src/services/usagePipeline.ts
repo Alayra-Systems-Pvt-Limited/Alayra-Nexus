@@ -14,8 +14,8 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-import { prisma } from '../lib/prisma';
-import { createManyIgnoringDuplicates } from '../lib/bulkInsert';
+import { coreStores } from '../core/stores';
+import type { UsageRow } from '../core/ports';
 
 // ── Async analytics pipeline ──────────────────────────────────────────────────
 // Usage events are buffered in-process and flushed to Postgres in a single batched
@@ -28,31 +28,8 @@ import { createManyIgnoringDuplicates } from '../lib/bulkInsert';
 // for a real queue later (BullMQ, Kafka → ClickHouse, …) is a change to this module
 // only — every caller keeps calling emit(). That is the point of the seam.
 
-export interface UsageEvent {
-  id:             string;
-  sessionId:      string;
-  modelId:        string;
-  modelName:      string;
-  provider:       string;
-  inputTokens:    number;
-  outputTokens:   number;
-  totalTokens:    number;
-  // Per-modality billing (Phase 6.3b). Defaulted for token endpoints; an image request
-  // records unit "image" and a quantity, so the batched insert stays a single shape.
-  unit:           string;
-  quantity:       number;
-  estimatedUsd:   number;
-  // Per-request outcome + latency (Phase 7.5). Every request emits an event now, not just the
-  // successful ones, so success/error rates and latency can be charted from real data.
-  outcome:        string;
-  latencyMs:      number;
-  // Response-cache accounting (Phase 7.5): `cached` marks a cache-served request (cost 0) and
-  // `savedUsd` is what calling the provider would have cost.
-  cached:         boolean;
-  savedUsd:       number;
-  nexusTeamKeyId: string | null;
-  createdAt:      Date;
-}
+/** One usage event. It is the usage store's row, so what is buffered is exactly what is written. */
+export type UsageEvent = UsageRow;
 
 export interface UsagePipelineOptions {
   /** Flush cadence in ms (also the maximum analytics lag). */
@@ -67,16 +44,9 @@ export interface UsagePipelineOptions {
   autoStart?:  boolean;
 }
 
-// Postgres caps parameters per statement (~65535); chunk so a large drain can't blow past it.
-// SQLite's limit is lower still (999 variables by default), and TokenUsage is a wide row, so the
-// same chunk size serves both. The insert is idempotent so a re-queued retry cannot duplicate a
-// row — ids are UUIDs, so a collision is always a row we already wrote. See lib/bulkInsert.ts:
-// SQLite has no skipDuplicates, and reaching for it there is a validation error, not a no-op.
-const INSERT_CHUNK = 500;
+// The host's usage store does the write — chunking and duplicate-safety included (see the port).
 const defaultInsert = async (rows: UsageEvent[]): Promise<void> => {
-  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
-    await createManyIgnoringDuplicates(prisma.tokenUsage, rows.slice(i, i + INSERT_CHUNK));
-  }
+  await (await coreStores()).usage.insertBatch(rows);
 };
 
 export function createUsagePipeline(options: UsagePipelineOptions = {}) {

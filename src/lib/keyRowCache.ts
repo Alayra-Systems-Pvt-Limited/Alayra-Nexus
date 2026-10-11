@@ -14,6 +14,8 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
+import type { KeyRow } from '../core/ports';
+
 // The pinned key's row, for one second.
 //
 // ── Why this is not the provider cache ────────────────────────────────────────────────────────
@@ -77,17 +79,11 @@
 // admission is what actually stops a key being overused, and it is atomic in the KV, where no cache
 // can reach it.
 
-/** Exactly what sticky routing reads. Anything not here must not be served from this cache. */
-export interface CachedKeyRow {
-  id: string;
-  providerId: string;
-  status: string;
-  ownerTeamId: string | null;
-  maxUsers: number;
-  rpmLimit: number;
-  tpmLimit: number;
-  encryptedKey: string;
-}
+/**
+ * Exactly what sticky routing reads. Anything not here must not be served from this cache. It is
+ * the KeyStore port's row, so the cache and the store can never disagree about the shape.
+ */
+export type CachedKeyRow = KeyRow;
 
 interface Entry {
   /** null is cached too: a pin to a deleted key must not re-query on every request. */

@@ -8,6 +8,8 @@ ES modules directly.
 alayra-nexus/
 ├── src/                    # Backend. Compiled to dist/ by `npm run build`.
 │   ├── server.ts           # Composition root: plugins, static root, route registration
+│   ├── core/               # Gateway core boundary: storage ports + caller context. No database client.
+│   ├── adapters/prisma/    # This gateway's answer to the core's ports (one adapter per port)
 │   ├── routes/             # HTTP surface. No business logic.
 │   ├── services/           # Stateful work: DB, Redis, provider calls, config
 │   ├── lib/                # Pure, unit-tested logic. No I/O, no framework imports.
@@ -21,6 +23,15 @@ alayra-nexus/
 ├── test/setup.ts           # Test-process env bootstrap
 └── docs/architecture/      # This directory
 ```
+
+## The core boundary
+
+The request path (routing, key selection, limits, usage, alerts) reaches storage only through the
+ports in `src/core/ports/` — keys, providers, usage, settings and notifications. The server installs
+the Prisma adapters at boot (`installPrismaCoreStores()` in `server.ts`, and in `test/setup.ts` for
+the suite), and `coreStores()` hands them to the services. This is what lets the hosted gateway run
+the same core against its own tenant storage. ESLint rejects any database-client or adapter import
+under `src/core/`.
 
 ## The layering rule
 

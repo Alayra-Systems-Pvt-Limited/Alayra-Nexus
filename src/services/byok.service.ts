@@ -14,7 +14,7 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-import { prisma }                     from '../lib/prisma';
+import { coreStores } from '../core/stores';
 import { resolveScope, type RoutingScope, type ScopeTeam } from '../lib/scope';
 
 // ── BYOK scope resolution (Phase 5.5) ─────────────────────────────────────────
@@ -30,9 +30,7 @@ import { resolveScope, type RoutingScope, type ScopeTeam } from '../lib/scope';
  * One indexed lookup on (ownerTeamId, status) — the index added in 0004_byok.
  */
 export async function countOwnedKeys(teamId: string): Promise<number> {
-  return prisma.nexusKey.count({
-    where: { ownerTeamId: teamId, status: { in: ['active', 'cooling'] } },
-  });
+  return (await coreStores()).keys.countOwnedUsable(teamId);
 }
 
 /**

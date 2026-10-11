@@ -40,6 +40,10 @@ import { getHealthOverview, takeSample } from '../../src/services/healthSampler.
 import { getCacheStats, getCacheConfigForUI } from '../../src/services/cache.service';
 import { getCurrentSpend } from '../../src/services/budget.service';
 import { CAPABILITIES } from '../../src/lib/modelSelect';
+import { installPrismaCoreStores } from '../../src/adapters/prisma/install';
+
+// Services here read through the core's storage ports, as they do in the server.
+installPrismaCoreStores();
 
 const OUT_DIR  = join(__dirname, '..', '..', 'web', 'src', 'demo');
 const OUT_FILE = join(OUT_DIR, 'dataset.json');

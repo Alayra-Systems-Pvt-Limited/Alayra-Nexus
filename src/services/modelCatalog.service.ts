@@ -38,7 +38,7 @@
 // Serving a different model than the one asked for is the single failure a gateway must
 // never have: it is invisible in the response, in the logs, and in the bill.
 
-import { prisma }                 from '../lib/prisma';
+import { coreStores } from '../core/stores';
 import { getActiveProviders }     from './providerCache.service';
 import { getModelRegistry, activeProviderSlugs, type AiModel } from './model.service';
 import type { Capability }        from '../lib/modelSelect';
@@ -96,11 +96,7 @@ export type ModelResolution =
  * key as a half-open probe, matching how routing treats them.
  */
 async function ownedProviderSlugs(teamId: string): Promise<Set<string>> {
-  const rows = await prisma.nexusKey.findMany({
-    where:  { ownerTeamId: teamId, status: { in: ['active', 'cooling'] } },
-    select: { provider: { select: { provider: true, isActive: true } } },
-  });
-  return new Set(rows.filter((r) => r.provider.isActive).map((r) => r.provider.provider));
+  return (await coreStores()).keys.ownedProviderSlugs(teamId);
 }
 
 /**
@@ -266,7 +262,7 @@ export async function noCapacityMessage(opts: {
     return 'No provider pools are configured on this gateway. Add a provider and an API key in the Nexus tab before sending requests.';
   }
 
-  const keyCount = await prisma.nexusKey.count({ where: { status: { in: ['active', 'cooling'] } } });
+  const keyCount = await (await coreStores()).keys.countUsable();
   if (keyCount === 0) {
     return 'No usable provider API keys are configured on this gateway. Add a key to a provider pool in the Nexus tab, or re-enable a banned one.';
   }

@@ -60,6 +60,11 @@ import cluster from 'node:cluster';
 import { assertClusterSafe, desiredWorkers, ownsBackgroundJobs, ClusterUnsafeError, forkDelayMs, createCrashWindow } from './lib/cluster';
 import { installCrashHandlers, onShutdown, shutdown } from './lib/lifecycle';
 import { kvAwareErrorHandler } from './lib/kvUnavailable';
+import { installPrismaCoreStores } from './adapters/prisma/install';
+import { coreStores } from './core/stores';
+
+// The core reads and writes through storage ports; this gateway answers them from its own database.
+installPrismaCoreStores();
 
 // Before anything else can throw. Registered at import time rather than inside `bootstrap`, because
 // the window this closes includes the boot itself — `initOnce` builds a schema and talks to Redis,
@@ -290,6 +295,10 @@ async function serve() {
   // No explicit WAL checkpoint here, deliberately — see the note in lib/sqlitePragma.ts.
   // $disconnect closes the last connection, and SQLite folds the -wal back in as part of that.
   onShutdown('disconnect the database', () => prisma.$disconnect());
+
+  // Resolve the core's storage before taking traffic: the adapters load here rather than inside the
+  // first request, and a broken install fails the boot instead of the first caller.
+  await coreStores();
 
   await app.listen({ port: PORT, host: HOST });
   console.log(`\n🚀  Alayra Nexus running on http://${HOST}:${PORT}`);
