@@ -111,6 +111,14 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   fails on a database client, an adapter, a route, the server, or a package outside a four-entry
   allowlist. No behaviour change.
 
+- **The key-value store is chosen on first use, and a host can supply it.** `lib/redis` no longer
+  opens Redis when it is imported. The `redis` export is now a thin stand-in that picks its client
+  the first time it is used: a client the host installed with `configureCoreKv()` (exported from
+  `src/core/index.ts`), otherwise `REDIS_URL` or the in-process store exactly as before. Installing
+  a client after the core has used one throws, so two stores can never split the same counters.
+  `usingMemoryKv` is now a function. The open-source server does not call `configureCoreKv()` and
+  behaves as before.
+
 ## [1.6.5] - 2026-09-20
 
 ### Added

@@ -206,7 +206,7 @@ async function serve() {
     // handing it one crashes the boot with `defineCommand is not a function`. Omitting the option
     // makes the plugin use its own in-process counter, which is the right store in that mode anyway:
     // there is exactly one process, so a shared one would be indirection with no purpose.
-    ...(usingMemoryKv ? {} : { redis }),
+    ...(usingMemoryKv() ? {} : { redis }),
     max:        ABUSE_RATE_LIMIT_MAX,
     timeWindow: ABUSE_RATE_LIMIT_WINDOW,
     skipOnError: true, // fail open: a Redis blip must never take the proxy down
@@ -362,7 +362,7 @@ async function bootstrap() {
   if (workers > 1 && cluster.isPrimary) {
     // Before anything is forked, and before the one-time work: an operator who asked for something
     // unsafe should learn about it immediately, not after a schema has been built.
-    assertClusterSafe(workers, { usingMemoryKv, dbEngine });
+    assertClusterSafe(workers, { usingMemoryKv: usingMemoryKv(), dbEngine });
 
     await initOnce();
 

@@ -34,6 +34,11 @@ export type {
 } from './ports';
 export { configureCoreStores, coreStores, type CoreStoresLoader } from './stores';
 
+// ── Key-value store: rate windows, breakers, sticky routes, the response cache ──
+// Install the host's ioredis client once at boot, before any other core call (P0.5b). Without it
+// the core falls back to REDIS_URL, or to an in-process store when that is unset.
+export { configureCoreKv } from '../lib/redis';
+
 // ── Who is calling: resolved by the host, never by the core ──
 export type { TeamContext, CallerContext } from './context';
 
