@@ -16,7 +16,7 @@
 
 import { redis }  from '../lib/redis';
 import { defineScript } from '../lib/kv/memory';
-import { prisma } from '../lib/prisma';
+import { coreStores } from '../core/stores';
 
 // ── Team budget enforcement ───────────────────────────────────────────────────
 // Each team's spend for the current period is tracked in a Redis counter and
@@ -114,11 +114,7 @@ export async function getCurrentSpend(teamId: string, period: BudgetPeriod, now:
   const cached = await redis.get(key);
   if (cached !== null) return parseFloat(cached) || 0;
 
-  const agg = await prisma.tokenUsage.aggregate({
-    _sum:  { estimatedUsd: true },
-    where: { createdAt: { gte: periodStart(period, now) }, teamKey: { teamId } },
-  });
-  const spend = agg._sum.estimatedUsd ?? 0;
+  const spend = await (await coreStores()).usage.teamSpendSince(teamId, periodStart(period, now));
   // NX: if a concurrent request seeded first, keep its counter (it may already
   // include increments this SET would otherwise erase).
   await redis.set(key, String(spend), 'EX', PERIOD_TTL_SECONDS[period], 'NX');

@@ -15,7 +15,7 @@
  */
 
 import { Registry, Counter, Histogram, Gauge, collectDefaultMetrics } from 'prom-client';
-import { prisma } from './prisma';
+import { coreStores } from '../core/stores';
 
 // ── Prometheus metrics ────────────────────────────────────────────────────────
 // A scrapeable /metrics endpoint. Counters/histograms are updated on the request
@@ -160,7 +160,8 @@ export function adminLogin(result: 'success' | 'invalid' | 'totp_required' | 'lo
 export async function refreshPoolGauges(): Promise<void> {
   try {
     const now  = Date.now();
-    const keys = await prisma.nexusKey.findMany({ select: { status: true, coolingUntil: true } });
+    const stores = await coreStores();
+    const keys = await stores.keys.listStates();
     let active = 0, cooling = 0, banned = 0;
     for (const k of keys) {
       if (k.status === 'banned') banned++;
@@ -170,7 +171,7 @@ export async function refreshPoolGauges(): Promise<void> {
     keysGauge.set({ state: 'active' },  active);
     keysGauge.set({ state: 'cooling' }, cooling);
     keysGauge.set({ state: 'banned' },  banned);
-    providersGauge.set(await prisma.nexusProvider.count({ where: { isActive: true } }));
+    providersGauge.set(await stores.providers.countActive());
   } catch { /* leave last-known values on a DB hiccup rather than error the scrape */ }
 }
 

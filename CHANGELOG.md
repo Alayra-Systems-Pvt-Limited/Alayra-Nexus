@@ -54,6 +54,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   - `brace-expansion` 5.0.9 → 5.0.12: the override floor is raised to match, so it cannot slip back.
   - `npm audit --omit=dev` reports 0 vulnerabilities.
 
+### Internal
+
+- **The gateway core now reaches storage through ports.** Key selection, provider lookup, usage
+  writes, team-spend reads, settings and request-path alerts go through five small interfaces in
+  `src/core/ports/` instead of importing the database client, and the server installs Prisma
+  adapters for them at boot. Every query the database sees is unchanged, and the stores are resolved
+  before the server listens, so the first request pays nothing extra. A lint rule keeps database
+  clients out of `src/core/`. This is the seam the hosted gateway uses to run the same core on its
+  own tenant storage; there is no behaviour change for self-hosted gateways.
+
 ## [1.6.5] - 2026-09-20
 
 ### Added

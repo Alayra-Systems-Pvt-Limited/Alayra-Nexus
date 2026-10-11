@@ -46,30 +46,17 @@
 // going through those routes — a restore, or a migration to Postgres — matching how the model
 // registry has always behaved.
 
-import { prisma } from '../lib/prisma';
+import { coreStores } from '../core/stores';
+import type { ProviderRow } from '../core/ports';
 import { redis } from '../lib/redis';
 import { PROVIDER_CACHE_KEY } from '../lib/registryCacheKey';
 import { TtlMemo } from '../lib/ttlMemo';
 
 /**
- * Exactly the columns routing reads. Structurally identical to nexus.service's `ProviderRow`,
- * which is what makes this a drop-in for the queries it replaces.
+ * Exactly the columns routing reads: the ProviderStore port's row, so the cache, the store and
+ * nexus.service's `ProviderRow` can never drift apart.
  */
-export interface CachedProvider {
-  id: string;
-  baseUrl: string | null;
-  provider: string;
-  authHeader: string;
-  authPrefix: string | null;
-  tier: string;
-  preferredModel: string | null;
-  extraHeaders: string | null;
-}
-
-const PROVIDER_SELECT = {
-  id: true, baseUrl: true, provider: true, authHeader: true,
-  authPrefix: true, tier: true, preferredModel: true, extraHeaders: true,
-} as const;
+export type CachedProvider = ProviderRow;
 
 /** Matches the model registry's cache. See the staleness note in the header. */
 const TTL_SECONDS = 60;
@@ -104,11 +91,7 @@ export async function getActiveProviders(): Promise<CachedProvider[]> {
     } catch { /* corrupt entry — re-read below */ }
   }
 
-  const rows = await prisma.nexusProvider.findMany({
-    where:   { isActive: true },
-    orderBy: { createdAt: 'asc' },
-    select:  PROVIDER_SELECT,
-  });
+  const rows = await (await coreStores()).providers.listActive();
 
   await redis.set(PROVIDER_CACHE_KEY, JSON.stringify(rows), 'EX', TTL_SECONDS);
   memo.set(PROVIDER_CACHE_KEY, rows);

@@ -1,6 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { installPrismaCoreStores } from '../src/adapters/prisma/install';
 
 // Test-only environment bootstrap. Runs before each test file so modules that
 // read configuration at import time (e.g. src/lib/encryption.ts) load cleanly.
@@ -28,3 +29,9 @@ process.env.DATABASE_URL = process.env.DATABASE_URL ?? 'postgresql://nexus:nexus
 //
 // mkdtemp rather than a fixed path so parallel vitest workers cannot fight over one directory.
 process.env.NEXUS_DATA_DIR = mkdtempSync(join(tmpdir(), 'nexus-test-'));
+
+// The core reaches storage through ports (src/core/stores.ts). Install the open-source Prisma
+// adapters for every test file, exactly as the server does at boot. The install only records a
+// lazy loader, so lib/prisma is not loaded here, and a test's own vi.mock of it still reaches the
+// adapters on the first storage call.
+installPrismaCoreStores();

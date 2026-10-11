@@ -15,7 +15,7 @@
  */
 
 import { redis }                  from '../lib/redis';
-import { prisma }                 from '../lib/prisma';
+import { coreStores } from '../core/stores';
 import { getSetting, setSetting } from './settings.service';
 import { REGISTRY_CACHE_KEY }    from '../lib/registryCacheKey';
 import { getActiveProviders }    from './providerCache.service';
@@ -229,10 +229,7 @@ export async function activeProviderSlugs(): Promise<Set<string>> {
 export async function reconcilePoolsToRegistry(): Promise<number> {
   const [registry, pools] = await Promise.all([
     getModelRegistry(),
-    prisma.nexusProvider.findMany({
-      where:  { isActive: true, preferredModel: { not: null } },
-      select: { provider: true, preferredModel: true, tier: true, name: true },
-    }),
+    coreStores().then((s) => s.providers.listPreferredModelPools()),
   ]);
 
   const have = new Set(registry.map((m) => `${m.provider}::${m.modelString}`));

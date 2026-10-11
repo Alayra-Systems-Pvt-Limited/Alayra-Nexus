@@ -27,6 +27,7 @@
 
 import { randomUUID } from 'crypto';
 import { prisma }     from '../lib/prisma';
+import { coreStores } from '../core/stores';
 import { redis }      from '../lib/redis';
 import { sectionFor, type NotifyMessage } from '../lib/notify';
 
@@ -51,16 +52,14 @@ export async function recordNotification(msg: NotifyMessage, windowSeconds: numb
   try {
     const claimed = await redis.set(`${FEED_CLAIM_PREFIX}${msg.dedupeKey}`, '1', 'EX', windowSeconds, 'NX');
     if (claimed === null) return false;
-    await prisma.notification.create({
-      data: {
-        id:        randomUUID(),
-        type:      msg.type,
-        severity:  msg.severity,
-        title:     msg.title,
-        body:      msg.body,
-        section:   sectionFor(msg.type),
-        dedupeKey: msg.dedupeKey,
-      },
+    await (await coreStores()).notifications.record({
+      id:        randomUUID(),
+      type:      msg.type,
+      severity:  msg.severity,
+      title:     msg.title,
+      body:      msg.body,
+      section:   sectionFor(msg.type),
+      dedupeKey: msg.dedupeKey,
     });
     return true;
   } catch {

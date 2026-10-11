@@ -20,7 +20,7 @@
 // production defaults and every test here would sit for ten minutes waiting for a ceiling that had
 // already been raised. It did exactly that on the first run.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 // Both guards have to be able to win, or one of these tests is only ever measuring the other. The
 // gaps below are chosen against these: 30ms between chunks never reaches the 200ms idle guard, so
@@ -68,6 +68,7 @@ vi.mock('../lib/metrics', async (o) => ({ ...(await o<typeof import('../lib/metr
 vi.mock('../lib/tracing', async (o) => ({ ...(await o<typeof import('../lib/tracing')>()) }));
 
 import { handleProxy } from './completionsProxy.service';
+import { coreStores } from '../core/stores';
 
 const ROUTE = {
   keyId: 'key-1', decryptedKey: 'sk-test', keyMask: '●●●●1234',
@@ -135,6 +136,10 @@ function drippingUpstream(chunks: Uint8Array[], gapMs: number, hangAtEnd = false
     };
   };
 }
+
+// The server resolves the core's storage at boot, before it listens (see server.ts). Do the same
+// here, so the first test's timer measures the stream ceiling rather than a one-off module load.
+beforeAll(async () => { await coreStores(); });
 
 beforeEach(() => {
   vi.clearAllMocks();

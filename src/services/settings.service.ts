@@ -50,7 +50,7 @@
 //
 // SETTING_MEMO_TTL_MS=0 disables the memo and restores a Redis round trip per read.
 
-import { prisma } from '../lib/prisma';
+import { coreStores } from '../core/stores';
 import { redis }  from '../lib/redis';
 
 const CACHE_TTL = 300; // 5 min, in Redis
@@ -81,19 +81,14 @@ export async function getSetting(key: string): Promise<string | null> {
     return value;
   }
 
-  const row = await prisma.appSettings.findUnique({ where: { key } });
-  const value = row?.value ?? null;
+  const value = await (await coreStores()).settings.get(key);
   await redis.set(`nexus:setting:${key}`, value ?? '__null__', 'EX', CACHE_TTL);
   if (ttl > 0) memo.set(key, { value, expiresAt: now + ttl });
   return value;
 }
 
 export async function setSetting(key: string, value: string): Promise<void> {
-  await prisma.appSettings.upsert({
-    where:  { key },
-    create: { key, value },
-    update: { value },
-  });
+  await (await coreStores()).settings.set(key, value);
   await redis.set(`nexus:setting:${key}`, value, 'EX', CACHE_TTL);
   // Written through rather than dropped, so the instance that made the change never reads its own
   // stale value back — and so the next read does not pay a round trip to learn what we just wrote.

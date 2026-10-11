@@ -15,6 +15,9 @@
  */
 
 import { prisma }           from '../lib/prisma';
+import { coreStores }       from '../core/stores';
+// Provider fields the router needs to build a route from a picked key: the ProviderStore row.
+import type { ProviderRow } from '../core/ports';
 import { decrypt, maskKey } from '../lib/encryption';
 import { selectAndReserve } from '../lib/selectKey';
 import * as breaker         from '../lib/breaker';
@@ -24,7 +27,7 @@ import { getCostWeight }     from './routing.service';
 import { getModelRegistry, activeProviderSlugs }  from './model.service';
 import { getActiveProviders }  from './providerCache.service';
 import { shouldWriteLastUsed, forgetLastUsed } from '../lib/lastUsed';
-import { getKeyRow, setKeyRow, getKeyList, setKeyList, forgetKeyRow, type CachedKeyRow } from '../lib/keyRowCache';
+import { getKeyRow, setKeyRow, getKeyList, setKeyList, forgetKeyRow } from '../lib/keyRowCache';
 import { selectModels, type SelectableModel, type Capability } from '../lib/modelSelect';
 import { stripTrailingSlash, assertSafeUrl } from '../lib/url';
 import { safeFetch }        from '../lib/safeFetch';
@@ -87,25 +90,10 @@ export interface NexusRoute {
   tpmLimit:     number;
 }
 
-// Provider fields the router needs to build a route from a picked key.
-type ProviderRow = {
-  id: string; baseUrl: string | null; provider: string;
-  authHeader: string; authPrefix: string | null; tier: string; preferredModel: string | null;
-  extraHeaders: string | null;
-};
 
 // The model a route will serve. On the model-first path it comes from the registry; on
 // the legacy fallback it is synthesised from the pool's own tier + preferredModel.
 type RouteModel = { modelString: string; modelId: string | null; tier: string };
-
-/**
- * The columns sticky routing reads from a key. Kept in step with CachedKeyRow by the
- * `satisfies` below, so adding a field to one without the other fails to compile.
- */
-const KEY_ROW_SELECT = {
-  id: true, providerId: true, status: true, ownerTeamId: true,
-  maxUsers: true, rpmLimit: true, tpmLimit: true, encryptedKey: true,
-} satisfies Record<keyof CachedKeyRow, true>;
 
 function buildRoute(
   key: { id: string; encryptedKey: string; ownerTeamId: string | null; status: string; rpmLimit: number; tpmLimit: number },
@@ -169,11 +157,7 @@ async function tryPickKey(
   // at most once per five seconds.
   let keys = getKeyList(providerRow.id, ownerTeamId);
   if (keys === undefined) {
-    keys = await prisma.nexusKey.findMany({
-      where:   { providerId: providerRow.id, status: { in: ['active', 'cooling'] }, ownerTeamId },
-      orderBy: { lastUsedAt: 'asc' },
-      select:  KEY_ROW_SELECT,
-    });
+    keys = await (await coreStores()).keys.listRoutable(providerRow.id, ownerTeamId);
     setKeyList(providerRow.id, ownerTeamId, keys);
   }
 
@@ -195,7 +179,7 @@ async function tryPickKey(
   // because Prisma's `update` compiles to a RETURNING of every column, and nothing here reads
   // the row back. See lib/lastUsed.ts for what the window costs.
   if (shouldWriteLastUsed(key.id, now.getTime())) {
-    await prisma.nexusKey.updateMany({ where: { id: key.id }, data: { lastUsedAt: now } });
+    await (await coreStores()).keys.touchLastUsed(key.id, now);
   }
   return buildRoute(key, providerRow, chosen.gate, model);
 }
@@ -224,7 +208,7 @@ async function tryStickyKey(
   // for why one second is both enough and the worst case.
   let key = getKeyRow(keyId);
   if (key === undefined) {
-    key = await prisma.nexusKey.findUnique({ where: { id: keyId }, select: KEY_ROW_SELECT });
+    key = await (await coreStores()).keys.findRoutable(keyId);
     setKeyRow(keyId, key);
   }
   if (!key || key.status === 'banned') return null;
@@ -263,7 +247,7 @@ async function tryStickyKey(
 
   const now = Date.now();
   if (shouldWriteLastUsed(key.id, now)) {
-    await prisma.nexusKey.updateMany({ where: { id: key.id }, data: { lastUsedAt: new Date(now) } });
+    await (await coreStores()).keys.touchLastUsed(key.id, new Date(now));
   }
   return { ...buildRoute(key, provider, chosen.gate, model), wasDowngrade: false, sticky: true };
 }
@@ -470,16 +454,13 @@ export async function discoverBestPool(
 }
 
 export async function getNextCooldownSeconds(): Promise<number> {
-  const cooling = await prisma.nexusKey.findFirst({
-    where:   { status: 'cooling', coolingUntil: { not: null } },
-    orderBy: { coolingUntil: 'asc' },
-  });
-  if (!cooling?.coolingUntil) return 60;
-  return Math.max(5, Math.ceil((cooling.coolingUntil.getTime() - Date.now()) / 1000));
+  const coolingUntil = await (await coreStores()).keys.nextCoolingUntil();
+  if (!coolingUntil) return 60;
+  return Math.max(5, Math.ceil((coolingUntil.getTime() - Date.now()) / 1000));
 }
 
 export async function banKey(keyId: string): Promise<void> {
-  await prisma.nexusKey.update({ where: { id: keyId }, data: { status: 'banned' } });
+  await (await coreStores()).keys.markBanned(keyId);
   forgetKeyRow(keyId);
   // A banned key is never routed to again, so its debounce entry is dead weight. Dropping it here
   // is what keeps that map bounded by the keys actually in service rather than by every key this
@@ -495,7 +476,7 @@ export async function banKey(keyId: string): Promise<void> {
 export async function coolKey(keyId: string, seconds = 60): Promise<void> {
   const until = new Date(Date.now() + seconds * 1000);
   await breaker.onRateLimit(keyId, seconds);
-  await prisma.nexusKey.update({ where: { id: keyId }, data: { status: 'cooling', coolingUntil: until } });
+  await (await coreStores()).keys.markCooling(keyId, until);
   forgetKeyRow(keyId);
 }
 
@@ -511,10 +492,7 @@ export async function reportSuccess(keyId: string, wasProbe: boolean): Promise<v
   // Only touch the DB when recovering a key that was actually cooling — a normal
   // closed-state success writes nothing.
   if (wasProbe) {
-    await prisma.nexusKey.updateMany({
-      where: { id: keyId, status: 'cooling' },
-      data:  { status: 'active', coolingUntil: null },
-    });
+    await (await coreStores()).keys.markRecovered(keyId);
     forgetKeyRow(keyId);
   }
 }
@@ -529,8 +507,8 @@ export async function reportServerFailure(keyId: string, wasProbe: boolean): Pro
   const { opened, cooldownSeconds } = await breaker.onServerFailure(keyId, wasProbe);
   if (opened) {
     const until = new Date(Date.now() + cooldownSeconds * 1000);
-    await prisma.nexusKey.update({ where: { id: keyId }, data: { status: 'cooling', coolingUntil: until } });
-  forgetKeyRow(keyId);
+    await (await coreStores()).keys.markCooling(keyId, until);
+    forgetKeyRow(keyId);
     void alertKeyEvent(keyId, 'opened', cooldownSeconds).catch(() => {});
   }
 }
@@ -551,13 +529,11 @@ export async function reportAuthFailure(keyId: string): Promise<void> {
 // lookup this costs is for the display name of a key that just got banned or tripped its breaker —
 // rare by construction, and off the request path.
 async function alertKeyEvent(keyId: string, kind: 'banned' | 'opened', cooldownSeconds = 0): Promise<void> {
-  const k = await prisma.nexusKey.findUnique({
-    where: { id: keyId }, select: { maskedKey: true, provider: { select: { slug: true } } },
-  });
+  const k = await (await coreStores()).keys.alertFacts(keyId);
   if (!k) return;
   await notify(kind === 'banned'
-    ? keyBannedMessage(k.provider.slug, k.maskedKey)
-    : breakerOpenedMessage(k.provider.slug, k.maskedKey, cooldownSeconds));
+    ? keyBannedMessage(k.providerSlug, k.maskedKey)
+    : breakerOpenedMessage(k.providerSlug, k.maskedKey, cooldownSeconds));
 }
 
 /**
