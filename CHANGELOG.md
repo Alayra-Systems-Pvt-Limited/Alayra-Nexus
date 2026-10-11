@@ -9,6 +9,13 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Internal
+
+- **Release: the npm visibility check waits up to ten minutes, not two and a half** (issue #198).
+  npm now takes a few minutes to list a new version, and the 1.6.6 release failed on that wait
+  although both packages had published correctly. Both checks (gateway and core) stop at the
+  first success, so a normal release is no slower.
+
 ## [1.6.6] - 2026-10-11
 
 ### Added
