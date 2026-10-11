@@ -9,6 +9,14 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A new provider key now takes traffic straight away on PostgreSQL** (issue #195). Routing
+  tries the least recently used key first, but a key that had never been used sorted LAST on
+  PostgreSQL (and first on SQLite), so a fresh key sat idle until every other key in its pool had
+  been used. Never-used keys now come first on both engines, ties are broken by id, and the
+  adapter conformance kit checks it, so every storage adapter routes the same way.
+
 ### Internal
 
 - **Release: the npm visibility check waits up to ten minutes, not two and a half** (issue #198).

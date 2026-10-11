@@ -41,7 +41,7 @@ export interface ProviderCheckRow {
   modelIdPath: string;
 }
 
-/** A pool for an operator check, with the ciphertext of its least-recently-used active key. */
+/** A pool for an operator check, with the ciphertext of its first active key in routing order. */
 export interface ProviderCheck extends ProviderCheckRow {
   /** Still encrypted; null when the pool has no active key. */
   activeKey: string | null;

@@ -20,8 +20,8 @@
 // adapter's harness writes exactly this into fresh storage; the checks then know every answer.
 //
 // Fixed timestamps, never the clock, so an ordering bug cannot hide behind two rows written in the
-// same millisecond. Every key has a lastUsedAt: engines disagree on where a NULL sorts, and the
-// core does not pin that order, so the fixture does not depend on it.
+// same millisecond. Every key in the main fixture has a lastUsedAt; NEVER_USED_FIXTURE adds keys
+// without one, because where a never-used key routes is part of the contract (#195).
 
 /** A caller's team. */
 export interface FixtureTeam { id: string; name: string }
@@ -44,7 +44,7 @@ export interface FixtureKey {
   status: 'active' | 'cooling' | 'banned';
   maxUsers: number; rpmLimit: number; tpmLimit: number;
   encryptedKey: string; maskedKey: string;
-  lastUsedAt: Date; coolingUntil: Date | null;
+  lastUsedAt: Date | null; coolingUntil: Date | null;
 }
 
 export interface CoreFixture {
@@ -111,4 +111,18 @@ export const CONFORMANCE_FIXTURE: CoreFixture = {
       encryptedKey: 'enc:cooling-late', maskedKey: 'sk-ant-…8888', lastUsedAt: hoursAfterT0(5), coolingUntil: hoursAfterT0(9) }),
   ],
   settings: [{ key: 'CACHE_ENABLED', value: 'true' }],
+};
+
+// ── Never-used keys ───────────────────────────────────────────────────────────────────────────
+// The main fixture plus two shared OpenAI keys that have never been used, listed out of id order
+// so an adapter that keeps insertion order instead of sorting by id is caught.
+export const NEVER_USED_FIXTURE: CoreFixture = {
+  ...CONFORMANCE_FIXTURE,
+  keys: [
+    ...CONFORMANCE_FIXTURE.keys,
+    key({ id: 'key-new-b', providerId: 'pool-openai', ownerTeamId: null, status: 'active',
+      encryptedKey: 'enc:new-b', maskedKey: 'sk-…9992', lastUsedAt: null, coolingUntil: null }),
+    key({ id: 'key-new-a', providerId: 'pool-openai', ownerTeamId: null, status: 'active',
+      encryptedKey: 'enc:new-a', maskedKey: 'sk-…9991', lastUsedAt: null, coolingUntil: null }),
+  ],
 };

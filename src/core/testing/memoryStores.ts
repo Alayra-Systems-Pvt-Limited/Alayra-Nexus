@@ -32,6 +32,15 @@ export interface MemoryCoreStores {
 
 const usable = (k: FixtureKey): boolean => k.status === 'active' || k.status === 'cooling';
 const byTime = (a: Date, b: Date): number => a.getTime() - b.getTime();
+/** The routing order every KeyStore promises: never used first, then oldest use, then id. */
+const byRouting = (a: FixtureKey, b: FixtureKey): number => {
+  if (a.lastUsedAt === null || b.lastUsedAt === null) {
+    if (a.lastUsedAt !== b.lastUsedAt) return a.lastUsedAt === null ? -1 : 1;
+  } else if (a.lastUsedAt.getTime() !== b.lastUsedAt.getTime()) {
+    return byTime(a.lastUsedAt, b.lastUsedAt);
+  }
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+};
 
 // ── Projections: exactly the columns each port promises, nothing more ──
 
@@ -61,7 +70,7 @@ export function createMemoryCoreStores(fixture: CoreFixture): MemoryCoreStores {
 
   const keyById      = (id: string) => keys.find((k) => k.id === id);
   const providerById = (id: string) => providers.find((p) => p.id === id);
-  const lru = (list: FixtureKey[]) => [...list].sort((a, b) => byTime(a.lastUsedAt, b.lastUsedAt));
+  const lru = (list: FixtureKey[]) => [...list].sort(byRouting);
 
   const stores: CoreStores = {
     // ── Keys ──

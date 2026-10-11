@@ -20,7 +20,7 @@
 
 import assert from 'node:assert/strict';
 import type { KeyRow } from '../ports';
-import { CONFORMANCE_FIXTURE as F, hoursAfterT0 } from './fixture';
+import { CONFORMANCE_FIXTURE as F, NEVER_USED_FIXTURE, hoursAfterT0 } from './fixture';
 import type { ConformanceCase } from './conformanceTypes';
 
 const ids = (rows: KeyRow[]): string[] => rows.map((r) => r.id);
@@ -37,6 +37,14 @@ export const keyStoreCases: ConformanceCase[] = [
     run: async (h) => {
       const s = await h.setup(F);
       assert.deepEqual(ids(await s.keys.listRoutable('pool-openai', null)), ['key-shared-2', 'key-shared-1']);
+    },
+  },
+  {
+    name: 'keys.listRoutable: never-used keys come first, ordered by id, before any used key',
+    run: async (h) => {
+      const s = await h.setup(NEVER_USED_FIXTURE);
+      assert.deepEqual(ids(await s.keys.listRoutable('pool-openai', null)),
+        ['key-new-a', 'key-new-b', 'key-shared-2', 'key-shared-1']);
     },
   },
   {

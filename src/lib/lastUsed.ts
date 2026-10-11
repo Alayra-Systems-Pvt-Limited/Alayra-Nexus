@@ -18,7 +18,7 @@
 //
 // ── What this column is for ───────────────────────────────────────────────────────────────────
 //
-// Routing orders candidate keys `lastUsedAt: 'asc'`, so the least recently used key is tried
+// Routing orders candidate keys by `lastUsedAt` (never-used first), so the least recently used key is tried
 // first and load spreads across a pool. It is NOT dead bookkeeping — dropping the write would
 // freeze that ordering and concentrate traffic on whichever key happened to sort first.
 //
