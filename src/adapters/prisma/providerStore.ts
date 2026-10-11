@@ -19,13 +19,19 @@
 // registry read them before the port existed.
 
 import { prisma } from '../../lib/prisma';
-import type { ProviderRow, ProviderStore } from '../../core/ports';
+import type { ProviderCheckRow, ProviderRow, ProviderStore } from '../../core/ports';
 
 /** The routing projection. `satisfies` keeps it in step with ProviderRow at compile time. */
 const PROVIDER_SELECT = {
   id: true, baseUrl: true, provider: true, authHeader: true,
   authPrefix: true, tier: true, preferredModel: true, extraHeaders: true,
 } satisfies Record<keyof ProviderRow, true>;
+
+/** The operator-check projection, kept in step with ProviderCheckRow the same way. */
+export const PROVIDER_CHECK_SELECT = {
+  baseUrl: true, provider: true, authHeader: true, authPrefix: true,
+  extraHeaders: true, modelFetchUrl: true, modelIdPath: true,
+} satisfies Record<keyof ProviderCheckRow, true>;
 
 export const prismaProviderStore: ProviderStore = {
   // Oldest first: every caller filters this list in memory, so this order is selection order.
@@ -41,4 +47,20 @@ export const prismaProviderStore: ProviderStore = {
   }),
 
   countActive: () => prisma.nexusProvider.count({ where: { isActive: true } }),
+
+  // ── Operator checks ───────────────────────────────────────────────────────
+  // Same where and the same key choice (one active key, least recently used) the checks issued
+  // inline; the projection is narrowed to the columns they read.
+  findForCheck: async (providerId) => {
+    const row = await prisma.nexusProvider.findUnique({
+      where:  { id: providerId },
+      select: {
+        ...PROVIDER_CHECK_SELECT,
+        keys: { where: { status: 'active' }, take: 1, orderBy: { lastUsedAt: 'asc' }, select: { encryptedKey: true } },
+      },
+    });
+    if (!row) return null;
+    const { keys, ...pool } = row;
+    return { ...pool, activeKey: keys[0]?.encryptedKey ?? null };
+  },
 };

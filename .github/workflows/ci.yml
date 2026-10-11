@@ -35,6 +35,10 @@ jobs:
       # evidence says, which is the half that used to be a person remembering to retype a tick.
       - name: Check the README provider table matches the committed evidence
         run: npm run docs:providers -- --check
+      # No source file over 300 lines. The files already over it are listed in
+      # scripts/lint/line-budget.json and may only shrink; a new one cannot join them.
+      - name: Check file sizes against the line budget
+        run: npm run check:lines
 
   typecheck:
     name: Typecheck

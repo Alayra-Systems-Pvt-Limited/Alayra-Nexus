@@ -84,7 +84,8 @@
     "bench:multi-instance": "tsx scripts/bench/multiInstance.ts",
     "verify:providers": "tsx scripts/verify-providers.ts",
     "gate:e2e": "tsx scripts/release-gate.ts",
-    "docs:providers": "tsx scripts/docs/providerTable.ts"
+    "docs:providers": "tsx scripts/docs/providerTable.ts",
+    "check:lines": "tsx scripts/lint/checkLines.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",

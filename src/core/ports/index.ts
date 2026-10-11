@@ -24,8 +24,8 @@ import type { UsageStore }       from './usageStore';
 import type { SettingsStore }    from './settingsStore';
 import type { NotificationSink } from './notificationSink';
 
-export type { KeyStore, KeyRow, KeyAlertFacts, KeyStateRow } from './keyStore';
-export type { ProviderStore, ProviderRow, PreferredModelPool } from './providerStore';
+export type { KeyStore, KeyRow, KeyAlertFacts, KeyStateRow, KeyCheck } from './keyStore';
+export type { ProviderStore, ProviderRow, PreferredModelPool, ProviderCheckRow, ProviderCheck } from './providerStore';
 export type { UsageStore, UsageRow } from './usageStore';
 export type { SettingsStore } from './settingsStore';
 export type { NotificationSink, NotificationRow } from './notificationSink';

@@ -18,7 +18,10 @@
 // Everything the request path needs to read or write about provider API keys, and nothing more.
 // The open-source gateway answers it from its own database; the hosted gateway answers it from a
 // tenant's encrypted vault. Each method maps to exactly one query the router used to issue inline,
-// so an adapter is a translation, never a place for routing logic.
+// so an adapter is a translation, never a place for routing logic. The one read off the request
+// path is `findForCheck`, for the operator's key test, so that it too goes through the vault.
+
+import type { ProviderCheckRow } from './providerStore';
 
 /** Exactly the columns routing reads from a key. `encryptedKey` is still ciphertext here. */
 export interface KeyRow {
@@ -42,6 +45,13 @@ export interface KeyAlertFacts {
 export interface KeyStateRow {
   status: string;
   coolingUntil: Date | null;
+}
+
+/** A key and its pool, for the operator's "test this key" action. */
+export interface KeyCheck {
+  /** Still ciphertext. */
+  encryptedKey: string;
+  provider: ProviderCheckRow;
 }
 
 export interface KeyStore {
@@ -84,4 +94,7 @@ export interface KeyStore {
 
   /** Status of every key, for the pool gauges. */
   listStates(): Promise<KeyStateRow[]>;
+
+  /** One key with its pool, for the operator's key test, or null when it no longer exists. */
+  findForCheck(keyId: string): Promise<KeyCheck | null>;
 }
