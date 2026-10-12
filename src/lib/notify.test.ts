@@ -16,7 +16,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  normalizeNotificationConfig, keyBannedMessage, breakerOpenedMessage, adminLockoutMessage,
+  normalizeNotificationConfig, keyBannedMessage, keyAuthRefusedMessage, breakerOpenedMessage, adminLockoutMessage,
   budgetThresholdCrossed, budgetThresholdMessage, tierExhaustedMessage, sectionFor,
   coalesceRedisKey, DEFAULT_WINDOW_SECONDS, MIN_WINDOW_SECONDS, NOTIFY_EVENTS,
 } from './notify';
@@ -151,5 +151,43 @@ describe('sectionFor (Phase 7.11)', () => {
 
   it('has a destination for every event, so a new one cannot ship without a home', () => {
     for (const e of NOTIFY_EVENTS) expect(sectionFor(e)).toBeTruthy();
+  });
+});
+
+// ── keyAuthRefused: a ban was asked for and the key store kept the key ──
+// The false alarm this replaces: a provider answered 403 twice (a region, a model, a policy), the
+// host's store kept the key, and the alert still said it was banned.
+describe('keyAuthRefusedMessage', () => {
+  const m = keyAuthRefusedMessage('openai', 'sk-…1111', 2, 300);
+
+  it('is its own event, a warning, filed under the pool, with a count-free dedupe key', () => {
+    expect(m.type).toBe('keyAuthRefused');
+    expect(m.severity).toBe('warning');
+    expect(m.dedupeKey).toBe('keyAuthRefused:openai:sk-…1111');
+    expect(sectionFor('keyAuthRefused')).toBe('nexus');
+  });
+
+  it('carries exactly the fields keyBanned carries, so a parser of one reads the other', () => {
+    expect(Object.keys(m).sort()).toEqual(Object.keys(keyBannedMessage('openai', 'sk-…1111')).sort());
+  });
+
+  it('says what happened: the provider, the key, the count, the window, and nothing cooled', () => {
+    expect(m.title).toBe('Alayra Nexus: openai refused a key 2 times; it was not taken out of service');
+    expect(m.body).toContain('401 or 403');
+    expect(m.body).toContain('sk-…1111');
+    expect(m.body).toContain('2 times within 5 minutes');
+    expect(m.body).toContain('did not cool the key or open its circuit breaker');
+    expect(keyAuthRefusedMessage('openai', 'k', 3, 90).body).toContain('3 times within 90 seconds');
+  });
+
+  it('never claims the key was banned', () => {
+    expect(`${m.title} ${m.body}`).not.toMatch(/banned/i);
+  });
+
+  it('is on by default, including for a config saved before it existed', () => {
+    expect(NOTIFY_EVENTS).toContain('keyAuthRefused');
+    const old = normalizeNotificationConfig({ events: { keyBanned: false } });
+    expect(old.events.keyAuthRefused).toBe(true);
+    expect(old.events.keyBanned).toBe(false); // the old flag still means what it meant
   });
 });

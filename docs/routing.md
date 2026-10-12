@@ -43,10 +43,16 @@ consistent across every Nexus replica.
 | **Cooldown** | **Escalates** on each successive trip — 10s → 20s → 40s … doubling up to a 10-minute cap — so a key that keeps failing is pushed further away instead of being retried on the same fixed timer forever. |
 | **Half-open recovery** | When the cooldown expires the router lets exactly **one** trial request through. Success closes the breaker and resets the streak; failure re-escalates without dumping full traffic back onto a still-dead provider. |
 | **429 (rate limited)** | Handled **separately** — a flat, non-escalating cooldown. A rate limit is expected back-pressure, not an outage, so it never feeds the strike counter. |
-| **401 / 403 (auth)** | A bad credential won't fix itself. **2** consecutive auth failures **ban** the key outright rather than merely cooling it. |
+| **401 / 403 (auth)** | A bad credential won't fix itself. **2** auth failures within 5 minutes **ban** the key outright rather than merely cooling it. Any 403 counts, whatever its reason, and a success in between does not reset the count. The operator alert is `keyBanned`. |
 
-Any success at any point resets the streak to zero. Cooling and banned keys are reflected
-live in the dashboard; the admin **unban** action clears the breaker state as well.
+A success resets the server-failure streak to zero; the auth count above runs out with its
+5-minute window instead. Cooling and banned keys are reflected live in the dashboard; the admin
+**unban** action clears the breaker state as well, but not that auth count, so inside the same
+window one more refusal bans the key again.
+
+If you embed `@alayrasystems/nexus-core` with your own key store, the core only *asks* that store
+to ban the key. When the store keeps it, the alert is `keyAuthRefused` (a warning: nothing was
+banned, cooled or tripped) instead of `keyBanned`. See the core package's README for every alert.
 
 </details>
 

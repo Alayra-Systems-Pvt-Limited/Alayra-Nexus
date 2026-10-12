@@ -26,6 +26,7 @@ const ICONS: Record<string, LucideIcon> = {
   adminLockout:    ShieldAlert,
   budgetThreshold: Wallet,
   tierExhausted:   Layers,
+  keyAuthRefused:  KeyRound,
 };
 
 // Day bucket for grouping. Compared on local midnight so "Today"/"Yesterday" match the operator's

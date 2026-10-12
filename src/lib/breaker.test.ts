@@ -23,9 +23,10 @@ import { describe, it, expect } from 'vitest';
 import { vi } from 'vitest';
 vi.mock('./redis', () => ({ redis: { eval: vi.fn(), del: vi.fn(), incr: vi.fn(), expire: vi.fn(), multi: vi.fn() } }));
 
+import { redis } from './redis';
 import {
-  nextCooldown, strikesKey, cooldownKey, openKey, probeKey, authKey,
-  BASE_COOLDOWN_SECONDS, MAX_COOLDOWN_SECONDS, STRIKE_THRESHOLD, AUTH_BAN_THRESHOLD,
+  nextCooldown, strikesKey, cooldownKey, openKey, probeKey, authKey, onAuthFailure,
+  BASE_COOLDOWN_SECONDS, MAX_COOLDOWN_SECONDS, STRIKE_THRESHOLD, AUTH_BAN_THRESHOLD, AUTH_WINDOW_SECONDS,
 } from './breaker';
 
 describe('breaker key derivation', () => {
@@ -75,5 +76,26 @@ describe('breaker thresholds', () => {
 
   it('bans a credential faster than it cools a transient fault', () => {
     expect(AUTH_BAN_THRESHOLD).toBeLessThanOrEqual(STRIKE_THRESHOLD);
+  });
+});
+
+// ── onAuthFailure: what a 401/403 really changes ──
+// It counts, opens the window on the first refusal, and frees a claimed probe slot. It never opens
+// the breaker or sets a cooldown, which is why the alert must not say the key is cooling either.
+describe('onAuthFailure', () => {
+  it('opens the window on the first refusal and does not ask for a ban yet', async () => {
+    vi.mocked(redis.incr).mockResolvedValueOnce(1);
+    await expect(onAuthFailure('k')).resolves.toEqual({ banned: false, refusals: 1 });
+    expect(redis.expire).toHaveBeenCalledWith(authKey('k'), AUTH_WINDOW_SECONDS);
+    expect(redis.del).toHaveBeenCalledWith(probeKey('k'));
+  });
+
+  it('asks for a ban at the threshold and reports the in-window count, without touching the breaker', async () => {
+    vi.mocked(redis.expire).mockClear();
+    vi.mocked(redis.incr).mockResolvedValueOnce(AUTH_BAN_THRESHOLD);
+    await expect(onAuthFailure('k')).resolves.toEqual({ banned: true, refusals: AUTH_BAN_THRESHOLD });
+    expect(redis.expire).not.toHaveBeenCalled();   // the window is not extended by later refusals
+    expect(redis.eval).not.toHaveBeenCalled();     // no trip: no open key, no cooldown
+    expect(redis.multi).not.toHaveBeenCalled();
   });
 });
