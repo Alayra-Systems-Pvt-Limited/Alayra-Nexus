@@ -15,6 +15,8 @@ const EVENTS: { id: NotifyEvent; label: string; hint: string }[] = [
   { id: 'adminLockout',    label: 'An admin is locked out',          hint: 'Too many failed sign-in attempts.' },
   { id: 'budgetThreshold', label: 'A team crosses its budget',       hint: 'Spend passed 80% or 100% of the cap.' },
   { id: 'tierExhausted',   label: 'The gateway runs out of capacity', hint: 'Every key able to serve a request was unavailable — traffic is being refused.' },
+  // No row for `keyAuthRefused`: it fires only when a key store keeps a key the core asked to ban,
+  // and this gateway's store always bans it. The flag still round-trips with the rest on save.
 ];
 
 export function NotificationsPanel() {

@@ -38,8 +38,9 @@ export const MAX_COOLDOWN_SECONDS  = 600;
 // How long a claimed half-open probe slot is held before it can be reclaimed
 // (guards against a probe request that dies without reporting a result).
 export const PROBE_TTL_SECONDS     = 30;
-// A key that returns this many auth errors (401/403) in-window is banned outright:
-// a bad credential is not a transient failure and will not recover on its own.
+// A key that returns this many auth errors (401/403) in-window is put up for a ban:
+// a bad credential is not a transient failure and will not recover on its own. The
+// key store carries the ban out (the open-source one always does; a host's may not).
 export const AUTH_BAN_THRESHOLD    = 2;
 export const AUTH_WINDOW_SECONDS   = 300;
 // 429s get their own flat, non-escalating cooldown and never feed the strike
@@ -187,11 +188,14 @@ export async function onRateLimit(keyId: string, seconds = RATE_LIMIT_COOLDOWN_S
 
 /**
  * Record an auth failure (401/403). Returns { banned: true } once the in-window
- * count reaches the threshold, at which point the caller should ban the key.
+ * count reaches the threshold, at which point the caller should ask the key store
+ * to ban the key. `refusals` is the in-window count, for the operator alert. The
+ * window opens at the first refusal and a success does not reset it. Nothing here
+ * cools the key or opens its breaker; it only drops a claimed probe slot.
  */
-export async function onAuthFailure(keyId: string): Promise<{ banned: boolean }> {
+export async function onAuthFailure(keyId: string): Promise<{ banned: boolean; refusals: number }> {
   const n = await redis.incr(authKey(keyId));
   if (n === 1) await redis.expire(authKey(keyId), AUTH_WINDOW_SECONDS);
   await redis.del(probeKey(keyId));
-  return { banned: n >= AUTH_BAN_THRESHOLD };
+  return { banned: n >= AUTH_BAN_THRESHOLD, refusals: n };
 }

@@ -200,7 +200,7 @@ export async function dispatchUpstream(
   if (!upstream.ok) {
     const errText = await upstream.text().catch(() => 'Upstream error');
     // Classify the failure for the circuit breaker: 429 is flat back-pressure,
-    // 401/403 is a bad credential (auto-ban on repeat), 5xx is a server fault
+    // 401/403 is a bad credential (a ban is requested on repeat), 5xx is a server fault
     // (strike/escalate). Other 4xx are the caller's error — the key is fine.
     if (upstream.status === 429)                             { await reportRateLimit(keyId); metrics.providerError(route.providerSlug, 'rate_limit'); }
     else if (upstream.status === 401 || upstream.status === 403) { await reportAuthFailure(keyId); metrics.providerError(route.providerSlug, 'auth'); }

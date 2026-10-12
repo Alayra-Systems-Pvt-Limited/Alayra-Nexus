@@ -19,7 +19,9 @@ import * as breaker from '../../lib/breaker';
 import { forgetLastUsed } from '../../lib/lastUsed';
 import { forgetKeyRow } from '../../lib/keyRowCache';
 import type { Capability } from '../../lib/modelSelect';
-import { keyBannedMessage, breakerOpenedMessage, tierExhaustedMessage } from '../../lib/notify';
+import {
+  keyBannedMessage, keyAuthRefusedMessage, breakerOpenedMessage, tierExhaustedMessage,
+} from '../../lib/notify';
 import { notify } from '../notifications.service';
 
 // ── Key health: cooldowns, bans, and the circuit breaker's outcome reporters ───
@@ -80,31 +82,52 @@ export async function reportServerFailure(keyId: string, wasProbe: boolean): Pro
     const until = new Date(Date.now() + cooldownSeconds * 1000);
     await (await coreStores()).keys.markCooling(keyId, until);
     forgetKeyRow(keyId);
-    void alertKeyEvent(keyId, 'opened', cooldownSeconds).catch(() => {});
+    void alertBreakerOpened(keyId, cooldownSeconds).catch(() => {});
   }
 }
 
-/** An auth failure (401/403): ban the key outright once the threshold is hit. */
+/**
+ * An auth failure (401/403): once the threshold is hit, ask the key store to ban the key. The store
+ * decides whether the ban happens (the open-source one always bans), so the alert reads the key back
+ * and reports what is true. No cooldown is set and the breaker does not open on this path.
+ */
 export async function reportAuthFailure(keyId: string): Promise<void> {
-  const { banned } = await breaker.onAuthFailure(keyId);
-  if (banned) {
+  const { banned: banRequested, refusals } = await breaker.onAuthFailure(keyId);
+  if (banRequested) {
     await banKey(keyId);
-    void alertKeyEvent(keyId, 'banned').catch(() => {});
+    void alertAuthRefusals(keyId, refusals).catch(() => {});
   }
 }
 
-// Fire-and-forget operator alert (Phase 6.4) for a key-level failure. Never awaited by the reporters.
+// Fire-and-forget operator alerts (Phase 6.4) for key-level failures. Never awaited by the reporters.
 // The armed check that used to short-circuit here was removed in 7.11: it gated on the *email*
 // config, so with delivery off (the default) the alert was never built and the in-app feed could
 // never show that a key had died. notify() now records first and gates only delivery. The extra
 // lookup this costs is for the display name of a key that just got banned or tripped its breaker —
 // rare by construction, and off the request path.
-async function alertKeyEvent(keyId: string, kind: 'banned' | 'opened', cooldownSeconds = 0): Promise<void> {
+async function alertBreakerOpened(keyId: string, cooldownSeconds: number): Promise<void> {
   const k = await (await coreStores()).keys.alertFacts(keyId);
   if (!k) return;
-  await notify(kind === 'banned'
-    ? keyBannedMessage(k.providerSlug, k.maskedKey)
-    : breakerOpenedMessage(k.providerSlug, k.maskedKey, cooldownSeconds));
+  await notify(breakerOpenedMessage(k.providerSlug, k.maskedKey, cooldownSeconds));
+}
+
+// ── Alerting on auth refusals: say what the key store actually did ──
+// The core only ever *asks* for a ban; the KeyStore carries it out. A host's store may keep the key
+// in service (the hosted gateway disables keys by its own rule), and alerting "banned" regardless was
+// a false alarm: a provider answering 403 "model not available in your region" twice produced
+// `keyBanned` for a key that went on serving. So the key is read back after the ban request. Still in
+// service (active or cooling, the statuses a KeyStore routes) → `keyAuthRefused`, a warning. Out of
+// service → `keyBanned`, exactly as before. A key that is gone raises nothing. This costs one read
+// more than before, on the same rare, off-request-path alert.
+const IN_SERVICE = new Set(['active', 'cooling']);
+
+async function alertAuthRefusals(keyId: string, refusals: number): Promise<void> {
+  const keys = (await coreStores()).keys;
+  const [k, row] = await Promise.all([keys.alertFacts(keyId), keys.findRoutable(keyId)]);
+  if (!k || !row) return;
+  await notify(IN_SERVICE.has(row.status)
+    ? keyAuthRefusedMessage(k.providerSlug, k.maskedKey, refusals, breaker.AUTH_WINDOW_SECONDS)
+    : keyBannedMessage(k.providerSlug, k.maskedKey));
 }
 
 /**

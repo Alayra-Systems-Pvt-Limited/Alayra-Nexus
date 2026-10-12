@@ -69,7 +69,11 @@ export interface KeyStore {
   /** Stamp the key as just used. Debounced by the caller; never read back. */
   touchLastUsed(keyId: string, at: Date): Promise<void>;
 
-  /** Mark a key banned for good (auth failure or operator action). */
+  /**
+   * Mark a key banned for good (auth failure or operator action). After an auth-failure ban the core
+   * reads the key back with `findRoutable`: if it is still active or cooling (a host that decides key
+   * disabling itself may keep it), the operator alert is `keyAuthRefused`, not `keyBanned`.
+   */
   markBanned(keyId: string): Promise<void>;
 
   /** Mark a key cooling until `until` (display column; the breaker gate lives in the KV). */

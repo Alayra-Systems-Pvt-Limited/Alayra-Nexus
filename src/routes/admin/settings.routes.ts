@@ -146,6 +146,7 @@ export default async function adminSettingsRoutes(fastify: FastifyInstance) {
       adminLockout:    z.boolean().optional(),
       budgetThreshold: z.boolean().optional(),
       tierExhausted:   z.boolean().optional(),
+      keyAuthRefused:  z.boolean().optional(),
     }).default({}),
     windowSeconds: z.number().int().min(60).max(86400).default(3600),
   });

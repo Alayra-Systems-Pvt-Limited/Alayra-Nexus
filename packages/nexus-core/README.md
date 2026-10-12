@@ -27,6 +27,23 @@ providers it holds a key for. Usage rows carry `teamId` (null for the master key
 `PROVIDER_PRESETS` and `presetFor(slug)` are the gateway's table of known providers: default base
 URL, auth header and prefix, model-list path and key prefixes.
 
+### Operator alerts
+
+The core raises these alerts on the request path and hands each to your `notifications` port
+(`NotificationSink.record`), at most once per `dedupeKey` per window. Every row has the same fields:
+`id`, `type`, `severity`, `title`, `body`, `section` and `dedupeKey`.
+
+| `type` | `severity` | Raised when |
+|---|---|---|
+| `keyBanned` | critical | A key had two 401/403 answers within five minutes, the core asked your `keys.markBanned` to ban it, and the key now reads back as out of service. |
+| `keyAuthRefused` | warning | The same two refusals, but your store kept the key: it still reads back as `active` or `cooling`. Nothing was banned or cooled and the breaker did not open. |
+| `breakerOpened` | warning | Three server failures (5xx, timeout) within five minutes, or a failed recovery probe, opened the key's breaker; it is skipped for the cooldown named in the body. |
+| `budgetThreshold` | warning / critical | A team crossed 80% (warning) or 100% (critical) of its budget. |
+| `tierExhausted` | critical | No key could serve a capability, so the request was answered 503. |
+
+Up to 1.7.0 the core raised `keyBanned` after the two refusals whether or not your store banned
+the key. If you alert on `keyBanned` and your store can keep keys, also match `keyAuthRefused`.
+
 Give the core its **own Redis database** (for example `redis://host:6379/1`). Its keys carry no
 prefix of yours, and an `ioredis` `keyPrefix` is not applied to the `SCAN` patterns the response-cache
 purge uses.

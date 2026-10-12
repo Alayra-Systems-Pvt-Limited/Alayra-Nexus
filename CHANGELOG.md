@@ -9,6 +9,24 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`@alayrasystems/nexus-core` no longer says a key was banned when it was not.** After two 401 or
+  403 answers within five minutes the core asks the key store to ban the key. It then raised
+  `keyBanned` ("a key was auto-banned", critical) whether or not the store did it. A host whose
+  store keeps the key, such as a gateway that decides key disabling itself, logged a false alarm for
+  a key still in use: two 403 "model not available in your region" answers were enough. The core
+  now reads the key back after asking. If the key is out of service the alert is `keyBanned`,
+  unchanged. If it is still active or cooling the alert is the new `keyAuthRefused`, a warning that
+  names the provider, the masked key, the refusal count and the window, and says the key was not
+  cooled and its circuit breaker did not open. Both alerts carry the same fields (`type`,
+  `severity`, `title`, `body`, `section`, `dedupeKey`). The open-source gateway's store always
+  bans, so its alerts are unchanged. **If you match `keyBanned` in a host whose store can keep
+  keys, match `keyAuthRefused` too.** Its email and webhook flag is on by default, also for settings
+  saved before it existed. When to ban is unchanged. The core package README now lists every alert
+  the core raises, and `docs/routing.md` states the auth rule as the code applies it: any 403
+  counts, a success does not reset the count, and an unban does not clear it.
+
 ## [1.7.0] - 2026-10-11
 
 ### Added

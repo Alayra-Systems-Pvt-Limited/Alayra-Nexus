@@ -24,10 +24,14 @@
 // must never slow or fail a proxied request, so nothing here is ever on the request path.
 
 /** The events an operator can be alerted on. The first three are rare failure or security
- *  signals tapped in the service layer; the last two (Phase 6.4b) are the request-path
+ *  signals tapped in the service layer; the next two (Phase 6.4b) are the request-path
  *  thresholds — a team crossing 80%/100% of its budget and a capability running out of
- *  usable keys (503). All are detected off, or fire-and-forget from, the hot path. */
-export const NOTIFY_EVENTS = ['keyBanned', 'breakerOpened', 'adminLockout', 'budgetThreshold', 'tierExhausted'] as const;
+ *  usable keys (503). `keyAuthRefused` is the honest twin of `keyBanned`: the provider refused a
+ *  key often enough for Nexus to ask for a ban, and the key store did not ban it. All are
+ *  detected off, or fire-and-forget from, the hot path. */
+export const NOTIFY_EVENTS = [
+  'keyBanned', 'breakerOpened', 'adminLockout', 'budgetThreshold', 'tierExhausted', 'keyAuthRefused',
+] as const;
 export type NotifyEventType = (typeof NOTIFY_EVENTS)[number];
 
 /** How loud an alert is (Phase 7.16c) — drives the panel's icon tint and ordering. `critical` is a
@@ -58,6 +62,7 @@ const EVENT_SECTION: Record<NotifyEventType, string> = {
   adminLockout:    'security', // sign-in policy and second factor live here
   budgetThreshold: 'teams',    // the team that hit its cap
   tierExhausted:   'nexus',    // capacity — add keys or wait out the cooldown
+  keyAuthRefused:  'nexus',    // the pool holding the key the provider keeps refusing
 };
 
 export function sectionFor(type: NotifyEventType): string {
@@ -86,7 +91,10 @@ export const DEFAULT_NOTIFICATION_CONFIG: NotificationConfig = {
   from:         '',
   to:           [],
   webhookUrl:   '',
-  events:       { keyBanned: true, breakerOpened: true, adminLockout: true, budgetThreshold: true, tierExhausted: true },
+  events:       {
+    keyBanned: true, breakerOpened: true, adminLockout: true, budgetThreshold: true, tierExhausted: true,
+    keyAuthRefused: true,
+  },
   windowSeconds: DEFAULT_WINDOW_SECONDS,
 };
 
@@ -131,6 +139,35 @@ export function keyBannedMessage(provider: string, maskedKey: string): NotifyMes
     dedupeKey: `keyBanned:${provider}:${maskedKey}`,
     title: `Alayra Nexus: a ${provider} key was auto-banned`,
     body: `A provider key for "${provider}" (${maskedKey}) was automatically banned after repeated authentication failures. That credential is dead — traffic is silently degrading until you replace it in the Pools tab.`,
+  };
+}
+
+// ── A ban was asked for and not carried out ──
+// The core asks the key store to ban a key after AUTH_BAN_THRESHOLD 401/403 answers inside the auth
+// window, whatever the 403 was about. The open-source store bans it, and `keyBanned` says so. A host's
+// store may keep the key instead (the hosted gateway decides key disabling itself), and then nothing
+// changed: the key was not banned, not cooled, and its breaker did not open. Saying "banned" there is
+// a false alarm, so this message names only what did happen. It carries no count in its dedupeKey,
+// so one flapping key stays one alert per window.
+
+/** "5 minutes" for 300, "90 seconds" for 90: the auth window, in the words an operator reads. */
+function spanWords(seconds: number): string {
+  if (seconds >= 60 && seconds % 60 === 0) {
+    const minutes = seconds / 60;
+    return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+  }
+  return seconds === 1 ? '1 second' : `${seconds} seconds`;
+}
+
+export function keyAuthRefusedMessage(
+  provider: string, maskedKey: string, refusals: number, windowSeconds: number,
+): NotifyMessage {
+  return {
+    type: 'keyAuthRefused',
+    severity: 'warning',
+    dedupeKey: `keyAuthRefused:${provider}:${maskedKey}`,
+    title: `Alayra Nexus: ${provider} refused a key ${refusals} times; it was not taken out of service`,
+    body: `The provider answered 401 or 403 to a "${provider}" key (${maskedKey}) ${refusals} times within ${spanWords(windowSeconds)}. Nexus asked the key store to take the key out of service, and the store kept it. Nexus did not cool the key or open its circuit breaker. A 403 is often about a region, a model or a content policy rather than the key itself; if the refusals continue, check the key.`,
   };
 }
 

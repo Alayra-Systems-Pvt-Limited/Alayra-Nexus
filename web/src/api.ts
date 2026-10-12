@@ -478,7 +478,7 @@ export interface GuardrailRule {
 }
 export interface GuardrailConfig { enabled: boolean; bufferedSafe: boolean; rules: GuardrailRule[] }
 
-export type NotifyEvent = 'keyBanned' | 'breakerOpened' | 'adminLockout' | 'budgetThreshold' | 'tierExhausted';
+export type NotifyEvent = 'keyBanned' | 'breakerOpened' | 'adminLockout' | 'budgetThreshold' | 'tierExhausted' | 'keyAuthRefused';
 export interface NotificationConfig {
   enabled: boolean; from: string; to: string[]; webhookUrl: string;
   events: Record<NotifyEvent, boolean>; windowSeconds: number;
@@ -505,7 +505,7 @@ export interface ComplianceConfig {
 export type NotificationSeverity = 'critical' | 'warning' | 'info';
 export interface NotificationRow {
   id: string;
-  /** NotifyEventType — keyBanned | breakerOpened | adminLockout | budgetThreshold | tierExhausted. */
+  /** NotifyEventType — keyBanned | breakerOpened | adminLockout | budgetThreshold | tierExhausted | keyAuthRefused. */
   type: string;
   /** How loud it is (7.16c) — drives the icon tint. Older rows without one read as 'info'. */
   severity: NotificationSeverity;
