@@ -169,3 +169,33 @@ describe('recordTokenUsage — a budget threshold alert', () => {
     expect(await alertTitle()).toContain('team "t-1" reached 80%');
   });
 });
+
+// The extra token kinds (1.8.0) are recorded as reported and never priced, and a request that
+// reports none writes exactly the row it wrote before they existed.
+describe('usage rows carry the token kinds the provider reported', () => {
+  const OLD_ROW_KEYS = [
+    'id', 'sessionId', 'modelId', 'modelName', 'provider', 'inputTokens', 'outputTokens', 'totalTokens', 'unit',
+    'quantity', 'estimatedUsd', 'outcome', 'latencyMs', 'cached', 'savedUsd', 'nexusTeamKeyId', 'teamId', 'createdAt',
+  ];
+
+  it('a request that reports none writes the same columns, and the same price, as before', async () => {
+    await recordTokenUsage({ ...base });
+    await recordTokenUsage({ ...base, detail: {} });
+    for (const [row] of vi.mocked(emit).mock.calls) {
+      expect(Object.keys(row).sort()).toEqual([...OLD_ROW_KEYS].sort());
+      expect(row.estimatedUsd).toBe(0.0075);
+    }
+  });
+
+  it('records each reported kind, and the price does not move', async () => {
+    const detail = { cachedInputTokens: 900, cacheWriteTokens: 50, cacheWrite5mTokens: 20, cacheWrite1hTokens: 30, cacheMissTokens: 100, reasoningTokens: 0 };
+    await recordTokenUsage({ ...base, detail });
+    expect(lastEvent()).toMatchObject({ ...detail, inputTokens: 1000, outputTokens: 500, totalTokens: 1500, estimatedUsd: 0.0075 });
+  });
+
+  it('copies only the known kinds, so a stray field can never fail the batch insert', async () => {
+    await recordTokenUsage({ ...base, detail: { reasoningTokens: 3, bogus: 1 } as never });
+    expect(lastEvent()).toMatchObject({ reasoningTokens: 3 });
+    expect(lastEvent()).not.toHaveProperty('bogus');
+  });
+});
