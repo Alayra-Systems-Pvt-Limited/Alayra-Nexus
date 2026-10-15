@@ -156,7 +156,8 @@ export interface TraceAttempt {
   keyMask:     string;
   status?:     number;
   ttfbMs?:     number;
-  outcome?:    'success' | 'rate_limited' | 'auth_error' | 'provider_error' | 'timeout' | 'connection_error' | 'stream_error';
+  outcome?:    'success' | 'rate_limited' | 'auth_error' | 'provider_error' | 'timeout' | 'connection_error' | 'stream_error'
+    | 'client_cancelled';
 }
 
 /**

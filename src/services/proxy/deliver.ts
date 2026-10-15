@@ -65,19 +65,24 @@ export function markHealthy({ route, session }: Dispatched): void {
   if (session) void setStickyKeyId(session, route.keyId).catch(() => {});
 }
 
-/** Read a whole JSON answer under its own timer; null when it timed out or was malformed. */
+/**
+ * Read a whole JSON answer under its own timer; null when it timed out, was malformed, or the caller
+ * hung up while it was arriving (the departure watch aborts the read, and closes the upstream).
+ */
 async function readJsonBody(d: Delivery): Promise<Record<string, unknown> | null> {
-  const { upstream, controller, refundReservation, traceAttempt } = d.dispatched;
+  const { upstream, controller, departure, refundReservation, traceAttempt } = d.dispatched;
   const bodyTimer = setTimeout(() => controller.abort(), UPSTREAM_BODY_MS);
   try {
     return await upstream.json() as Record<string, unknown>;
   } catch {
     refundReservation();
-    if (traceAttempt) traceAttempt.outcome = 'provider_error';
-    observe(d.run, 'upstream_error');
+    const cancelled = departure.gone();
+    if (traceAttempt) traceAttempt.outcome = cancelled ? 'client_cancelled' : 'provider_error';
+    observe(d.run, cancelled ? 'client_cancelled' : 'upstream_error');
     return null;
   } finally {
     clearTimeout(bodyTimer);
+    departure.release();
   }
 }
 

@@ -32,6 +32,7 @@ import { withExtraHeaders, providerAuthHeader } from '../../lib/providerHeaders'
 import { isByok, isIsolated } from '../../lib/scope';
 import * as metrics from '../../lib/metrics';
 import { startUpstreamSpan, SpanStatusCode } from '../../lib/tracing';
+import { watchDeparture, type Departure } from '../../lib/clientDeparture';
 import type { RequestTrace } from '../../lib/requestTrace';
 import { DEFAULT_MAX_TOKENS_RESERVE, UPSTREAM_TTFT_MS } from './config';
 import type { Admission } from './admission';
@@ -46,6 +47,8 @@ export interface Dispatched {
   upstream:          Response;
   /** Governs the whole upstream call; the body and stream guards abort through it. */
   controller:        AbortController;
+  /** Aborts `controller` when the caller hangs up; the delivery path releases it when it is done. */
+  departure:         Departure;
   /** Conversation hash for sticky routing; null for a one-shot request. */
   session:           string | null;
   /** Tokens reserved against the key's TPM budget, reconciled to real usage at the end. */
@@ -167,6 +170,9 @@ export async function dispatchUpstream(
   // timer aborts if response headers never arrive; it is cleared once they do.
   const controller = new AbortController();
   const ttftTimer = setTimeout(() => controller.abort(), UPSTREAM_TTFT_MS);
+  // A caller who hangs up aborts it too, from here to the last byte: the provider would otherwise
+  // keep generating, and billing, an answer nobody is reading. See lib/clientDeparture.ts.
+  const departure = watchDeparture(reply.raw, () => controller.abort());
 
   // OTel: span for the gateway → provider call (no-op unless an SDK is attached).
   run.tFetch = Date.now();
@@ -178,6 +184,15 @@ export async function dispatchUpstream(
   } catch (err) {
     clearTimeout(ttftTimer);
     refundReservation();
+    departure.release();
+    // The caller left before the provider answered. Nobody is waiting and the key did nothing wrong,
+    // so this is neither a breaker strike nor a provider error.
+    if (departure.gone()) {
+      span.end();
+      if (traceAttempt) traceAttempt.outcome = 'client_cancelled';
+      observe(run, 'client_cancelled');
+      return answered(reply.code(499).send({ error: 'The client closed the request.' }));
+    }
     // A timeout/connection failure is a server-side fault: feed the breaker.
     await reportServerFailure(keyId, route.isProbe);
     metrics.providerError(route.providerSlug, 'timeout');
@@ -199,6 +214,7 @@ export async function dispatchUpstream(
 
   if (!upstream.ok) {
     const errText = await upstream.text().catch(() => 'Upstream error');
+    departure.release();
     // Classify the failure for the circuit breaker: 429 is flat back-pressure,
     // 401/403 is a bad credential (a ban is requested on repeat), 5xx is a server fault
     // (strike/escalate). Other 4xx are the caller's error — the key is fine.
@@ -220,5 +236,5 @@ export async function dispatchUpstream(
   if (traceAttempt) traceAttempt.status = upstream.status;
   span.end(); // upstream responded OK
 
-  return proceed({ route, upstream, controller, session, reserve, refundReservation, traceAttempt, sessionId });
+  return proceed({ route, upstream, controller, departure, session, reserve, refundReservation, traceAttempt, sessionId });
 }

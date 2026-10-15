@@ -32,7 +32,7 @@ import { cutFrame, openEventStream, type CutReason } from './sse';
 export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array>): Promise<void> {
   const { run, dispatched, guarded, cache, nexusHeaders } = d;
   const { reply } = run;
-  const { route, controller, reserve, traceAttempt, sessionId } = dispatched;
+  const { route, controller, departure, reserve, traceAttempt, sessionId } = dispatched;
   openEventStream(reply, nexusHeaders);
 
   const reader = body.getReader();
@@ -61,14 +61,20 @@ export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array
       clearTimeout(idleTimer);
       tally.push(value);
       await client.write(value);
-      if (client.gone()) { cutShort ??= 'client'; break; }
+      if (client.gone() || departure.gone()) { cutShort ??= 'client'; break; }
       idleTimer = startIdleTimer();
     }
-  } catch { streamFailed = true; /* aborted (a guard fired) or upstream error mid-stream — keep what arrived */ }
+  } catch { streamFailed = true; /* aborted (a guard fired, or the caller left) or upstream error mid-stream — keep what arrived */ }
   finally {
     clearTimeout(idleTimer);
     clearTimeout(wholeTimer);
     client.release();
+    departure.release();
+    // The departure watch aborted the read, so the loop never saw it: say so here.
+    if (departure.gone()) cutShort ??= 'client';
+    // Close the provider's socket, so it stops generating (and billing) an answer nobody will read.
+    // Already done when the watch fired; this covers the loop's own break.
+    if (cutShort === 'client') controller.abort();
     // Before reading the tally either way: a stream that died mid-flight still delivered tokens
     // the provider will bill for, and the last of them may be sitting in the decoder.
     tally.end();
@@ -77,13 +83,17 @@ export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array
     reply.raw.end();
   }
 
-  // A stream that connected (200 headers) but hung/aborted mid-flight is a
-  // server-side fault; a clean completion closes the breaker and sticks. Either way it delivered
-  // tokens the provider will bill for, so recordTokenUsage below writes the one row and carries
-  // the real outcome — hence persist: false here (see observe in run.ts).
-  if (streamFailed) { void reportServerFailure(route.keyId, route.isProbe).catch(() => {}); metrics.providerError(route.providerSlug, 'server'); observe(run, 'upstream_error', false); }
-  else { markHealthy(dispatched); observe(run, 'success'); }
-  if (traceAttempt) traceAttempt.outcome = streamFailed ? 'stream_error' : 'success';
+  // Three endings. A caller who hung up cancelled it: not a provider fault, not a success. A stream
+  // that connected (200 headers) but hung/aborted mid-flight is a server-side fault. A clean
+  // completion closes the breaker and sticks, as does a cancel, since the provider was answering.
+  // Every one delivered tokens the provider will bill for, so recordTokenUsage below writes the one
+  // row and carries the real outcome — hence persist: false here (see observe in run.ts).
+  const cancelled = cutShort === 'client';
+  const outcome   = cancelled ? 'client_cancelled' : streamFailed ? 'upstream_error' : 'success';
+  if (cancelled) { markHealthy(dispatched); observe(run, outcome, false); }
+  else if (streamFailed) { void reportServerFailure(route.keyId, route.isProbe).catch(() => {}); metrics.providerError(route.providerSlug, 'server'); observe(run, outcome, false); }
+  else { markHealthy(dispatched); observe(run, outcome); }
+  if (traceAttempt) traceAttempt.outcome = cancelled ? 'client_cancelled' : streamFailed ? 'stream_error' : 'success';
 
   const usage        = tally.usage();
   const answer       = tally.content();
@@ -93,9 +103,9 @@ export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array
   const outputTokens = usage?.output ?? Math.max(1, countTokens(answer));
   stampUsage(run, inputTokens, outputTokens);
   metrics.addTokens(inputTokens, outputTokens);
-  // Only cache a cleanly-completed stream, and only one that was read whole: a dropped frame
-  // leaves a hole in the answer, and a cached hole is served to everyone who asks again.
-  if (!streamFailed && !tally.degraded()) storeStreamInCache(cache.cacheStoreKey, answer, route.modelString, route.providerSlug, inputTokens, outputTokens, cache.cacheCfg.ttlSeconds);
+  // Only cache a cleanly-completed stream, and only one that was read whole: a dropped frame (or a
+  // caller who left halfway) leaves a hole in the answer, and a cached hole is served to everyone.
+  if (outcome === 'success' && !tally.degraded()) storeStreamInCache(cache.cacheStoreKey, answer, route.modelString, route.providerSlug, inputTokens, outputTokens, cache.cacheCfg.ttlSeconds);
   void reconcileTpm(route.keyId, reserve, inputTokens + outputTokens).catch(() => {});
-  await recordUsage(run, { ...routeUsage(run, route, sessionId, inputTokens, outputTokens), outcome: streamFailed ? 'upstream_error' : 'success' });
+  await recordUsage(run, { ...routeUsage(run, route, sessionId, inputTokens, outputTokens), outcome });
 }

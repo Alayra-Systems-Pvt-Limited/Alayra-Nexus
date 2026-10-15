@@ -27,6 +27,11 @@ providers it holds a key for. Usage rows carry `teamId` (null for the master key
 `PROVIDER_PRESETS` and `presetFor(slug)` are the gateway's table of known providers: default base
 URL, auth header and prefix, model-list path and key prefixes.
 
+When the caller hangs up, the core aborts the provider request and records the outcome
+`client_cancelled`. It sees the disconnect through `reply.raw`: a `close` event, or `destroyed`
+already true. If you hand `handleProxy` a reply stand-in of your own, forward `once`, `off` and
+`destroyed` to the real socket, as `createAnthropicReply` does.
+
 ### Operator alerts
 
 The core raises these alerts on the request path and hands each to your `notifications` port

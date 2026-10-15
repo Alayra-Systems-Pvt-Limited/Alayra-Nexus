@@ -11,6 +11,22 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
+- **A caller who hangs up now stops the provider, and the request is recorded as cancelled.** When a
+  client closed a streamed request early (an editor's Stop or Esc key, for example), the gateway
+  went on reading the provider's answer to the end, so the provider kept generating it and a BYOK
+  key paid for tokens nobody read. On `/v1/messages` the Anthropic translator hid the disconnect
+  from the proxy entirely. On `/v1/chat/completions` the proxy stopped reading but left the provider
+  connection open. On the chat endpoints the disconnect now aborts the provider request, for every
+  provider, through the same signal as the time limits: before the provider answers, while a whole
+  answer is arriving, or mid-stream. The request is recorded with the new outcome `client_cancelled`
+  (Cancelled on the dashboard), not as a success or a provider error, and it does not count against
+  the key's circuit breaker. A cancelled stream still records the tokens streamed until then. A
+  stream cut short is no longer stored in the response cache: before, a stream the caller left was
+  recorded as a success and its partial answer could be cached and served to the next caller. A
+  Playground run stops the same way when its tab is closed. **Hosts of `@alayrasystems/nexus-core`
+  that hand `handleProxy` a reply stand-in of their own:** give its `raw` `once` and `off`
+  (forwarded to the real socket) and a `destroyed` getter, or a disconnect cannot reach the core.
+  `createAnthropicReply` now does this.
 - **`@alayrasystems/nexus-core` no longer says a key was banned when it was not.** After two 401 or
   403 answers within five minutes the core asks the key store to ban the key. It then raised
   `keyBanned` ("a key was auto-banned", critical) whether or not the store did it. A host whose

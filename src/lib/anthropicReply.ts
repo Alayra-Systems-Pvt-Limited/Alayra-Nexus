@@ -31,8 +31,17 @@ interface RawSink {
   writeHead(status: number, headers?: Record<string, string>): void;
   // `Uint8Array` covers Buffer, which extends it. Naming Buffer alone was the type-level half of
   // the bug: the signature described one of the two things the proxy actually writes.
-  write(chunk: string | Uint8Array): void;
+  //
+  // Returns the real socket's answer, so a slow caller pushes back on the provider here exactly as
+  // on /v1/chat/completions (see clientWriter.ts).
+  write(chunk: string | Uint8Array): boolean;
   end(): void;
+  // The real socket's events and state, passed through. Without them the proxy cannot see the
+  // caller hang up (an editor's Stop), and a cancelled answer was read from the provider to the end,
+  // and billed, with nobody reading it. See clientDeparture.ts.
+  readonly destroyed?: boolean;
+  once?(event: string, listener: () => void): unknown;
+  off?(event: string, listener: () => void): unknown;
 }
 
 export interface AnthropicReply {
@@ -61,7 +70,13 @@ export function createAnthropicReply(real: FastifyReply): AnthropicReply {
       if (typeof served === 'string') translator.setModel(served);
       real.raw.writeHead(code, headers);
     },
-    write(chunk) { real.raw.write(translator.push(decoder.text(chunk))); },
+    write(chunk) { return real.raw.write(translator.push(decoder.text(chunk))); },
+    get destroyed() { return real.raw.destroyed; },
+    // Only when the real reply has them: a stand-in passed in here (a test's) may not.
+    ...(typeof real.raw.once === 'function' && typeof real.raw.off === 'function' ? {
+      once: (event: string, listener: () => void) => real.raw.once(event, listener),
+      off:  (event: string, listener: () => void) => real.raw.off(event, listener),
+    } : {}),
     end() {
       // Flush whatever the decoder was holding back for a continuation byte that never came, so a
       // stream truncated mid-character still delivers everything that was complete.
