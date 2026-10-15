@@ -107,5 +107,5 @@ export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array
   // caller who left halfway) leaves a hole in the answer, and a cached hole is served to everyone.
   if (outcome === 'success' && !tally.degraded()) storeStreamInCache(cache.cacheStoreKey, answer, route.modelString, route.providerSlug, inputTokens, outputTokens, cache.cacheCfg.ttlSeconds);
   void reconcileTpm(route.keyId, reserve, inputTokens + outputTokens).catch(() => {});
-  await recordUsage(run, { ...routeUsage(run, route, sessionId, inputTokens, outputTokens), outcome });
+  await recordUsage(run, { ...routeUsage(run, route, sessionId, inputTokens, outputTokens), outcome, detail: tally.detail() });
 }

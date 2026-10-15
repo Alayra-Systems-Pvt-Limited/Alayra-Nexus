@@ -45,6 +45,7 @@
 // because two ways to read one format is the shape the bug came in.
 
 import { createChunkDecoder } from './chunkDecoder';
+import { mergeUsageDetail, readUsageDetail, type UsageDetail } from './usageDetail';
 
 export interface StreamUsage { input: number; output: number }
 
@@ -57,6 +58,8 @@ export interface StreamTally {
   content(): string;
   /** The last usage the provider reported, or null if it never reported any. */
   usage(): StreamUsage | null;
+  /** The extra token kinds (cache reads and writes, reasoning) reported so far; see usageDetail.ts. */
+  detail(): UsageDetail;
   /** True if a frame was dropped for being implausibly large; the content may have a hole. */
   degraded(): boolean;
 }
@@ -71,6 +74,10 @@ const MAX_FRAME_CHARS = 1_000_000;
 interface Frame {
   choices?: Array<{ delta?: { content?: unknown } }>;
   usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
+  /** Anthropic's own event stream reports its first usage inside `message_start`. */
+  message?: { usage?: unknown };
+  /** Gemini's own stream calls the block `usageMetadata`. */
+  usageMetadata?: unknown;
 }
 
 export function createStreamTally(): StreamTally {
@@ -81,6 +88,7 @@ export function createStreamTally(): StreamTally {
   let pending  = '';
   let content  = '';
   let usage: StreamUsage | null = null;
+  const detail: UsageDetail = {};
   let dropped  = false;
 
   const readFrame = (raw: string): void => {
@@ -104,6 +112,9 @@ export function createStreamTally(): StreamTally {
         output: typeof u.completion_tokens === 'number' ? u.completion_tokens : 0,
       };
     }
+    // Field by field, since some providers report usage more than once (see mergeUsageDetail).
+    const reported = u ?? frame.message?.usage ?? frame.usageMetadata;
+    if (reported) mergeUsageDetail(detail, readUsageDetail(reported));
   };
 
   const consume = (text: string): void => {
@@ -122,6 +133,7 @@ export function createStreamTally(): StreamTally {
     push:     (chunk) => consume(decoder.text(chunk)),
     content:  () => content,
     usage:    () => usage,
+    detail:   () => ({ ...detail }),
     degraded: () => dropped,
     end() {
       consume(decoder.flush());

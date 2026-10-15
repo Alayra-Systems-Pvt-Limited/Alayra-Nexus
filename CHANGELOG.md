@@ -11,17 +11,20 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
-- **`TokenUsage` can store the token kinds a provider reports beyond input and output.** Six new
-  nullable columns: `cachedInputTokens`, `cacheWriteTokens`, `cacheWrite5mTokens`,
-  `cacheWrite1hTokens`, `cacheMissTokens` and `reasoningTokens`. A column is null when the provider
-  did not report that kind, so older rows read exactly as before, and nothing prices them.
-  PostgreSQL gets migration `0020_usage_token_kinds`, which is additive and gives up after five
-  seconds rather than queue behind a long query on the table (the next start runs it again). A
-  standalone SQLite database created by an earlier version gains the same columns when the gateway
-  starts, and the startup log says so. That is the only change made to an existing file. For
-  `@alayrasystems/nexus-core` hosts: `UsageRow` gains the same six optional fields (type
-  `UsageTokenKinds`), and the conformance checks now require a store to accept a row that carries
-  them.
+- **Usage records every token kind the provider reports.** Cache reads, cache writes (with
+  Anthropic's 5-minute and 1-hour split), DeepSeek's cache misses and reasoning tokens are read from
+  the provider's usage block, streamed or not, under OpenAI, Anthropic, DeepSeek and Gemini names,
+  and stored in six new nullable `TokenUsage` columns: `cachedInputTokens`, `cacheWriteTokens`,
+  `cacheWrite5mTokens`, `cacheWrite1hTokens`, `cacheMissTokens` and `reasoningTokens`. A column is
+  null when the provider did not report that kind, so older rows read exactly as before. Nothing is
+  priced differently: cost is still input and output at the model's two prices. Responses still pass
+  the provider's usage object through unchanged. PostgreSQL gets migration `0020_usage_token_kinds`,
+  which is additive and gives up after five seconds rather than queue behind a long query on the
+  table (the next start runs it again). A standalone SQLite database created by an earlier version
+  gains the same columns when the gateway starts, and the startup log says so. That is the only
+  change made to an existing file. For `@alayrasystems/nexus-core` hosts: `UsageRow` gains the same
+  six optional fields (type `UsageTokenKinds`), the conformance checks now require a store to accept
+  a row that carries them, and `readUsageDetail` reads them from any provider's usage block.
 
 ### Fixed
 

@@ -28,6 +28,7 @@ import { budgetThresholdCrossed, budgetThresholdMessage } from '../lib/notify';
 import type { RequestTrace } from '../lib/requestTrace';
 import { isUsageAnonymized } from './usagePrivacy.service';
 import { hashIdentifier }    from '../lib/audit';
+import { mergeUsageDetail, type UsageDetail } from '../lib/usageDetail';
 
 // Handles both inputPricePer1k (old) and inputCostPer1M (new dashboard format)
 function modelCost(m: Record<string, unknown>, input: number, output: number): number {
@@ -81,6 +82,9 @@ export interface RecordTokenUsageParams {
   // that the provider will bill for, so its tokens must still be recorded — but the request itself
   // failed, and calling it a success would quietly inflate the success rate.
   outcome?:          string;
+  // The extra token kinds the provider reported (cache reads and writes, reasoning); see
+  // lib/usageDetail.ts. Recorded on the row as reported, and never part of the price.
+  detail?:           UsageDetail;
 }
 
 /**
@@ -171,6 +175,8 @@ export async function recordTokenUsage(p: RecordTokenUsageParams, trace?: Reques
     nexusTeamKeyId: p.nexusTeamKeyId ?? null,
     teamId:         p.teamId ?? null,
     createdAt:      new Date(),
+    // Only the kinds that were reported, so a row without them is written exactly as before.
+    ...(p.detail ? mergeUsageDetail({}, p.detail) : {}),
   });
 }
 

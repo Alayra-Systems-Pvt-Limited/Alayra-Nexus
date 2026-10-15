@@ -67,6 +67,9 @@ export {
   type BillingSpec, type DispatchOptions,
 } from '../services/proxyDispatch.service';
 
+// ── Usage: the extra token kinds, read from any provider's usage block ──
+export { readUsageDetail, mergeUsageDetail, USAGE_DETAIL_FIELDS, type UsageDetail } from '../lib/usageDetail';
+
 // ── Anthropic Messages API, translated onto the same pipeline ──
 export { anthropicToOpenAI } from '../lib/anthropic';
 export { createAnthropicReply } from '../lib/anthropicReply';

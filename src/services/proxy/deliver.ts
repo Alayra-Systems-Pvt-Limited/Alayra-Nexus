@@ -19,6 +19,7 @@ import { reportSuccess } from '../nexus.service';
 import { countMessageTokens } from '../../lib/tokenizer';
 import { reconcileTpm } from '../../lib/admission';
 import { setStickyKeyId } from '../../lib/sticky';
+import { readUsageDetail } from '../../lib/usageDetail';
 import * as metrics from '../../lib/metrics';
 import { UPSTREAM_BODY_MS } from './config';
 import type { CacheMiss } from './cacheLookup';
@@ -98,7 +99,9 @@ async function settleJson(d: Delivery, data: Record<string, unknown>): Promise<v
   storeInCache(cache.cacheStoreKey, data, route.providerSlug, cache.cacheCfg.ttlSeconds); // cache the post-guardrails response
   void reconcileTpm(route.keyId, reserve, inputTokens + outputTokens).catch(() => {});
   if (traceAttempt) traceAttempt.outcome = 'success';
-  await recordUsage(run, routeUsage(run, route, sessionId, inputTokens, outputTokens));
+  // Gemini's own answer calls the block `usageMetadata`; every other format calls it `usage`.
+  const detail = readUsageDetail(data.usage ?? data.usageMetadata);
+  await recordUsage(run, { ...routeUsage(run, route, sessionId, inputTokens, outputTokens), detail });
 }
 
 /**

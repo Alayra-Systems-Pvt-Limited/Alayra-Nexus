@@ -34,7 +34,8 @@ already true. If you hand `handleProxy` a reply stand-in of your own, forward `o
 
 Usage rows may carry optional token kinds (`UsageTokenKinds`): cache reads and writes, cache misses
 and reasoning tokens, as the provider reported them. Absent means not reported. Your `usage` store
-must accept a row that carries them; keeping them is up to you.
+must accept a row that carries them; keeping them is up to you. `readUsageDetail(usage)` reads them
+from any provider's usage block.
 
 ### Operator alerts
 
