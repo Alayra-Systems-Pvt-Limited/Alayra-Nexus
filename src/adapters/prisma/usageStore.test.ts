@@ -50,4 +50,13 @@ describe('prismaUsageStore.insertBatch', () => {
     // The caller's rows are not mutated: the pipeline may re-queue them after a failed write.
     expect(rows[0]!.teamId).toBe('team-1');
   });
+
+  it('writes the token kinds a row carries (they are TokenUsage columns), and adds none to a row without them', async () => {
+    const kinds = { cachedInputTokens: 7, cacheWriteTokens: 2, cacheWrite5mTokens: 1, cacheWrite1hTokens: 1, cacheMissTokens: 3, reasoningTokens: 0 };
+    await prismaUsageStore.insertBatch([{ ...row('u-3', null), ...kinds }, row('u-4', null)]);
+
+    const written = createMany.mock.calls.at(-1)![0].data as Record<string, unknown>[];
+    expect(written[0]).toMatchObject(kinds);
+    for (const k of Object.keys(kinds)) expect(written[1]).not.toHaveProperty(k);
+  });
 });
