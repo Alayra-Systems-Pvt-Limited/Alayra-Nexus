@@ -212,3 +212,39 @@ describe('createAnthropicReply — the chunk type the proxy actually writes', ()
     expect(textOf(parseSse(state.raw))).toBe('from cache');
   });
 });
+
+describe('createAnthropicReply — the caller hanging up', () => {
+  // The bug this pins: the wrapper's raw had no `once`/`off`, so the proxy could not see a caller
+  // (an editor's Stop key) hang up, and read the provider to the end of an answer nobody was reading.
+  it("passes the real socket's close, destroyed state and write result through", async () => {
+    const { EventEmitter } = await import('node:events');
+    const socket = Object.assign(new EventEmitter(), { destroyed: false, writeHead() {}, end() {}, write: () => false });
+    const real = { raw: socket, code() { return real; }, header() { return real; }, send() { return real; }, hijack() {} };
+    const { reply: wrap } = createAnthropicReply(real as unknown as FastifyReply);
+    const raw = wrap.raw as unknown as { once(e: string, l: () => void): void; off(e: string, l: () => void): void; destroyed: boolean; write(c: string): unknown };
+
+    let closed = 0;
+    const onClose = () => { closed++; };
+    raw.once('close', onClose);
+    socket.emit('close');
+    expect(closed).toBe(1);
+
+    raw.once('close', onClose);
+    raw.off('close', onClose);
+    socket.emit('close');
+    expect(closed).toBe(1);
+
+    expect(raw.destroyed).toBe(false);
+    socket.destroyed = true;
+    expect(raw.destroyed).toBe(true);
+    // `false` is how a slow caller says stop; the wrapper must not swallow it.
+    expect(raw.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'x' } }] })}\n\n`)).toBe(false);
+  });
+
+  it('offers no events when the reply it wraps has none, so a stand-in is not called for them', () => {
+    const { reply } = fakeReply();
+    const raw = createAnthropicReply(reply).reply.raw as unknown as Record<string, unknown>;
+    expect(raw.once).toBeUndefined();
+    expect(raw.off).toBeUndefined();
+  });
+});
