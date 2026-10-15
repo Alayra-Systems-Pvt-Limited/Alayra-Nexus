@@ -32,6 +32,10 @@ When the caller hangs up, the core aborts the provider request and records the o
 already true. If you hand `handleProxy` a reply stand-in of your own, forward `once`, `off` and
 `destroyed` to the real socket, as `createAnthropicReply` does.
 
+Usage rows may carry optional token kinds (`UsageTokenKinds`): cache reads and writes, cache misses
+and reasoning tokens, as the provider reported them. Absent means not reported. Your `usage` store
+must accept a row that carries them; keeping them is up to you.
+
 ### Operator alerts
 
 The core raises these alerts on the request path and hands each to your `notifications` port

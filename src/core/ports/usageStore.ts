@@ -19,8 +19,34 @@
 // spend so far this budget period). Rows are written in batches by the usage pipeline, never
 // inline on a request.
 
-/** One request's usage, exactly as it is persisted. */
-export interface UsageRow {
+/**
+ * Token kinds a provider reports beyond input and output (all optional, additive). Absent means the
+ * provider did not report it, and no row written before these existed has any; a reported 0 is 0.
+ * Each is recorded as the provider reported it: `inputTokens` and `outputTokens` are unchanged, so
+ * whether a cache read is also counted inside `inputTokens` is the provider's convention (OpenAI's
+ * `prompt_tokens` includes its cached tokens). Recorded, not priced: `estimatedUsd` is unchanged.
+ * Which provider field feeds each one is listed in lib/usageDetail.ts.
+ */
+export interface UsageTokenKinds {
+  /** Input tokens read from the provider's prompt cache. */
+  cachedInputTokens?:  number;
+  /** Input tokens written to the provider's prompt cache. */
+  cacheWriteTokens?:   number;
+  /** Of the cache writes, those kept for five minutes (Anthropic). */
+  cacheWrite5mTokens?: number;
+  /** Of the cache writes, those kept for an hour (Anthropic). */
+  cacheWrite1hTokens?: number;
+  /** Input tokens that missed the prompt cache (DeepSeek). */
+  cacheMissTokens?:    number;
+  /** Output tokens spent on reasoning before the answer. */
+  reasoningTokens?:    number;
+}
+
+/**
+ * One request's usage, exactly as it is persisted. A store that has nowhere to keep the optional
+ * token kinds must still accept a row that carries them.
+ */
+export interface UsageRow extends UsageTokenKinds {
   id:             string;
   sessionId:      string;
   modelId:        string;

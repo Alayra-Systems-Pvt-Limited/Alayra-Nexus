@@ -28,7 +28,7 @@ export type {
   CoreStores,
   KeyStore, KeyRow, KeyAlertFacts, KeyStateRow, KeyCheck,
   ProviderStore, ProviderRow, PreferredModelPool, ProviderCheckRow, ProviderCheck,
-  UsageStore, UsageRow,
+  UsageStore, UsageRow, UsageTokenKinds,
   SettingsStore,
   NotificationSink, NotificationRow,
 } from './ports';

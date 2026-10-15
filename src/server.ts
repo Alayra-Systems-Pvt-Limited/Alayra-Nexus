@@ -103,14 +103,14 @@ async function initOnce() {
   // Fail with an instruction, not a retry storm, when the database or Redis is missing.
   await assertDependencies();
 
-  // Standalone only (S2.4): build the database if this is a first run. It has to happen here rather
-  // than in a deploy step because `npx @alayra/nexus` has no deploy step — and it has to happen
-  // AFTER assertDependencies so an unreachable database is still reported as such, not as a failure
-  // to create a schema. `SELECT 1` passes against an empty SQLite file, so nothing before this point
-  // can tell the difference between a working gateway and one with no tables.
+  // Standalone only (S2.4): build the database on a first run, or add the nullable columns an older
+  // file lacks. Here, not in a deploy step, because `npx @alayra/nexus` has none; and AFTER
+  // assertDependencies, so an unreachable database is reported as such. `SELECT 1` passes against an
+  // empty SQLite file, so nothing before this point can tell a working gateway from one with no tables.
   if (dbEngine === 'sqlite') {
-    const { created, tables } = await ensureSqliteSchema(prisma);
+    const { created, tables, added } = await ensureSqliteSchema(prisma);
     if (created) console.log(`  Database created → ${tables} tables at ${resolveDatabaseUrl().replace(/^file:/, '')}`);
+    if (added.length) console.log(`  Database upgraded → added ${added.join(', ')}`);
 
     // And put it into WAL (S2.5), so background writes stop queueing behind dashboard reads. After
     // the schema, because there is no point configuring a database that does not exist yet — and
