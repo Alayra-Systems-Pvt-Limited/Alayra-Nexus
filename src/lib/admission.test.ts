@@ -33,7 +33,7 @@ vi.mock('./redis', () => ({ redis: { eval: evalMock } }));
 import { beforeEach, afterEach } from 'vitest';
 import {
   rpmKey, tpmKey, usersKey, admitUser, reconcileTpm, readTpmReconcile, effectiveTpmReconcile, ADMIT_LUA, RECONCILE_LUA,
-  CHARGE_LUA,
+  CHARGE_LUA, MAX_USAGE_TOKENS,
   RPM_TPM_WINDOW_SECONDS, MAXUSERS_WINDOW_SECONDS,
 } from './admission';
 import { redis } from './redis';
@@ -187,6 +187,23 @@ describe('reconcileTpm', () => {
     await mod.reconcileTpm('key-1', 100, Number.NaN, NOON);
     await mod.reconcileTpm('key-1', 100, Number.POSITIVE_INFINITY, NOON);
     expect(evalMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores a negative usage figure rather than emptying the window', async () => {
+    // A refund of reserved + 5,000,000 would be clamped to everything the window holds.
+    await reconcileTpm('key-1', 100, -5_000_000, NOON);
+    const mod = await loadWith('two-way');
+    await mod.reconcileTpm('key-1', 100, -1, NOON);
+    expect(evalMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores an absurd usage figure rather than blocking the key on it', async () => {
+    const mod = await loadWith('two-way');
+    await mod.reconcileTpm('key-1', 100, 1e12, NOON);
+    await mod.reconcileTpm('key-1', 100, MAX_USAGE_TOKENS + 1, NOON);
+    expect(evalMock).not.toHaveBeenCalled();
+    await mod.reconcileTpm('key-1', 100, MAX_USAGE_TOKENS, NOON);
+    expect(evalMock).toHaveBeenCalledWith(mod.CHARGE_LUA, 1, TPM, String(MAX_USAGE_TOKENS - 100), '60', String(NOON));
   });
 
   it('with the fast estimate, charges an overrun even though reconcile was left at refund', async () => {

@@ -55,7 +55,17 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   minute, exactly as a refund already lands there. The default, `refund`, behaves exactly as before,
   except with `NEXUS_TPM_ESTIMATE=fast`, which always runs two-way: set with `refund`, it logs one
   warning at start-up and uses two-way. It is also useful on its own for providers whose counts
-  run above cl100k's.
+  run above cl100k's. A usage figure above 10,000,000 tokens, more than any model reads in one
+  request, is a broken report and is never charged.
+
+### Fixed
+
+- **A TPM reconcile ignores a usage figure that is negative or not a number.** When an answer comes
+  back, Nexus gives the key's per-minute window back what the request reserved and did not use. A
+  negative usage figure was given back as more than the request reserved, which emptied the window
+  of every other request's reservation and let the key admit past its limit for the rest of the
+  minute, and a figure that was not a number was passed on to the Redis script. Either is now
+  ignored, and the reservation stands until the window rolls over.
 
 ## [1.8.0] - 2026-10-16
 

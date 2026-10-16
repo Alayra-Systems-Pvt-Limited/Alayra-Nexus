@@ -184,6 +184,9 @@ export function effectiveTpmReconcile(estimate: TpmEstimate, configured: TpmReco
 
 const TPM_RECONCILE: TpmReconcile = effectiveTpmReconcile(TPM_ESTIMATE, readTpmReconcile());
 
+/** No model reads this many tokens in one request. A usage figure above it is a broken report. */
+export const MAX_USAGE_TOKENS = 10_000_000;
+
 /**
  * Atomically admit one request against a key's RPM and TPM budgets, reserving
  * `reserve` tokens. Returns true only if the key had headroom for both.
@@ -218,6 +221,10 @@ export async function reconcileTpm(
   /** Test seam: pin the instant both halves of the script see. Never passed in production. */
   nowMs?: number,
 ): Promise<void> {
+  // A usage figure that is negative, not a number or absurd says nothing true about the key. Acting
+  // on it would empty the window (a negative refund) or block the key (a huge charge), so the
+  // reservation is left as it was.
+  if (!Number.isFinite(actual) || actual < 0 || actual > MAX_USAGE_TOKENS) return;
   const giveBack = Math.floor(reserved - actual);
   if (giveBack > 0) {
     await redis.eval(
@@ -230,7 +237,6 @@ export async function reconcileTpm(
   }
   if (TPM_RECONCILE !== 'two-way') return;
   const excess = Math.ceil(actual - reserved);
-  // Also refuses NaN and Infinity: a usage figure that is not a number must not poison the window.
   if (!Number.isSafeInteger(excess) || excess <= 0) return;
   await redis.eval(
     CHARGE_LUA, 1, tpmKey(keyId),
