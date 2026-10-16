@@ -27,10 +27,10 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   languages, emoji, base64, URLs, minified JavaScript, recorded chat payloads) and on 4,000
   generated strings. The one exception is a single run over 64 KB with no space, digit or
   punctuation mark to break it, which real text does not have. It is counted in 64 KB slices with
-  8 tokens added at each cut, four times the most a cut lowered a count in 52,500 measured cuts, so
-  it counts at or above the exact count and at most 11 tokens a cut above it. The tokenizer's data
-  now also loads in the background once the server is listening, instead of during the first
-  request that needs it.
+  8 tokens added at each cut, four times the largest drop seen. In every cut measured (52,500 cuts,
+  worst shift -3/+2 tokens) the sliced count was never lower than exact, and at most 11 tokens a cut
+  above it; this is measured, not guaranteed. The tokenizer's data now also loads in the
+  background once the server is listening, instead of during the first request that needs it.
 - **Text that contains a tokenizer special-token string, such as `<|endoftext|>`, is now counted
   exactly.** Before, the tokenizer refused such text and the whole text was estimated at a quarter
   of its length in characters. It is now counted as the ordinary text it is, the way the tokenizer

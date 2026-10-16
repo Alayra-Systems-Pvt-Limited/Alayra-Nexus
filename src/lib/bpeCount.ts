@@ -34,8 +34,9 @@
 // or punctuation mark to break it, which real text does not have) is merged in slices of that size.
 // A cut moves the count a few tokens either way: over 52,500 random cuts in 21 shapes of run, a
 // whole run counted between 3 fewer and 2 more tokens than its two parts. So each cut adds
-// CUT_MARGIN, 8 tokens, four times the worst measured: the count stays at or above the exact one,
-// and at most 11 tokens a cut above it.
+// CUT_MARGIN, 8 tokens, four times the largest drop measured. In every cut measured, the count
+// stayed at or above the exact one and at most 11 tokens a cut above it. That is a measurement, not
+// a proof: no bound on how far one cut can move a count is known.
 
 /** The shape of js-tiktoken's rank files. */
 interface Ranks { pat_str: string; bpe_ranks: string }
@@ -52,7 +53,7 @@ interface Cl100k {
 const SCAN_BYTES = 64;
 /** A longer piece is merged in slices of at most this many bytes: ~40 bytes of scratch per byte. */
 export const SLICE_BYTES = 64 * 1024;
-/** Tokens added per cut, so a sliced piece never counts below its exact count. */
+/** Tokens added per cut. In every cut measured, a sliced piece counted at or above its exact count. */
 const CUT_MARGIN = 8;
 
 const NONE = 0x7fffffff;
