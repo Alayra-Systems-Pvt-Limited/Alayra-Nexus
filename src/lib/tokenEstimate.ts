@@ -32,12 +32,15 @@
 // to sit just above the cl100k count on 402 samples of real text: English prose and docs,
 // TypeScript, minified JavaScript, shell and YAML, package and lock JSON, IDs, numbers, base64,
 // emoji, and 51 languages in 17 scripts. The sum then gets 5 % headroom. On those samples, and on
-// 111 held-out ones, it never fell below the tokenizer; its median was 32 % above for English,
-// 28-40 % for code, 16-27 % for JSON and 22 % across the other languages. Strings of random
-// characters, which no real prompt is, can fall below. It never exceeds the UTF-8 byte count,
-// which no token count can.
+// 111 held-out ones, it never fell below the tokenizer; its median was 32-34 % above for English,
+// 31-43 % for code, 17-27 % for JSON and 22 % across the other languages. It never exceeds the
+// UTF-8 byte count, which no token count can.
 //
-// It is an admission estimate only. Usage rows and money never use it.
+// Crafted text can still count low. Whitespace and control characters cannot (tabs, lone carriage
+// returns and every mix of them were checked against the tokenizer), but a long run of random
+// letters can count as little as a fifth of its real tokens.
+//
+// It is an admission estimate only, used for chat requests. Usage rows and money never use it.
 
 /** `[per run, per character]` tokens for one class of character. */
 type Cost = readonly [run: number, char: number];
@@ -51,7 +54,11 @@ export const TOKEN_ESTIMATE_WEIGHTS = Object.freeze({
   lower:    [0.7, 0.15] as Cost,      // a-z
   upper:    [0.7, 0.5] as Cost,       // A-Z
   punct:    [0.15, 0.3] as Cost,      // ASCII punctuation and symbols
-  lineBreak: [1.35, 0.04] as Cost,    // \n and \r
+  lineBreak: [1.35, 0.04] as Cost,    // \n. A run of line breaks, \n and \r mixed, costs its run once
+  carriageReturn: [1.35, 0.25] as Cost, // \r before \n: no token packs more than 8 bytes of \r\n
+  loneCarriageReturn: [1.35, 1] as Cost, // \r not before \n: one token each
+  tab:      [1, 1 / 16] as Cost,      // \t: no token holds over 21 tabs; " \t" alternating is a token a pair
+  control:  [0, 1] as Cost,           // other ASCII control characters, \v and \f among them: a token each
   latin:    [1.45, 0.5] as Cost,      // accented Latin letters
   greek:    [0, 1.05] as Cost,
   cyrillic: [1.55, 0.35] as Cost,
@@ -71,7 +78,7 @@ export const TOKEN_ESTIMATE_WEIGHTS = Object.freeze({
   astral:   [0, 3] as Cost,           // beyond the BMP: emoji, rare ideographs
   /** Each group of up to three digits, the most the tokenizer joins. */
   digitGroup: 1.6,
-  /** A run of two or more spaces or tabs, and each space in it. A single space joins the next word. */
+  /** A run of two or more spaces, and each space in it. A single space joins the next word. */
   spaceRun: 0.9,
   space: 1 / 80,
   /** Applied to the whole sum, for text unlike the samples the weights were fitted on. */
@@ -79,11 +86,12 @@ export const TOKEN_ESTIMATE_WEIGHTS = Object.freeze({
 });
 
 // Class ids, in the order of CLASSES. 0 is "no class yet" (the start of the text).
-const CLASSES = ['lower', 'upper', 'punct', 'lineBreak', 'latin', 'greek', 'cyrillic', 'armenian', 'hebrew',
-  'arabic', 'other2', 'indic', 'thai', 'georgian', 'hangul', 'kana', 'han', 'cjkPunct', 'genPunct', 'other3',
-  'astral'] as const;
-const [LOWER, UPPER, PUNCT, BREAK, LATIN, GREEK, CYRILLIC, ARMENIAN, HEBREW, ARABIC, OTHER2, INDIC, THAI,
-  GEORGIAN, HANGUL, KANA, HAN, CJK_PUNCT, GEN_PUNCT, OTHER3, ASTRAL] = CLASSES.map((_, i) => i + 1);
+// The three line-break classes are adjacent, so "is a line break" is one range test.
+const CLASSES = ['lower', 'upper', 'punct', 'lineBreak', 'carriageReturn', 'loneCarriageReturn', 'tab', 'control',
+  'latin', 'greek', 'cyrillic', 'armenian', 'hebrew', 'arabic', 'other2', 'indic', 'thai', 'georgian', 'hangul',
+  'kana', 'han', 'cjkPunct', 'genPunct', 'other3', 'astral'] as const;
+const [LOWER, UPPER, PUNCT, BREAK, CR, LONE_CR, TAB, CONTROL, LATIN, GREEK, CYRILLIC, ARMENIAN, HEBREW, ARABIC, OTHER2,
+  INDIC, THAI, GEORGIAN, HANGUL, KANA, HAN, CJK_PUNCT, GEN_PUNCT, OTHER3, ASTRAL] = CLASSES.map((_, i) => i + 1);
 const DIGIT = CLASSES.length + 1, SPACE = CLASSES.length + 2, COUNT = CLASSES.length + 3;
 
 const RUN = new Float64Array(COUNT), CHAR = new Float64Array(COUNT), BYTES = new Float64Array(COUNT).fill(1);
@@ -93,10 +101,12 @@ for (const c of [INDIC, THAI, GEORGIAN, HANGUL, KANA, HAN, CJK_PUNCT, GEN_PUNCT,
 BYTES[ASTRAL] = 4;
 
 const ASCII = new Uint8Array(128).fill(PUNCT);
+for (let x = 0; x < 0x20; x++) ASCII[x] = CONTROL;
+ASCII[0x7f] = CONTROL;
 for (let x = 0x61; x <= 0x7a; x++) ASCII[x] = LOWER;
 for (let x = 0x41; x <= 0x5a; x++) ASCII[x] = UPPER;
 for (let x = 0x30; x <= 0x39; x++) ASCII[x] = DIGIT;
-ASCII[0x20] = SPACE; ASCII[0x09] = SPACE; ASCII[0x0a] = BREAK; ASCII[0x0d] = BREAK;
+ASCII[0x20] = SPACE; ASCII[0x09] = TAB; ASCII[0x0a] = BREAK; ASCII[0x0d] = CR;
 
 /** The class of one UTF-16 code unit at or above 0x80. */
 function wideClass(x: number): number {
@@ -139,8 +149,12 @@ export function estimateTokens(text: string): number {
       const next = text.charCodeAt(i + 1);
       if (next >= 0xdc00 && next < 0xe000) i++;                       // its low surrogate
       else c = OTHER3;                                                // a lone one: UTF-8 writes 3 bytes
+    } else if (c === CR && text.charCodeAt(i + 1) !== 0x0a) {
+      c = LONE_CR;                                                    // \r without \n is a token each
     }
-    if (c !== prev && !(prev === UPPER && c === LOWER)) {
+    // A run continues through a capital-then-lowercase (a word) and through any mix of \r and \n.
+    if (c !== prev && !(prev === UPPER && c === LOWER)
+      && !(prev >= BREAK && prev <= LONE_CR && c >= BREAK && c <= LONE_CR)) {
       if (prev === DIGIT) digitGroups += Math.ceil(run / 3);
       else if (prev === SPACE && run > 1) { spaceRuns++; spaces += run; }
       runs[c]++;

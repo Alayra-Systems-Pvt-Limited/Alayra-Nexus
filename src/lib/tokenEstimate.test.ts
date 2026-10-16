@@ -54,8 +54,8 @@ const SAMPLES: Record<string, string> = {
   base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
 };
 
-/** The four prompt kinds the latency bench measured, built the way the bench builds them. */
-const BENCH_SEEDS = {
+/** Four sample prompts (English, code, Chinese, JSON), each one sentence repeated to size. */
+const SAMPLE_PROMPTS = {
   english: 'The quick brown fox jumps over the lazy dog while the gateway counts every token of the prompt. ',
   code: 'function add(a, b) { return a + b; } // const x = await fetch(url, { method: "POST" });\n',
   cjk: '网关在把请求发送给模型供应商之前会估算令牌数量。延迟是产品的一部分。日本語のテキストも含みます。',
@@ -65,7 +65,7 @@ const fill = (seed: string, bytes: number): string =>
   Buffer.from(seed.repeat(Math.ceil(bytes / Buffer.byteLength(seed)) + 1), 'utf8')
     .subarray(0, bytes).toString('utf8').replace(/�+$/u, '');
 
-/** How far above the tokenizer each bench kind may land: today 1.38, 1.06, 1.42 and 1.22. */
+/** How far above the tokenizer each sample prompt may land: today 1.38, 1.06, 1.42 and 1.22. */
 const CEILING = { english: 1.5, code: 1.2, cjk: 1.55, json: 1.35 };
 
 describe('estimateTokens — errs high, never far', () => {
@@ -80,7 +80,7 @@ describe('estimateTokens — errs high, never far', () => {
     expect(estimate).toBeLessThan(2 * exact);
   });
 
-  it.each(Object.entries(BENCH_SEEDS))('counts the bench\'s %s prompt high, within its ceiling', (kind, seed) => {
+  it.each(Object.entries(SAMPLE_PROMPTS))('counts the %s sample prompt high, within its ceiling', (kind, seed) => {
     for (const bytes of [2_048, 16_384]) {
       const text = fill(seed, bytes);
       const ratio = estimateTokens(text) / countTokens(text);
@@ -92,7 +92,7 @@ describe('estimateTokens — errs high, never far', () => {
   it('holds where bytes / 4 runs low: code, JSON and Chinese', () => {
     // The reason this file exists. A byte divisor under-counts each of these by 20-30 %.
     for (const kind of ['code', 'json', 'cjk'] as const) {
-      const text = fill(BENCH_SEEDS[kind], 4_096);
+      const text = fill(SAMPLE_PROMPTS[kind], 4_096);
       const exact = countTokens(text);
       expect(Math.ceil(Buffer.byteLength(text) / 4), kind).toBeLessThan(exact);
       expect(estimateTokens(text), kind).toBeGreaterThanOrEqual(exact);
@@ -104,6 +104,29 @@ describe('estimateTokens — errs high, never far', () => {
     const ten = estimateTokens(`${SAMPLES.english} `.repeat(10));
     expect(ten).toBeGreaterThanOrEqual(9 * one);
     expect(ten).toBeLessThanOrEqual(11 * one);
+  });
+});
+
+describe('estimateTokens — whitespace and control characters never count low', () => {
+  // Each of these once counted at a fraction of the tokenizer: tab shared the space's run, so a
+  // run of " \t" cost almost nothing, and \r rode along with \n at 0.04 a character.
+  const crafted: Record<string, string> = {
+    'space-tab': ' \t'.repeat(1_000),
+    'tab-tab-space': '\t\t '.repeat(700),
+    'tab-space': '\t '.repeat(1_000),
+    tabs: '\t'.repeat(2_000),
+    crlf: '\r\n'.repeat(1_000),
+    'lone CR': '\r'.repeat(2_000),
+    'CR-CR-LF': '\r\r\n'.repeat(700),
+    'tab-CR': '\t\r'.repeat(1_000),
+    'space-CR': ' \r'.repeat(1_000),
+    'LF-CR': '\n\r'.repeat(1_000),
+    'vertical tab and form feed': '\v\f'.repeat(1_000),
+    'other control characters': '\u0001\u0002\u001b\u007f'.repeat(500),
+  };
+
+  it.each(Object.entries(crafted))('counts %s at or above the tokenizer', (_kind, text) => {
+    expect(estimateTokens(text)).toBeGreaterThanOrEqual(countTokens(text));
   });
 });
 
@@ -140,8 +163,8 @@ describe('estimateTokens — bounded by the UTF-8 byte count', () => {
 
 describe('estimateTokens — the tokenizer stays out of it', () => {
   it('never calls the tokenizer, even for a 128 KB Chinese prompt', () => {
-    // The tokenizer took 1.36 s on this prompt in the bench. The estimate must not reach it at all.
-    const text = fill(BENCH_SEEDS.cjk, 131_072);
+    // The tokenizer takes over a second on this prompt. The estimate must not reach it at all.
+    const text = fill(SAMPLE_PROMPTS.cjk, 131_072);
     encodes.n = 0;
     expect(estimateTokens(text)).toBeGreaterThan(Buffer.byteLength(text) / 4);
     expect(encodes.n).toBe(0);
