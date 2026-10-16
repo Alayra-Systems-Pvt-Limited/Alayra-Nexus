@@ -656,11 +656,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   // "undefined", which every `?.trim() ||` check in the codebase would read as a configured value.
   for (const [k, v] of Object.entries(env)) if (v !== undefined) process.env[k] = v;
 
-  // The server calls `dotenv/config` at its top, which would otherwise read ./.env — the very file
-  // this launcher just declined to use. Pointing dotenv at what we chose, or at a path inside the
-  // data directory that need not exist (dotenv ignores a missing file), keeps that promise without
-  // changing the server at all.
-  process.env.DOTENV_CONFIG_PATH = o.envFile ?? join(o.dataDir, '.env');
+  // The server's `dotenv/config` would otherwise read ./.env, the file this launcher declined to use,
+  // so point it at our choice (a missing file is ignored) and never let a file override. dotenv 18
+  // reads DOTENV_PATH/DOTENV_OVERRIDE before the DOTENV_CONFIG_ names: set all four, or a stray one wins.
+  process.env.DOTENV_PATH = process.env.DOTENV_CONFIG_PATH = o.envFile ?? join(o.dataDir, '.env');
+  process.env.DOTENV_OVERRIDE = process.env.DOTENV_CONFIG_OVERRIDE = 'false';
 
   // The move happens INSTEAD of starting, and before anything binds a port or takes the lock: it
   // is not a gateway that is running, and a half-started one holding the port would stop the

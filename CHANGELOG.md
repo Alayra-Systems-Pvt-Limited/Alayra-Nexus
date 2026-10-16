@@ -29,6 +29,15 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Changed
 
+- **dotenv 17 → 18, and the launcher sets the new names dotenv reads first.** dotenv 18 adds
+  `DOTENV_PATH` and `DOTENV_OVERRIDE`, reads them ahead of `DOTENV_CONFIG_PATH` and
+  `DOTENV_CONFIG_OVERRIDE`, and honours them in every `dotenv.config()` call. The `alayra-nexus`
+  launcher pointed the server's `dotenv/config` only through `DOTENV_CONFIG_PATH`, so a
+  `DOTENV_PATH` left in the shell would have loaded a file nobody named, and a `DOTENV_OVERRIDE`
+  would have let that file outrank the environment the launcher assembled. It now sets
+  `DOTENV_PATH` and `DOTENV_CONFIG_PATH` to the same file, and both override names to `false`. Boot
+  output is unchanged: `dotenv/config` still defaults to quiet. dotenv 18 also drops `.env.vault`,
+  `DOTENV_KEY` and the `dotenv_config_*` command-line options, none of which Nexus used.
 - **One read when a memo expires, and the registry parsed only when it changes.** Requests that
   find a memoised setting, registry or pool list expired now share one read instead of each making
   its own. A registry read whose text has not changed reuses the models already parsed: at 5,000
