@@ -24,6 +24,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const REGISTRY = [
   { id: 'openai-gpt-4o', modelString: 'gpt-4o', inputCostPer1M: 2.5, outputCostPer1M: 10 },
   { id: 'openai-tts',    modelString: 'tts-1',  speechPricePer1MChars: 15 },
+  { id: 'claude-sonnet', modelString: 'claude-sonnet-4-6', inputCostPer1M: 3, outputCostPer1M: 15, webSearchCostPer1K: 10 },
 ];
 
 vi.mock('../lib/redis', () => ({ redis: {} }));
@@ -197,5 +198,20 @@ describe('usage rows carry the token kinds the provider reported', () => {
     await recordTokenUsage({ ...base, detail: { reasoningTokens: 3, bogus: 1 } as never });
     expect(lastEvent()).toMatchObject({ reasoningTokens: 3 });
     expect(lastEvent()).not.toHaveProperty('bogus');
+  });
+});
+
+describe('recordTokenUsage — cache and server-tool prices reach the row and the budget', () => {
+  it('prices cache reads below the input price and adds the searches, on the row and against the budget', async () => {
+    vi.mocked(addSpend).mockResolvedValue(null);
+    await recordTokenUsage({
+      sessionId: 's-2', modelId: 'claude-sonnet', modelName: 'claude-sonnet-4-6', provider: 'anthropic',
+      inputTokens: 122_500, outputTokens: 1_000, teamId: 'team-1',
+      detail: { cachedInputTokens: 120_000, cacheWriteTokens: 2_000, cacheWrite5mTokens: 2_000 },
+      serverToolUse: { web_search_requests: 2 },
+    });
+    // 0.036 reads + 0.0075 writes + 0.0015 uncached + 0.015 output + 0.02 searches
+    expect(lastEvent().estimatedUsd).toBeCloseTo(0.08, 9);
+    expect(vi.mocked(addSpend).mock.calls[0][2]).toBeCloseTo(0.08, 9);
   });
 });
