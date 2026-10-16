@@ -17,6 +17,7 @@
 import { redis } from './redis';
 import { defineScript } from './kv/memory';
 import { RATE_WINDOW_LUA, rateWindow, rateCount, windowTtl } from './rateWindow';
+import { TPM_ESTIMATE, type TpmEstimate } from './tokenEstimate';
 
 // Sliding-window length for per-key RPM/TPM counters (seconds).
 export const RPM_TPM_WINDOW_SECONDS = 60;
@@ -129,6 +130,67 @@ return redis.call('DECRBY', cur, giveBack)
   return kv.decrby(cur, giveBack);
 });
 
+// The other direction: a request that used MORE than it reserved adds the excess to the window, so
+// the next admission sees what the key really spent. Without it the window under-counts a key for a
+// minute every time a reservation runs low, and a key can run past its limit at the provider while
+// Nexus believes it has room.
+//
+// INCRBY keeps an existing expiry, as the refund's DECRBY does. A counter this creates (the window
+// rolled over while the request ran, which puts the excess in the next minute, as a refund would)
+// gets the same two-window deadline admission gives one.
+export const CHARGE_LUA = defineScript(`${RATE_WINDOW_LUA}
+local extra  = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local nowMs  = tonumber(ARGV[3])
+local cur    = nexusWindow(KEYS[1], nowMs, window)
+
+if extra <= 0 then return tonumber(redis.call('GET', cur) or '0') end
+local total = redis.call('INCRBY', cur, extra)
+if redis.call('TTL', cur) == -1 then redis.call('EXPIRE', cur, window * 2) end
+return total
+`, ([tpmKeyName], [amount, window, nowMs], kv) => {
+  const cur = rateWindow(tpmKeyName, Number(nowMs), Number(window)).current;
+  const extra = Number(amount);
+  if (extra <= 0) return Number(kv.get(cur) ?? '0');
+  const total = kv.incrby(cur, extra);
+  if (kv.ttl(cur) === -1) kv.expire(cur, windowTtl(Number(window)));
+  return total;
+});
+
+export type TpmReconcile = 'refund' | 'two-way';
+
+/**
+ * NEXUS_TPM_RECONCILE: `refund` (the default, as before) only gives back what a request reserved
+ * and did not use; `two-way` also adds what it used beyond its reservation. Read once, at load.
+ */
+export function readTpmReconcile(raw = process.env.NEXUS_TPM_RECONCILE): TpmReconcile {
+  const value = raw?.trim().toLowerCase();
+  if (!value || value === 'refund') return 'refund';
+  if (value === 'two-way') return 'two-way';
+  console.warn(`⚠️  NEXUS_TPM_RECONCILE="${raw}" was ignored — use "refund" or "two-way". Using refund.`);
+  return 'refund';
+}
+
+/**
+ * The reconcile a process runs. The `fast` estimate can run low on crafted text (a long run of
+ * random letters counts as little as a fifth of its real tokens), and only two-way reconcile charges
+ * that back, so `fast` always runs with two-way. It warns once, and only when NEXUS_TPM_RECONCILE
+ * was set to something else; left unset, two-way is simply what `fast` means.
+ */
+export function effectiveTpmReconcile(estimate: TpmEstimate, raw = process.env.NEXUS_TPM_RECONCILE): TpmReconcile {
+  if (estimate !== 'fast') return readTpmReconcile(raw);
+  const value = raw?.trim().toLowerCase();
+  if (value && value !== 'two-way') {
+    console.warn(`⚠️  NEXUS_TPM_RECONCILE="${raw}" was ignored — NEXUS_TPM_ESTIMATE=fast always runs two-way.`);
+  }
+  return 'two-way';
+}
+
+const TPM_RECONCILE: TpmReconcile = effectiveTpmReconcile(TPM_ESTIMATE);
+
+/** No model reads this many tokens in one request. A usage figure above it is a broken report. */
+export const MAX_USAGE_TOKENS = 10_000_000;
+
 /**
  * Atomically admit one request against a key's RPM and TPM budgets, reserving
  * `reserve` tokens. Returns true only if the key had headroom for both.
@@ -153,20 +215,37 @@ export async function admitKey(
 }
 
 /**
- * Reconcile a TPM reservation down to actual usage: refund `reserved - actual`
- * tokens to the key's TPM window. A no-op when the request used at least what it
- * reserved. Pass `actual = 0` to fully release a reservation for a failed request.
+ * Reconcile a TPM reservation to actual usage: refund `reserved - actual` tokens to the key's TPM
+ * window. When the request used more than it reserved, NEXUS_TPM_RECONCILE=two-way (always on with
+ * NEXUS_TPM_ESTIMATE=fast) adds the excess instead; by default that is a no-op, as it always was.
+ * Pass `actual = 0` to fully release a reservation for a failed request.
  */
 export async function reconcileTpm(
   keyId: string, reserved: number, actual: number,
   /** Test seam: pin the instant both halves of the script see. Never passed in production. */
   nowMs?: number,
 ): Promise<void> {
-  const giveBack = Math.floor(reserved - actual);
-  if (giveBack <= 0) return;
+  // A provider may report usage as a string of digits, which counts, as it always did. A figure that
+  // is negative, not a number or absurd says nothing true about the key: acting on it would empty the
+  // window (a negative refund) or block the key (a huge charge), so the reservation is left as it was.
+  const used = Number(actual);
+  if (!Number.isFinite(used) || used < 0 || used > MAX_USAGE_TOKENS) return;
+  const giveBack = Math.floor(reserved - used);
+  if (giveBack > 0) {
+    await redis.eval(
+      RECONCILE_LUA, 1, tpmKey(keyId),
+      String(giveBack),
+      String(RPM_TPM_WINDOW_SECONDS),
+      String(nowMs ?? Date.now()),
+    );
+    return;
+  }
+  if (TPM_RECONCILE !== 'two-way') return;
+  const excess = Math.ceil(used - reserved);
+  if (!Number.isSafeInteger(excess) || excess <= 0) return;
   await redis.eval(
-    RECONCILE_LUA, 1, tpmKey(keyId),
-    String(giveBack),
+    CHARGE_LUA, 1, tpmKey(keyId),
+    String(excess),
     String(RPM_TPM_WINDOW_SECONDS),
     String(nowMs ?? Date.now()),
   );

@@ -22,7 +22,7 @@ import {
 import { getSsrfPolicy } from '../ssrf.service';
 import { noCapacityMessage } from '../modelCatalog.service';
 import { byokKeyRequired } from '../byokOnly.service';
-import { computeReserve } from '../../lib/tokenizer';
+import { planReserve } from '../../lib/tokenizer';
 import { reconcileTpm } from '../../lib/admission';
 import { sessionHash } from '../../lib/sticky';
 import { stripTrailingSlash, assertSafeUrl } from '../../lib/url';
@@ -72,7 +72,7 @@ export async function dispatchUpstream(
   const { scope, pinnedModelId, strategyWeight, overBudgetDowngrade } = admission;
   const { effectiveMessages, bufferStream } = guarded;
 
-  const reserve  = computeReserve(effectiveMessages, body.max_tokens, DEFAULT_MAX_TOKENS_RESERVE);
+  const counted  = planReserve(effectiveMessages, body.max_tokens, DEFAULT_MAX_TOKENS_RESERVE);
   // Cache-aware sticky routing: pin a continuing conversation to its last key.
   const session  = sessionHash({ messages, user: body.user }, reqHeaders);
   // OpenAI-standard end-user id, used to enforce each key's Max Users cap. Absent → no per-user
@@ -83,8 +83,8 @@ export async function dispatchUpstream(
   // its normal preference, so it keeps working at the lowest cost rather than being cut off.
   const preferredTier = overBudgetDowngrade ? 'fast' : (team?.assignedTier ?? null);
   const route = pinnedModelId
-    ? await discoverBestPool(reserve, session, scope, 'chat', userId, preferredTier, pinnedModelId)
-    : await discoverBestPool(reserve, session, scope, 'chat', userId, preferredTier, null, strategyWeight);
+    ? await discoverBestPool(counted, session, scope, 'chat', userId, preferredTier, pinnedModelId)
+    : await discoverBestPool(counted, session, scope, 'chat', userId, preferredTier, null, strategyWeight);
   if (!route) {
     // A byok-only team with no key of its own that could serve this is told to add one (P1.1).
     const needsKey = await byokKeyRequired(scope, 'chat', { pinnedModelId });
@@ -111,6 +111,10 @@ export async function dispatchUpstream(
         retryAfter,
       }));
   }
+
+  // What the chosen key reserved: the estimate, or the exact count if routing had to make it exact.
+  // Read after routing, so a refund or reconcile gives back exactly what was taken.
+  const reserve = counted.tokens;
 
   // Route chosen: record provider dispatch and (if applicable) a prompt-cache hit.
   run.tier          = route.tier;

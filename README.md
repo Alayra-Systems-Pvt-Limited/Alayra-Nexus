@@ -336,7 +336,7 @@ is disabled because there is no database server; the engines underneath are diff
 is the same.
 
 ```
-  Alayra Nexus 1.8.0 — first run
+  Alayra Nexus 1.8.5 — first run
 
   Data directory   /home/you/.alayra-nexus
   Encryption key   /home/you/.alayra-nexus/secret.key  (generated)
@@ -399,7 +399,7 @@ docker run -d --name alayra-nexus -p 3000:3000 \
 | Docker Hub | `alayrasystems/nexus` |
 | GHCR | `ghcr.io/alayra-systems-pvt-limited/alayra-nexus` |
 
-Pin a version for production (e.g. `:1.8.0`) rather than `:latest`.
+Pin a version for production (e.g. `:1.8.5`) rather than `:latest`.
 
 <details>
 <summary><b>Option C — Docker Compose (brings its own Postgres + Redis)</b></summary>
@@ -418,7 +418,7 @@ curl -O https://raw.githubusercontent.com/Alayra-Systems-Pvt-Limited/Alayra-Nexu
 cat > .env <<EOF
 MASTER_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 ADMIN_PASSWORD=change-me
-NEXUS_VERSION=1.8.0
+NEXUS_VERSION=1.8.5
 EOF
 
 docker compose up -d
@@ -656,10 +656,13 @@ curl http://<your-host>:3000/v1/chat/completions \
 | `ABUSE_RATE_LIMIT_MAX` | No | Requests **per credential** per window before the abuse guard trips (default: `12000`). This is DoS/abuse protection, **not** a throughput cap — see [Rate limits, explained](#rate-limits-explained). |
 | `ABUSE_RATE_LIMIT_WINDOW` | No | Abuse-guard window (default: `1 minute`) |
 | `NEXUS_DEFAULT_MAX_TOKENS` | No | Output tokens reserved against a key's TPM budget when a request omits `max_tokens` (default: `2048`; reconciled to real usage afterward) |
+| `NEXUS_TPM_ESTIMATE` | No | How a chat request's input is counted for its key's TPM reservation: `tokenizer` (default, exact cl100k) or `fast`, a one-pass estimate that skips the tokenizer (about 1 ms instead of 33 ms-1.4 s for a 128 KB prompt) and counted at or above it on every kind of real text measured. A request is always counted exactly before it is refused, so it is refused exactly when it is with `tokenizer`. `fast` always runs with `NEXUS_TPM_RECONCILE=two-way`. Chat admission only: embeddings, completions, images, speech and usage rows keep the tokenizer. See the CHANGELOG |
+| `NEXUS_TPM_RECONCILE` | No | How a reservation is corrected to the provider's reported usage: `refund` (default) only gives unused tokens back; `two-way` also adds usage above the reservation to the key's window. Always `two-way` when `NEXUS_TPM_ESTIMATE=fast`: leave it unset there, since `refund` or an unknown value logs a warning |
 | `UPSTREAM_TTFT_MS` | No | Abort if a provider doesn't return response headers within this many ms (default: `20000`) |
 | `UPSTREAM_BODY_MS` | No | Non-streaming: max ms to read the full response body (default: `60000`) |
 | `UPSTREAM_STREAM_IDLE_MS` | No | Streaming: max ms gap between chunks before a hung stream is aborted (default: `30000`) |
 | `UPSTREAM_STREAM_MAX_MS` | No | Streaming: ceiling on one whole request in ms — the idle guard restarts on every chunk, so it bounds silence, not duration (default: `600000`) |
+| `MEMO_MAX_STALE_MS` | No | Lets an instance keep serving a memoised setting, model registry or pool list for up to this many ms after it was read, while one background read refreshes it, so no request waits for that read (default: `0`, off; at most `30000`). **With it on, a dashboard change can take this long to reach another instance**, including guardrails, the SSRF settings, a deactivated pool and usage anonymisation (up to 60 s, as it keeps its own 30 s copy). Only the master API key is exempt: a rotation reaches every instance within 5 s |
 
 > [!IMPORTANT]
 > Generate `MASTER_ENCRYPTION_KEY` with:

@@ -41,6 +41,7 @@
 import { coreStores } from '../core/stores';
 import { getActiveProviders }     from './providerCache.service';
 import { getModelRegistry, activeProviderSlugs, type AiModel } from './model.service';
+import { servableSnapshot }       from './registrySnapshot';
 import type { Capability }        from '../lib/modelSelect';
 import type { RoutingScope }      from '../lib/scope';
 
@@ -99,27 +100,38 @@ async function ownedProviderSlugs(teamId: string): Promise<Set<string>> {
   return (await coreStores()).keys.ownedProviderSlugs(teamId);
 }
 
+/** One registry model as `/v1/models` lists it, with its own copy of the capabilities (frozen with it). */
+const toCatalogEntry = (m: AiModel): CatalogEntry => ({
+  id: m.id, displayName: m.displayName || m.modelString || m.id, provider: m.provider,
+  capabilities: [...m.capabilities], contextWindow: m.contextWindow, maxTokens: m.maxTokens, auto: false,
+});
+
 /**
- * Which registry models this scope can actually be routed to, in registry order.
+ * Which registry models this scope can actually be routed to, in registry order, and their entries.
  *
  * The filters are deliberately the same three `selectModels` applies — active status, and
  * a provider with a live pool — minus the capability narrowing, because a listing spans
  * every endpoint. A model that fails these is not "hidden", it is unroutable: paused by
- * the operator, or belonging to a pool that no longer exists.
+ * the operator, or belonging to a pool that no longer exists. That part is built once per
+ * registry version and set of pools (registrySnapshot.ts); only a team's own keys are read
+ * per request.
  */
-async function servableRegistryModels(scope?: RoutingScope | null): Promise<AiModel[]> {
+async function servableRegistry(scope?: RoutingScope | null): Promise<{ models: readonly AiModel[]; entries: () => CatalogEntry[] }> {
   const [registry, slugs] = await Promise.all([getModelRegistry(), activeProviderSlugs()]);
+  const shared = servableSnapshot(registry, slugs, toCatalogEntry);
 
-  let allowed = slugs;
   // Only a hard-isolated team is narrowed. A team that may fall back to the shared pool
   // can reach every pooled model, so restricting its listing would be a lie in the other
-  // direction — it would hide models that will serve it perfectly well.
+  // direction — it would hide models that will serve it perfectly well. Never cached: a memo
+  // here would keep counting a revoked key's provider as owned.
   if (scope?.ownerTeamId && !scope.fallbackToShared) {
     const owned = await ownedProviderSlugs(scope.ownerTeamId);
-    allowed = new Set([...slugs].filter((s) => owned.has(s)));
+    return {
+      models:  shared.models.filter((m) => owned.has(m.provider)),
+      entries: () => shared.entries.filter((e) => owned.has(e.provider)),
+    };
   }
-
-  return registry.filter((m) => m.status === 'active' && allowed.has(m.provider));
+  return { models: shared.models, entries: () => [...shared.entries] };
 }
 
 /**
@@ -157,17 +169,9 @@ function legacyPoolEntries(providers: Awaited<ReturnType<typeof getActiveProvide
  * it is answered 403 `byok_key_required`, which tells the caller exactly what to add.
  */
 export async function listServableModels(scope?: RoutingScope | null): Promise<CatalogEntry[]> {
-  const models = await servableRegistryModels(scope);
-
-  const entries: CatalogEntry[] = models.map((m) => ({
-    id:            m.id,
-    displayName:   m.displayName || m.modelString || m.id,
-    provider:      m.provider,
-    capabilities:  m.capabilities,
-    contextWindow: m.contextWindow,
-    maxTokens:     m.maxTokens,
-    auto:          false,
-  }));
+  const servable = await servableRegistry(scope);
+  const models   = servable.models;
+  const entries  = servable.entries();
 
   // The legacy walk's own trigger is "no CHAT-capable model qualifies" — not "the registry
   // is empty". Testing the weaker condition here would let a gateway that has, say, one
@@ -208,7 +212,7 @@ export async function resolveRequestedModel(
   if (!requested || isAutoModel(requested)) return { kind: 'auto' };
 
   const wanted  = requested.toLowerCase();
-  const models  = await servableRegistryModels(scope);
+  const { models } = await servableRegistry(scope);
   const capable = models.filter((m) => m.capabilities.includes(capability));
 
   const hit = capable.find((m) => m.id.toLowerCase() === wanted)

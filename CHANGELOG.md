@@ -9,8 +9,84 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.8.5] - 2026-10-17
+
+### Added
+
+- **A chat request's TPM reservation can be counted without the tokenizer: `NEXUS_TPM_ESTIMATE=fast`.**
+  Before a chat request (`/v1/chat/completions`, `/v1/messages`) is routed, Nexus reserves its
+  input tokens plus its `max_tokens` against the chosen key's tokens-per-minute limit. The input was
+  counted with the cl100k tokenizer, on the event loop, before routing: about 33 ms for a 128 KB
+  English prompt, 67 ms for 128 KB of JSON and 1.36 s for 128 KB of Chinese, which every other
+  request on that process waited behind. With `fast`, a one-pass estimate counts it instead: about
+  1 ms at 128 KB and under 0.05 ms at 2 KB on a laptop, and it never calls the tokenizer. **It is
+  not bytes / 4.** Measured against the tokenizer, bytes / 4 was off by 22-30 % on four sample
+  prompts (English 5.05 bytes a token, code 3.14, Chinese 2.94, JSON 2.81) and up to 75 % low on
+  other real text (minified JavaScript, Traditional Chinese, Czech, Georgian, Armenian), and a low
+  estimate lets a key past its limit. So the estimate counts what the tokenizer cuts text into
+  (runs of letters, groups of digits, punctuation, runs of spaces, tabs, line breaks and carriage
+  returns, and characters by script), with weights fitted to sit just above the tokenizer and 5 %
+  headroom on top. On 402 samples of real text and 111 held-out ones (English, code, minified
+  JavaScript, JSON, IDs, base64, emoji, and 51 languages in 17 scripts) it never counted fewer
+  tokens than the tokenizer; its median was 32-34 % above for English, 31-43 % for code, 17-27 %
+  for JSON and 22 % for other languages. On the four sample prompts it lands at 1.38x (English),
+  1.06x (code), 1.42x (Chinese) and 1.22x (JSON). It never exceeds the prompt's UTF-8 byte count.
+  Whitespace and control characters count high wherever they were checked: every repeated mix of up
+  to four spaces, tabs, line feeds and carriage returns, each against the tokenizer, and the other
+  ASCII control characters and the C1 controls (U+0080-U+009F), which count at their byte count, the
+  most they can be. Crafted text can still count low: some longer mixes of carriage returns and line
+  feeds (`"\r\r\n\r\n"` repeated counts at 0.84), and a long run of random letters with no spaces,
+  at about a fifth of its tokens. So `fast` always runs with two-way reconcile (next entry), which
+  charges the difference once the provider reports it.
+  **A refusal is always decided on the exact count.** When the estimate plus `max_tokens` is above
+  a key's whole TPM limit, or a pass over the keys refuses the estimate, routing counts the prompt
+  with the tokenizer and decides on that count, once per request. So a request is refused exactly
+  when it is today: an 80,000-token prompt still goes through a key with a 100,000-token limit, and
+  a 70,000-token prompt still goes through that key while it holds 10,000 tokens of other traffic.
+  Only a refused request, or one bigger than a key's whole limit, pays for the tokenizer. The
+  reservations a key holds are estimates until their answers come back, so a busy key's window
+  fills a little sooner within the minute.
+  **Where it applies:** chat admission only. Embeddings, completions, images and speech still
+  reserve with the tokenizer, and usage rows still use it, including the count recorded after the
+  answer when a provider reports no usage. The estimate is never used for cost. The default,
+  `tokenizer`, behaves exactly as before.
+- **Usage above a TPM reservation can now count against the key: `NEXUS_TPM_RECONCILE=two-way`.**
+  When an answer comes back, Nexus corrects the key's per-minute window from the reservation to
+  the usage the provider reported. Until now it only ever gave tokens back: when a request used
+  more than it reserved (a provider whose tokenizer counts more than cl100k, or an estimate that
+  ran low), the excess was never added, so the window under-counted that key for the rest of the
+  minute and could admit past its limit. With `two-way`, the excess is added to the current window
+  in the same single Redis call a refund makes (a new script, `CHARGE_LUA`, with an in-memory twin
+  and its own parity test). A request that spans a minute boundary adds its excess to the new
+  minute, exactly as a refund already lands there. The default, `refund`, behaves exactly as before,
+  except with `NEXUS_TPM_ESTIMATE=fast`, which always runs two-way: left unset, two-way is what `fast`
+  means; set to `refund` or to an unknown value, it logs one warning at start-up and uses two-way.
+  It is also useful on its own for providers whose counts run above cl100k's. A usage figure above
+  10,000,000 tokens, more than any model reads in one request, is a broken report and is never
+  charged.
+- **Settings, the model registry and the active pools can be refreshed in the background.** With
+  the new `MEMO_MAX_STALE_MS` set (for example `30000`), a value whose few-second memo window has
+  passed is still served while one background read replaces it, so no request waits on that read
+  and, with a large registry, no request pays every few seconds for re-reading it. The setting is
+  the oldest such a value may be when it is served: past it, the request waits for a fresh read, as
+  before. It is capped at 30 seconds and is off by default (`0`), which keeps today's behaviour:
+  nothing older than its own window (`SETTING_MEMO_TTL_MS`, `REGISTRY_MEMO_TTL_MS`,
+  `PROVIDER_MEMO_TTL_MS`, five seconds each) is served. **With it on, a change made on one instance
+  can take up to that long to reach an instance that has been idle;** under steady traffic it still
+  arrives within about the window. That includes the security and privacy switches: guardrails, the
+  SSRF settings, a deactivated pool, and usage anonymisation, which keeps its own 30-second copy on
+  top and so can take up to 60 seconds. Only the master key's hash is exempt: it is never served
+  this way, so a key rotation still reaches every instance within its five seconds. A background
+  read that fails keeps the last good value, is logged (at most every 30 seconds per value, and
+  again when it recovers), and never leaves the value empty.
+
 ### Changed
 
+- **Dependency updates.** jose 6.2.12: single sign-on now refuses an identity provider whose
+  published key set is malformed (a bad `use`, `alg` or `key_ops` value, or a `kid` that is not
+  text), as the standard requires; Google, Microsoft and Okta publish conforming key sets.
+  @fastify/rate-limit 11.2.1, @fastify/cors 11.3.1 and @fastify/helmet 13.1.2 are maintenance
+  releases with no change in behaviour.
 - **dotenv 17 → 18, and the launcher sets the new names dotenv reads first.** dotenv 18 adds
   `DOTENV_PATH` and `DOTENV_OVERRIDE`, reads them ahead of `DOTENV_CONFIG_PATH` and
   `DOTENV_CONFIG_OVERRIDE`, and honours them in every `dotenv.config()` call. The `alayra-nexus`
@@ -20,6 +96,44 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   `DOTENV_PATH` and `DOTENV_CONFIG_PATH` to the same file, and both override names to `false`. Boot
   output is unchanged: `dotenv/config` still defaults to quiet. dotenv 18 also drops `.env.vault`,
   `DOTENV_KEY` and the `dotenv_config_*` command-line options, none of which Nexus used.
+- **One read when a memo expires, and the registry parsed only when it changes.** Requests that
+  find a memoised setting, registry or pool list expired now share one read instead of each making
+  its own. A registry read whose text has not changed reuses the models already parsed: at 5,000
+  models that skips about 15 ms of JSON parsing plus normalising every entry, for a comparison well
+  under a millisecond and two to three copies of the text kept in memory (about 4.5 to 7 MB at
+  5,000 models). The servable model list, its
+  `/v1/models` entries and the price map routing orders by are built once per registry version and
+  set of pools instead of on every request. A hard-isolated team's own keys are still read on every
+  request, so a revoked key stops counting at once. **For `@alayrasystems/nexus-core` hosts:** the
+  entries `listServableModels` returns are now shared between calls and frozen; the array is the
+  caller's own.
+
+### Fixed
+
+- **A change is no longer undone by a read already under way on the same instance.** A memo read in
+  progress when this instance changed a setting, the registry or the pools could finish after the
+  change and keep the value from before it, and a registry or pool read that had gone to the
+  database also wrote that old value back as the shared Redis copy, where every instance read it for
+  up to a minute. Such a read is now discarded and writes nothing back. The registry and pool memos
+  are also dropped when Redis refuses the delete that invalidates the shared copy. A read on
+  another instance that started before the change can still refill the deleted registry or pool
+  copy with the old value, for at most that copy's minute, as before.
+- **A slow read no longer overwrites a newer shared copy.** When a setting's Redis copy had expired,
+  a read that reached the database before a change made on any instance could write the old value
+  over the new one, and every instance then read it for the copy's five minutes, a rotated master
+  key's hash included. The setting, registry and pool copies are now filled only while they are
+  still missing (`SET … NX`); a change itself still overwrites them.
+- **The shared registry copy is rebuilt from the stored setting, not from this instance's memo of
+  it.** When the copy was missing, an instance rebuilt it through its settings memo, which could
+  still hold the registry from before another instance's change, and wrote that back as the copy
+  every instance reads, for a minute.
+- **A TPM reconcile ignores a usage figure that is negative or not a finite number.** When an
+  answer comes back, Nexus gives the key's per-minute window back what the request reserved and did
+  not use. A negative usage figure, or negative infinity, was given back as more than the request
+  reserved. The refund is clamped to what the window holds, so it emptied the window of every other
+  request's reservation and let the key admit past its limit for the rest of the minute. A figure
+  that was not a number reached the Redis script as `NaN`. Each is now ignored, and the reservation
+  stands until the window rolls over. A figure reported as a string of digits still counts, as before.
 
 ## [1.8.0] - 2026-10-16
 
@@ -2861,7 +2975,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.5...HEAD
+[1.8.5]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.0...v1.8.5
 [1.8.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.6...v1.7.0
 [1.6.6]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.5...v1.6.6

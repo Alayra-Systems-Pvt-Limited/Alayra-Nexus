@@ -28,10 +28,13 @@ vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: {} }));
 vi.mock('../lib/redis',  () => ({ redis: { get: vi.fn(), set: vi.fn(), del: vi.fn() } }));
 vi.mock('./settings.service', () => ({
   getSetting: vi.fn(async () => store.value),
+  readSettingFresh: vi.fn(async () => store.value),
   setSetting: vi.fn(async (_k: string, v: string) => { store.value = v; }),
 }));
 
-import { normalizeModel, removeModelById, removeModelsForProvider, getModelRegistry, clearRegistryMemo } from './model.service';
+import {
+  normalizeModel, removeModelById, removeModelsForProvider, getModelRegistry, clearRegistryMemo, updateModelRegistry,
+} from './model.service';
 
 // Writing the store directly is how this suite arranges a registry, and that now bypasses TWO
 // caches rather than one: the shared copy in the KV, and an in-process memo in front of it. The
@@ -178,5 +181,69 @@ describe('getModelRegistry normalizes the cached copy too', () => {
 
     const models = await getModelRegistry();
     expect(models.map((m) => m.id)).toEqual(['from-store']);
+  });
+});
+
+describe('getModelRegistry parses only what changed', () => {
+  beforeEach(() => { store.value = '[]'; clearRegistryMemo(); });
+
+  it('returns the same models, unparsed, while the stored text is unchanged', async () => {
+    seed([model('a', 'openai')]);
+    const first = await getModelRegistry();
+    clearRegistryMemo();
+    // Same text, so the same array: the lists derived from it (registrySnapshot.ts) stay built.
+    expect(await getModelRegistry()).toBe(first);
+  });
+
+  it('parses again the moment the stored text changes', async () => {
+    seed([model('a', 'openai')]);
+    const first = await getModelRegistry();
+    seed([model('a', 'openai'), model('b', 'groq')]);
+    const second = await getModelRegistry();
+    expect(second).not.toBe(first);
+    expect(second.map((m) => m.id)).toEqual(['a', 'b']);
+  });
+
+  it('reuses the parse of an unchanged shared copy too', async () => {
+    const { redis } = await import('../lib/redis');
+    // Two reads, two separate strings with the same text: what Redis hands back each time.
+    const text = () => JSON.stringify([model('shared', 'openai')]);
+    (redis.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce(text()).mockResolvedValueOnce(text());
+    clearRegistryMemo();
+    const first = await getModelRegistry();
+    clearRegistryMemo();
+    expect(await getModelRegistry()).toBe(first);
+    expect(first.map((m) => m.id)).toEqual(['shared']);
+  });
+
+  it('reads the stored registry past the settings memo', async () => {
+    // What is built here is written back as the shared copy every instance reads. Built from an
+    // old memoised setting, it would hand that old registry to all of them for a minute.
+    const settings = await import('./settings.service');
+    vi.mocked(settings.getSetting).mockClear();
+    seed([model('a', 'openai')]);
+    await getModelRegistry();
+    expect(settings.readSettingFresh).toHaveBeenCalledWith('AI_MODEL_REGISTRY');
+    expect(settings.getSetting).not.toHaveBeenCalled();
+  });
+});
+
+describe('a registry read overtaken by an update on this instance', () => {
+  it('neither keeps nor writes back the registry from before the update', async () => {
+    const settings = await import('./settings.service');
+    const { redis } = await import('../lib/redis');
+    seed([model('old', 'openai')]);
+    let answer: (text: string) => void = () => undefined;
+    vi.mocked(settings.readSettingFresh).mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    vi.mocked(redis.set).mockClear();
+
+    const slow = getModelRegistry();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await updateModelRegistry([normalizeModel(model('new', 'openai'))]);
+    answer(JSON.stringify([model('old', 'openai')]));
+
+    expect((await slow).map((m) => m.id)).toEqual(['old']); // it asked before the update
+    expect(vi.mocked(redis.set).mock.calls.filter(([key]) => key === 'nexus:model_registry')).toEqual([]);
+    expect((await getModelRegistry()).map((m) => m.id)).toEqual(['new']);
   });
 });

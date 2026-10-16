@@ -19,8 +19,10 @@ import { getStickyKeyId } from '../../lib/sticky';
 import { costOrder, effectivePrice } from '../../lib/routing';
 import { selectModels, type SelectableModel, type Capability } from '../../lib/modelSelect';
 import type { RoutingScope } from '../../lib/scope';
+import type { TokenReserve } from '../../lib/tokenizer';
 import { getCostWeight } from '../routing.service';
 import { getModelRegistry, activeProviderSlugs } from '../model.service';
+import { registryPrices } from '../registrySnapshot';
 import { getActiveProviders } from '../providerCache.service';
 import { tryPickKey, tryStickyKey } from './pickKey';
 import { SHARED_SCOPE, TIER_ORDER, type NexusRoute, type RouteModel } from './route';
@@ -38,7 +40,7 @@ import { SHARED_SCOPE, TIER_ORDER, type NexusRoute, type RouteModel } from './ro
  */
 async function sweepModels(
   candidates: SelectableModel[],
-  reserveTokens: number,
+  reserveTokens: number | TokenReserve,
   ownerTeamId: string | null,
   userId: string | null,
 ): Promise<NexusRoute | null> {
@@ -87,7 +89,7 @@ type PriceOf = (p: { preferredModel: string | null }) => number | null;
  * runs at startup, so this is rare). Never used by non-chat endpoints.
  */
 async function legacySweepTiers(
-  reserveTokens: number,
+  reserveTokens: number | TokenReserve,
   ownerTeamId: string | null,
   costWeight: number,
   priceOf: PriceOf,
@@ -128,7 +130,7 @@ async function legacySweepTiers(
  * Returns null when every eligible key is out of RPM or TPM headroom.
  */
 export async function discoverBestPool(
-  reserveTokens: number,
+  reserveTokens: number | TokenReserve,
   sessionKey?: string | null,
   scope: RoutingScope = SHARED_SCOPE,
   capability: Capability = 'chat',
@@ -142,9 +144,9 @@ export async function discoverBestPool(
 
   // Model-first candidate list (Phase 6.1): the registry, filtered to this capability
   // and to providers that actually have a pool, ordered tier → priority → cost. When the
-  // caller is a team with an assigned tier (Phase 8), that tier leads the ordering.
-  const priceById = new Map<string, number | null>();
-  for (const m of registry) priceById.set(m.id, effectivePrice(m as unknown as Record<string, unknown>));
+  // caller is a team with an assigned tier (Phase 8), that tier leads the ordering. The price map
+  // is built once per registry version, not per request (registrySnapshot.ts).
+  const priceById = registryPrices(registry);
   const ordered = selectModels(registry as unknown as SelectableModel[], {
     capability,
     activeProviderSlugs: await activeProviderSlugs(),
