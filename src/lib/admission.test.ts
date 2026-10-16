@@ -20,11 +20,19 @@ import { describe, it, expect, vi } from 'vitest';
 // REDIS_URL is unset) at module load. These are pure-helper tests, so we mock the
 // Redis module — no connection is attempted. The admitKey / reconcileTpm Lua paths
 // are exercised against a real Redis in the integration suite (Phase 13).
-vi.mock('./redis', () => ({ redis: { eval: vi.fn() } }));
+// One mock function for every copy of the module, so a test that reloads admission.ts under another
+// environment still sees the same `redis.eval`.
+const evalMock = vi.hoisted(() => vi.fn());
+vi.mock('./redis', () => ({ redis: { eval: evalMock } }));
 
-import { beforeEach } from 'vitest';
-import { rpmKey, tpmKey, usersKey, admitUser, RPM_TPM_WINDOW_SECONDS, MAXUSERS_WINDOW_SECONDS } from './admission';
+import { beforeEach, afterEach } from 'vitest';
+import {
+  rpmKey, tpmKey, usersKey, admitUser, reconcileTpm, readTpmReconcile, ADMIT_LUA, RECONCILE_LUA, CHARGE_LUA,
+  RPM_TPM_WINDOW_SECONDS, MAXUSERS_WINDOW_SECONDS,
+} from './admission';
 import { redis } from './redis';
+import { MemoryKv } from './kv/memory';
+import { rateWindow } from './rateWindow';
 
 describe('admission key derivation', () => {
   it('namespaces RPM keys per key id', () => {
@@ -85,5 +93,126 @@ describe('admitUser — per-key Max Users cap', () => {
     vi.mocked(redis.eval).mockResolvedValue(1 as never);
     await admitUser('key-1', 0, 'user-a', 3600);
     expect(vi.mocked(redis.eval).mock.calls[0][4]).toBe('1');
+  });
+});
+
+// ── Reconciling a TPM reservation to what the request really used ────────────────────────────────
+
+const NOON = Date.UTC(2026, 7, 11, 12, 0, 30);
+const TPM = 'nexus:tpm:key-1';
+const CURRENT = rateWindow(TPM, NOON, RPM_TPM_WINDOW_SECONDS).current;
+
+/** A fresh copy of admission.ts, loaded with NEXUS_TPM_RECONCILE set to `value`. */
+async function loadWith(value: string) {
+  vi.stubEnv('NEXUS_TPM_RECONCILE', value);
+  vi.resetModules();
+  return import('./admission');
+}
+
+describe('NEXUS_TPM_RECONCILE', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('defaults to refunding only, as before', () => {
+    expect(readTpmReconcile(undefined)).toBe('refund');
+    expect(readTpmReconcile('')).toBe('refund');
+    expect(readTpmReconcile(' Refund ')).toBe('refund');
+  });
+
+  it('selects both directions with "two-way"', () => {
+    expect(readTpmReconcile('two-way')).toBe('two-way');
+    expect(readTpmReconcile('TWO-WAY')).toBe('two-way');
+  });
+
+  it('keeps refunding only, and says so, for a value it does not know', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(readTpmReconcile('both')).toBe('refund');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('NEXUS_TPM_RECONCILE="both" was ignored'));
+  });
+});
+
+describe('reconcileTpm', () => {
+  beforeEach(() => { evalMock.mockReset(); });
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  it('refunds the unused part of a reservation', async () => {
+    await reconcileTpm('key-1', 100, 30, NOON);
+    expect(evalMock).toHaveBeenCalledWith(RECONCILE_LUA, 1, TPM, '70', '60', String(NOON));
+  });
+
+  it('by default, leaves a window alone when usage ran over the reservation', async () => {
+    await reconcileTpm('key-1', 100, 150, NOON);
+    expect(evalMock).not.toHaveBeenCalled();
+  });
+
+  it('with two-way, adds what usage ran over the reservation', async () => {
+    const mod = await loadWith('two-way');
+    await mod.reconcileTpm('key-1', 100, 150, NOON);
+    expect(evalMock).toHaveBeenCalledWith(mod.CHARGE_LUA, 1, TPM, '50', '60', String(NOON));
+  });
+
+  it('with two-way, still refunds an over-reservation the same way', async () => {
+    const mod = await loadWith('two-way');
+    await mod.reconcileTpm('key-1', 100, 30, NOON);
+    expect(evalMock).toHaveBeenCalledWith(mod.RECONCILE_LUA, 1, TPM, '70', '60', String(NOON));
+  });
+
+  it('with two-way, rounds a fractional excess up and ignores an exact match', async () => {
+    const mod = await loadWith('two-way');
+    await mod.reconcileTpm('key-1', 100, 100, NOON);
+    expect(evalMock).not.toHaveBeenCalled();
+    await mod.reconcileTpm('key-1', 100, 100.4, NOON);
+    expect(evalMock).toHaveBeenCalledWith(mod.CHARGE_LUA, 1, TPM, '1', '60', String(NOON));
+  });
+
+  it('with two-way, never charges a usage figure that is not a number', async () => {
+    const mod = await loadWith('two-way');
+    await mod.reconcileTpm('key-1', 100, Number.NaN, NOON);
+    await mod.reconcileTpm('key-1', 100, Number.POSITIVE_INFINITY, NOON);
+    expect(evalMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('reconcileTpm against a store — what the next request sees', () => {
+  afterEach(() => { vi.unstubAllEnvs(); evalMock.mockReset(); });
+
+  /** Reserve 100, report 150, then ask for 60 more against a 200-token limit. */
+  async function overrunThenAdmit(mode: string): Promise<unknown> {
+    const mod = await loadWith(mode);
+    const kv = new MemoryKv(0);
+    evalMock.mockImplementation((lua: string, n: number, ...rest: (string | number)[]) => kv.eval(lua, n, ...rest));
+    expect(await kv.eval(ADMIT_LUA, 2, 'nexus:rpm:key-1', TPM, 1000, 200, 100, 60, NOON)).toBe(1);
+    await mod.reconcileTpm('key-1', 100, 150, NOON);
+    return kv.eval(ADMIT_LUA, 2, 'nexus:rpm:key-1', TPM, 1000, 200, 60, 60, NOON);
+  }
+
+  it('by default, the window forgets the overrun and admits past the limit', async () => {
+    expect(await overrunThenAdmit('refund')).toBe(1);       // 100 + 60 <= 200, though 210 were used
+  });
+
+  it('with two-way, the window holds the overrun and refuses', async () => {
+    expect(await overrunThenAdmit('two-way')).toBe(0);      // 150 + 60 > 200
+  });
+});
+
+describe('CHARGE_LUA — its in-memory twin', () => {
+  it("adds the excess and keeps the window's deadline", async () => {
+    const kv = new MemoryKv(0);
+    await kv.set(CURRENT, '100', 'EX', 30);
+    expect(await kv.eval(CHARGE_LUA, 1, TPM, 50, 60, NOON)).toBe(150);
+    expect(await kv.ttl(CURRENT)).toBeLessThanOrEqual(30);
+  });
+
+  it('gives a counter it creates the two-window deadline admission gives', async () => {
+    const kv = new MemoryKv(0);
+    expect(await kv.eval(CHARGE_LUA, 1, TPM, 50, 60, NOON)).toBe(50);
+    expect(await kv.ttl(CURRENT)).toBeGreaterThan(60);
+    expect(await kv.ttl(CURRENT)).toBeLessThanOrEqual(120);
+  });
+
+  it('is a no-op for a non-positive amount', async () => {
+    const kv = new MemoryKv(0);
+    await kv.set(CURRENT, '42');
+    expect(await kv.eval(CHARGE_LUA, 1, TPM, 0, 60, NOON)).toBe(42);
+    expect(await kv.get(CURRENT)).toBe('42');
   });
 });
