@@ -9,6 +9,32 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+
+- **A key's TPM reservation can be counted without the tokenizer: `NEXUS_TPM_ESTIMATE=fast`.**
+  Before a request is routed, Nexus reserves its input tokens plus its `max_tokens` against the
+  chosen key's tokens-per-minute limit. The input was counted with the cl100k tokenizer, on the
+  event loop, before routing: about 33 ms for a 128 KB English prompt, 67 ms for 128 KB of JSON and
+  1.36 s for 128 KB of Chinese, which every other request on that process waited behind. With
+  `fast`, a one-pass estimate counts it instead: about 1 ms at 128 KB and under 0.05 ms at 2 KB on
+  a laptop, and it never calls the tokenizer. **It is not bytes / 4.** Measured against the
+  tokenizer, bytes / 4 was off by 22-30 % on the latency bench's own prompts (English 5.05 bytes a
+  token, code 3.14, Chinese 2.94, JSON 2.81) and up to 75 % low on other real text (minified
+  JavaScript, Traditional Chinese, Czech, Georgian, Armenian), and a low estimate lets a key past its
+  limit. So the estimate counts what the tokenizer cuts text into (runs of letters, groups of
+  digits, punctuation, whitespace runs, and characters by script), with weights fitted to sit just
+  above the tokenizer and 5 % headroom on top. On 402 samples of real text and 111 held-out ones
+  (English, code, minified JavaScript, JSON, IDs, base64, emoji, and 51 languages in 17 scripts) it
+  never counted fewer tokens than the tokenizer; its median was 32 % above for English, 28-40 % for
+  code, 16-27 % for JSON and 22 % for other languages. On the bench's four prompts it lands at
+  1.38x (English), 1.06x (code), 1.42x (Chinese) and 1.22x (JSON). It never exceeds the prompt's
+  UTF-8 byte count. A string of random characters can still use more tokens than it counts.
+  **What changes for a caller:** reservations are larger, so a prompt whose estimate plus `max_tokens` exceeds a key's
+  whole TPM limit, while its tokenizer count did not, is refused by that key, and routing tries the
+  next one. The reservation is corrected to the provider's reported usage afterwards, as before.
+  The default, `tokenizer`, behaves exactly as before. Usage rows, and the count recorded when a
+  provider reports no usage, keep using the tokenizer; the estimate is never used for cost.
+
 ## [1.8.0] - 2026-10-16
 
 ### Added
