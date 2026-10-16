@@ -50,9 +50,9 @@ describe('the proxy routes warm the tokenizer', () => {
       expect(loads.n).toBe(0); // ready() alone, as inject()-based tests run, loads nothing
 
       await app.listen({ port: 0, host: '127.0.0.1' });
-      await vi.waitFor(() => expect(loads.n).toBe(1));
+      await vi.waitFor(() => expect(loads.n).toBe(1), { timeout: 10_000 });
     } finally {
       await app.close();
     }
-  });
+  }, 30_000); // generous: on a loaded machine running every suite at once this once took over 5 s
 });

@@ -88,9 +88,16 @@ const samples = JSON.parse(read('src/lib/__fixtures__/token-corpus.json')) as Re
 function corpus(): [string, string][] {
   const files = ['README.md', 'CHANGELOG.md', 'SECURITY.md', 'CONTRIBUTING.md', 'package-lock.json', 'Dockerfile',
     'docker-compose.yml', 'eslint.config.mjs', 'prisma/schema.prisma', 'prisma/sqlite-schema.sql',
-    'src/lib/__fixtures__/provider-usage.json', 'src/lib/tokenEstimate.ts', 'src/server.ts', 'web/src/api.ts'];
+    'src/lib/__fixtures__/provider-usage.json', 'src/server.ts', 'web/src/api.ts'];
   for (const dir of ['docs', 'docs/provider-verification']) {
     for (const name of readdirSync(resolve(ROOT, dir))) if (/\.(md|json)$/.test(name)) files.push(`${dir}/${name}`);
+  }
+  // The gateway's own code, except a file that names a special token (both counters refuse it).
+  for (const dir of ['src/lib', 'src/services', 'src/routes']) {
+    for (const name of readdirSync(resolve(ROOT, dir), { recursive: true, encoding: 'utf8' })) {
+      const path = `${dir}/${name.replace(/\\/g, '/')}`;
+      if (path.endsWith('.ts') && !path.endsWith('.test.ts') && !read(path).includes('<|')) files.push(path);
+    }
   }
   const out: [string, string][] = files.map((f) => [f, read(f)]);
   // Minified JavaScript and a real base64 blob, from the Prisma client the gateway installs.
@@ -115,7 +122,7 @@ describe('countCl100k — the count js-tiktoken gives', () => {
       expect(countCl100k(text), name).toBe(reference(text));
       bytes += Buffer.byteLength(text);
     }
-    expect(bytes).toBeGreaterThan(MiB); // a corpus that silently shrank would prove little
+    expect(bytes).toBeGreaterThan(2 * MiB); // a corpus that silently shrank would prove little
   }, 120_000);
 
   it('on 4,000 generated strings over every kind of character the pre-tokenizer tells apart', () => {
