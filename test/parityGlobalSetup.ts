@@ -32,9 +32,12 @@ const NEVER_CONNECTS = 'postgresql://never:never@127.0.0.1:1/never';
 
 export default function setup(): (() => void) | undefined {
   if (!process.env.PARITY_DATABASE_URL?.trim()) return undefined;
+  // The schema path is relative to `cwd`: with `shell: true` the arguments are joined unquoted, so an
+  // absolute path with a space in it, such as a checkout in a home folder named "Jane Doe", would
+  // split in two.
   const sql = execFileSync(
     'npx',
-    ['prisma', 'migrate', 'diff', '--from-empty', '--to-schema', join(ROOT, 'prisma', 'schema.prisma'), '--script'],
+    ['prisma', 'migrate', 'diff', '--from-empty', '--to-schema', 'prisma/schema.prisma', '--script'],
     { cwd: ROOT, encoding: 'utf8', shell: true, env: { ...process.env, DATABASE_URL: NEVER_CONNECTS } },
   );
   if (!/CREATE TABLE/i.test(sql)) throw new Error(`prisma migrate diff produced no CREATE TABLE statements:\n${sql.slice(0, 400)}`);

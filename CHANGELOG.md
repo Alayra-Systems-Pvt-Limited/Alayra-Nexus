@@ -138,9 +138,9 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   their 120s limit, where CI on Linux spends 6-7s per suite. The PostgreSQL DDL is now generated
   once per run by a vitest global setup (`prisma migrate diff --from-empty`, the same DDL `db push`
   applies to an empty database), the SQLite DDL is the committed `prisma/sqlite-schema.sql`, and
-  each suite applies both in one transaction per engine. The suites no longer run `db push`, so
-  they no longer stop for the confirmation Prisma asks before that command. The 1.7.0 database the
-  column-upgrade tests start from is built once, in one transaction, and copied for each test.
+  each suite applies both in one transaction per engine. No suite runs `db push --force-reset` any
+  more. The 1.7.0 database the column-upgrade tests start from is built once, in one transaction,
+  and copied for each test.
 - **The parity suites run SQLite in WAL, as the gateway does.** The gateway puts every standalone
   database into WAL when it starts, but the suites compared it in SQLite's default `delete` mode,
   which the gateway never runs in. On the same disk under load a single-row commit took 3.3-4.9s in
