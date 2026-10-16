@@ -30,7 +30,7 @@
   "src/routes/admin/malformedBody.test.ts": 443,
   "src/routes/admin/providers.routes.test.ts": 381,
   "src/routes/admin/teams.routes.test.ts": 372,
-  "src/server.ts": 449,
+  "src/server.ts": 448,
   "src/services/adminAuth.service.test.ts": 505,
   "src/services/adminAuth.service.ts": 678,
   "src/services/adminUsers.service.test.ts": 397,
