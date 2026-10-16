@@ -29,17 +29,21 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   tokens than the tokenizer; its median was 32-34 % above for English, 31-43 % for code, 17-27 %
   for JSON and 22 % for other languages. On the four sample prompts it lands at 1.38x (English),
   1.06x (code), 1.42x (Chinese) and 1.22x (JSON). It never exceeds the prompt's UTF-8 byte count.
-  Whitespace and control characters never count low: tabs, lone carriage returns, CRLF and every
-  mix of them were checked against the tokenizer. Crafted text can still count low: a long run of
-  random letters with no spaces counts at about a fifth of its tokens. So `fast` always runs with
-  two-way reconcile (next entry), which charges the difference once the provider reports it.
-  **A refusal on size stays exact.** When the estimate plus `max_tokens` is above a key's whole TPM
-  limit, the key would refuse the request even with an empty window, although the exact count might
-  fit. Routing then counts the prompt with the tokenizer and decides on that count, so a prompt is
-  refused for its size exactly when it is today: an 80,000-token prompt still goes through a key
-  with a 100,000-token limit. The tokenizer runs only for prompts that big. Otherwise a reservation
-  is larger than the exact count until the answer corrects it, so a busy key's window fills a little
-  sooner within the minute and routing moves on to the next key a little earlier.
+  Whitespace and control characters count high wherever they were checked: every repeated mix of up
+  to four spaces, tabs, line feeds and carriage returns, each against the tokenizer, and the other
+  ASCII control characters and the C1 controls (U+0080-U+009F), which count at their byte count, the
+  most they can be. Crafted text can still count low: some longer mixes of carriage returns and line
+  feeds (`"\r\r\n\r\n"` repeated counts at 0.84), and a long run of random letters with no spaces,
+  at about a fifth of its tokens. So `fast` always runs with two-way reconcile (next entry), which
+  charges the difference once the provider reports it.
+  **A refusal is always decided on the exact count.** When the estimate plus `max_tokens` is above
+  a key's whole TPM limit, or a pass over the keys refuses the estimate, routing counts the prompt
+  with the tokenizer and decides on that count, once per request. So a request is refused exactly
+  when it is today: an 80,000-token prompt still goes through a key with a 100,000-token limit, and
+  a 70,000-token prompt still goes through that key while it holds 10,000 tokens of other traffic.
+  Only a refused request, or one bigger than a key's whole limit, pays for the tokenizer. The
+  reservations a key holds are estimates until their answers come back, so a busy key's window
+  fills a little sooner within the minute.
   **Where it applies:** chat admission only. Embeddings, completions, images and speech still
   reserve with the tokenizer, and usage rows still use it, including the count recorded after the
   answer when a provider reports no usage. The estimate is never used for cost. The default,
@@ -53,10 +57,11 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   in the same single Redis call a refund makes (a new script, `CHARGE_LUA`, with an in-memory twin
   and its own parity test). A request that spans a minute boundary adds its excess to the new
   minute, exactly as a refund already lands there. The default, `refund`, behaves exactly as before,
-  except with `NEXUS_TPM_ESTIMATE=fast`, which always runs two-way: set with `refund`, it logs one
-  warning at start-up and uses two-way. It is also useful on its own for providers whose counts
-  run above cl100k's. A usage figure above 10,000,000 tokens, more than any model reads in one
-  request, is a broken report and is never charged.
+  except with `NEXUS_TPM_ESTIMATE=fast`, which always runs two-way: left unset, two-way is what `fast`
+  means; set to `refund` or to an unknown value, it logs one warning at start-up and uses two-way.
+  It is also useful on its own for providers whose counts run above cl100k's. A usage figure above
+  10,000,000 tokens, more than any model reads in one request, is a broken report and is never
+  charged.
 
 ### Changed
 
@@ -72,12 +77,13 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
-- **A TPM reconcile ignores a usage figure that is negative or not a number.** When an answer comes
-  back, Nexus gives the key's per-minute window back what the request reserved and did not use. A
-  negative usage figure was given back as more than the request reserved, which emptied the window
-  of every other request's reservation and let the key admit past its limit for the rest of the
-  minute, and a figure that was not a number was passed on to the Redis script. Either is now
-  ignored, and the reservation stands until the window rolls over.
+- **A TPM reconcile ignores a usage figure that is negative or not a finite number.** When an
+  answer comes back, Nexus gives the key's per-minute window back what the request reserved and did
+  not use. A negative usage figure, or negative infinity, was given back as more than the request
+  reserved. The refund is clamped to what the window holds, so it emptied the window of every other
+  request's reservation and let the key admit past its limit for the rest of the minute. A figure
+  that was not a number reached the Redis script as `NaN`. Each is now ignored, and the reservation
+  stands until the window rolls over. A figure reported as a string of digits still counts, as before.
 
 ## [1.8.0] - 2026-10-16
 

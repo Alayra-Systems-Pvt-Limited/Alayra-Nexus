@@ -257,8 +257,13 @@ describe('a /v1/messages request routed to Anthropic', () => {
       req.end(JSON.stringify({ ...RICH, stream: true }));
     });
     const hungUpAt = Date.now();
-    await vi.waitFor(() => expect(recordTokenUsage).toHaveBeenCalledTimes(1), { timeout: 3_000 });
-    expect(fake.closedAt, 'the provider socket never closed').toBeGreaterThan(0);
+    // The gateway aborts the provider's request and then records the usage, in one turn of the event
+    // loop. The provider's side sees its socket close on a later turn, so a poll can land between the
+    // two: wait for both, then check how soon after the hang-up the socket closed.
+    await vi.waitFor(() => {
+      expect(recordTokenUsage).toHaveBeenCalledTimes(1);
+      expect(fake.closedAt, 'the provider socket never closed').toBeGreaterThan(0);
+    }, { timeout: 3_000 });
     expect(fake.closedAt - hungUpAt).toBeLessThan(1_000);
     const row = usageRow();
     expect(row).toMatchObject({ outcome: 'client_cancelled', inputTokens: 2310, detail: { cachedInputTokens: 2000 } });

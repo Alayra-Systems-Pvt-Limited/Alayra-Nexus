@@ -18,7 +18,8 @@
 // English, so an 80,000-token prompt estimates at about 110,000: above a default key's whole
 // 100,000-token limit, which would refuse it on an empty window and on every retry. Routing counts
 // such a prompt exactly before deciding (TokenReserve in tokenizer.ts), so it is admitted exactly
-// as it is today, and the tokenizer runs only for prompts that big.
+// as it is today. The same holds below the whole limit on a busy key: a pass that refuses the
+// estimate counts exactly and asks once more. Only a refused request pays for the tokenizer.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
@@ -36,11 +37,10 @@ const NOON = Date.UTC(2026, 7, 11, 12, 0, 30);
 const WINDOW = `nexus:tpm:key-1:${Math.floor(NOON / 60_000)}`;
 const key = (tpmLimit: number) => ({ id: 'key-1', rpmLimit: 1_000, tpmLimit, maxUsers: 1_000 });
 
-/** About 80,000 tokens of English: one sentence the tokenizer reads at 5 bytes a token. */
-const BIG = [{
-  role: 'user',
-  content: 'The quick brown fox jumps over the lazy dog while the gateway counts every token of the prompt. '.repeat(4_150),
-}];
+/** One sentence of English the tokenizer reads at about 5 bytes, 19 tokens. */
+const SENTENCE = 'The quick brown fox jumps over the lazy dog while the gateway counts every token of the prompt. ';
+/** About 80,000 tokens. */
+const BIG = [{ role: 'user', content: SENTENCE.repeat(4_150) }];
 
 /** Fresh copies of the modules, loaded with NEXUS_TPM_ESTIMATE set to `mode`, over an empty store. */
 async function load(mode: string) {
@@ -105,5 +105,52 @@ describe('a refusal on size is decided on the exact count', () => {
     const today = await load('');
     expect(await today.selectKey.selectAndReserve([key(100_000)], 2_500, null)).not.toBeNull();
     expect(await today.kv.get(WINDOW)).toBe('2500');
+  });
+});
+
+describe('a refusal on a busy key is decided on the exact count too', () => {
+  // A 100k key already holding 10k of other traffic, and a 70k-token prompt with max_tokens 2,048.
+  // Today: 10,000 + about 72,000 fits. The estimate is under the whole limit, so it is not counted up
+  // front, but 10,000 + the estimate does not fit: refused on every retry unless it is recounted.
+  const PROMPT = [{ role: 'user', content: SENTENCE.repeat(3_684) }];   // about 70,000 tokens
+  const busy = async (mode: string, traffic: number) => {
+    const m = await load(mode);
+    m.kv.incrby(WINDOW, traffic);
+    m.kv.expire(WINDOW, 120);
+    return m;
+  };
+
+  it('admits a 70k prompt on a 100k key holding 10k, as today', async () => {
+    const today = await busy('', 10_000);
+    const exact = today.tokenizer.planReserve(PROMPT, 2_048, 2_048).tokens;
+    expect(exact).toBeGreaterThan(70_000);
+    expect(10_000 + exact).toBeLessThanOrEqual(100_000);
+    expect(await today.selectKey.selectAndReserve([key(100_000)], exact, null)).not.toBeNull();
+
+    const fast = await busy('fast', 10_000);
+    const plan = fast.tokenizer.planReserve(PROMPT, 2_048, 2_048);
+    expect(plan.tokens, 'not counted up front: under the whole limit').toBeLessThanOrEqual(100_000);
+    expect(10_000 + plan.tokens, 'the estimate alone would be refused').toBeGreaterThan(100_000);
+    expect(await fast.selectKey.selectAndReserve([key(100_000)], plan, null)).not.toBeNull();
+    expect(plan.exact).toBe(true);
+    expect(plan.tokens).toBe(exact);
+    expect(await fast.kv.get(WINDOW)).toBe(String(10_000 + exact));
+  });
+
+  it('still refuses when the exact count does not fit either, and reserves nothing', async () => {
+    const fast = await busy('fast', 30_000);
+    const plan = fast.tokenizer.planReserve(PROMPT, 2_048, 2_048);
+    expect(await fast.selectKey.selectAndReserve([key(100_000)], plan, null)).toBeNull();
+    expect(plan.exact, 'counted exactly before being refused').toBe(true);
+    expect(await fast.kv.get(WINDOW)).toBe('30000');
+  });
+
+  it('counts once, however many pools refuse it', async () => {
+    const fast = await busy('fast', 99_000);
+    const plan = fast.tokenizer.planReserve(PROMPT, 2_048, 2_048);
+    state.encodes = 0;
+    expect(await fast.selectKey.selectAndReserve([key(100_000)], plan, null)).toBeNull();
+    expect(await fast.selectKey.selectAndReserve([key(100_000)], plan, null)).toBeNull();
+    expect(state.encodes).toBe(1);
   });
 });

@@ -174,15 +174,19 @@ export function readTpmReconcile(raw = process.env.NEXUS_TPM_RECONCILE): TpmReco
 /**
  * The reconcile a process runs. The `fast` estimate can run low on crafted text (a long run of
  * random letters counts as little as a fifth of its real tokens), and only two-way reconcile charges
- * that back, so `fast` always runs with two-way, and says so once when the setting asked for refund.
+ * that back, so `fast` always runs with two-way. It warns once, and only when NEXUS_TPM_RECONCILE
+ * was set to something else; left unset, two-way is simply what `fast` means.
  */
-export function effectiveTpmReconcile(estimate: TpmEstimate, configured: TpmReconcile): TpmReconcile {
-  if (estimate !== 'fast' || configured === 'two-way') return configured;
-  console.warn('⚠️  NEXUS_TPM_ESTIMATE=fast needs two-way reconcile. Using NEXUS_TPM_RECONCILE=two-way, not refund.');
+export function effectiveTpmReconcile(estimate: TpmEstimate, raw = process.env.NEXUS_TPM_RECONCILE): TpmReconcile {
+  if (estimate !== 'fast') return readTpmReconcile(raw);
+  const value = raw?.trim().toLowerCase();
+  if (value && value !== 'two-way') {
+    console.warn(`⚠️  NEXUS_TPM_RECONCILE="${raw}" was ignored — NEXUS_TPM_ESTIMATE=fast always runs two-way.`);
+  }
   return 'two-way';
 }
 
-const TPM_RECONCILE: TpmReconcile = effectiveTpmReconcile(TPM_ESTIMATE, readTpmReconcile());
+const TPM_RECONCILE: TpmReconcile = effectiveTpmReconcile(TPM_ESTIMATE);
 
 /** No model reads this many tokens in one request. A usage figure above it is a broken report. */
 export const MAX_USAGE_TOKENS = 10_000_000;
@@ -221,11 +225,12 @@ export async function reconcileTpm(
   /** Test seam: pin the instant both halves of the script see. Never passed in production. */
   nowMs?: number,
 ): Promise<void> {
-  // A usage figure that is negative, not a number or absurd says nothing true about the key. Acting
-  // on it would empty the window (a negative refund) or block the key (a huge charge), so the
-  // reservation is left as it was.
-  if (!Number.isFinite(actual) || actual < 0 || actual > MAX_USAGE_TOKENS) return;
-  const giveBack = Math.floor(reserved - actual);
+  // A provider may report usage as a string of digits, which counts, as it always did. A figure that
+  // is negative, not a number or absurd says nothing true about the key: acting on it would empty the
+  // window (a negative refund) or block the key (a huge charge), so the reservation is left as it was.
+  const used = Number(actual);
+  if (!Number.isFinite(used) || used < 0 || used > MAX_USAGE_TOKENS) return;
+  const giveBack = Math.floor(reserved - used);
   if (giveBack > 0) {
     await redis.eval(
       RECONCILE_LUA, 1, tpmKey(keyId),
@@ -236,7 +241,7 @@ export async function reconcileTpm(
     return;
   }
   if (TPM_RECONCILE !== 'two-way') return;
-  const excess = Math.ceil(actual - reserved);
+  const excess = Math.ceil(used - reserved);
   if (!Number.isSafeInteger(excess) || excess <= 0) return;
   await redis.eval(
     CHARGE_LUA, 1, tpmKey(keyId),

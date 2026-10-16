@@ -231,6 +231,10 @@ return { -1, '' }
  * An empty candidate list never reaches the KV. A pool with no eligible keys is common on the sweep
  * — it is most of what walking past a pool means — and a round trip to be told about nothing is the
  * cost this whole file exists to remove.
+ *
+ * A TokenReserve that is still the estimate is decided on the exact count: counted first when the
+ * estimate is above a candidate's whole limit, and otherwise counted after a refusal and asked
+ * once more, since the estimate errs high. Only a refused request pays for the tokenizer.
  */
 export async function selectAndReserve(
   candidates: Candidate[],
@@ -238,8 +242,19 @@ export async function selectAndReserve(
   userId: string | null | undefined,
 ): Promise<Selection | null> {
   if (candidates.length === 0) return null;
-  const reserveTokens = tokensFor(reserve, candidates);
+  const first = await reserveOn(candidates, tokensFor(reserve, candidates), userId);
+  if (first || typeof reserve === 'number' || reserve.exact) return first;
+  const estimate = reserve.tokens;
+  if (reserve.makeExact() >= estimate) return null;   // the exact count needs at least as much room
+  return reserveOn(candidates, reserve.tokens, userId);
+}
 
+/** One atomic pass of SELECT_KEY_LUA over the candidates, reserving `reserveTokens`. */
+async function reserveOn(
+  candidates: Candidate[],
+  reserveTokens: number,
+  userId: string | null | undefined,
+): Promise<Selection | null> {
   const keys: string[] = [];
   const limits: string[] = [];
   for (const c of candidates) {
@@ -275,11 +290,7 @@ export async function selectAndReserve(
   return { index: oneBased - 1, gate: gate === 'probe' ? 'probe' : 'closed' };
 }
 
-/**
- * What to reserve against these candidates. An estimate bigger than a candidate's whole TPM limit
- * would be refused by that key on an empty window, and on every retry, so it is counted exactly
- * first (see TokenReserve). Below every whole limit, the estimate is used as it is.
- */
+/** What to reserve: an estimate above a candidate's whole TPM limit is counted exactly first. */
 function tokensFor(reserve: number | TokenReserve, candidates: Candidate[]): number {
   if (typeof reserve === 'number') return reserve;
   if (!reserve.exact && candidates.some((c) => reserve.tokens > c.tpmLimit)) return reserve.makeExact();

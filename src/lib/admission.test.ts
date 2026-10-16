@@ -117,7 +117,7 @@ async function loadWith(value: string, estimate = '') {
 }
 
 describe('NEXUS_TPM_RECONCILE', () => {
-  afterEach(() => { vi.restoreAllMocks(); });
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
   it('defaults to refunding only, as before', () => {
     expect(readTpmReconcile(undefined)).toBe('refund');
@@ -136,15 +136,26 @@ describe('NEXUS_TPM_RECONCILE', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('NEXUS_TPM_RECONCILE="both" was ignored'));
   });
 
-  it('runs two-way under the fast estimate, and says so when refund was asked for', () => {
+  it('runs two-way under the fast estimate, and warns only when the setting said otherwise', () => {
     // The estimate can run low on crafted text, and only two-way charges that back.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(effectiveTpmReconcile('fast', 'refund')).toBe('two-way');
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(effectiveTpmReconcile('fast', undefined)).toBe('two-way');
+    expect(effectiveTpmReconcile('fast', '')).toBe('two-way');
     expect(effectiveTpmReconcile('fast', 'two-way')).toBe('two-way');
-    expect(effectiveTpmReconcile('tokenizer', 'refund')).toBe('refund');
+    expect(warn).not.toHaveBeenCalled();
+    expect(effectiveTpmReconcile('fast', 'refund')).toBe('two-way');
+    expect(warn).toHaveBeenLastCalledWith(expect.stringContaining('NEXUS_TPM_RECONCILE="refund" was ignored'));
+    expect(effectiveTpmReconcile('tokenizer', undefined)).toBe('refund');
     expect(effectiveTpmReconcile('tokenizer', 'two-way')).toBe('two-way');
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it.each<[string, string, number]>([
+    ['', 'fast', 0], ['two-way', 'fast', 0], ['refund', 'fast', 1], ['twoway', 'fast', 1], ['twoway', '', 1], ['refund', '', 0],
+  ])('at load, NEXUS_TPM_RECONCILE=%j with NEXUS_TPM_ESTIMATE=%j logs %i warning', async (reconcile, estimate, count) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await loadWith(reconcile, estimate);
+    expect(warn).toHaveBeenCalledTimes(count);
   });
 });
 
@@ -197,6 +208,18 @@ describe('reconcileTpm', () => {
     expect(evalMock).not.toHaveBeenCalled();
   });
 
+  it('still counts a usage figure reported as a string of digits, within the same bounds', async () => {
+    const asReported = (figure: string) => figure as unknown as number;
+    await reconcileTpm('key-1', 100, asReported('30'), NOON);
+    expect(evalMock).toHaveBeenLastCalledWith(RECONCILE_LUA, 1, TPM, '70', '60', String(NOON));
+    const mod = await loadWith('two-way');
+    await mod.reconcileTpm('key-1', 100, asReported('150'), NOON);
+    expect(evalMock).toHaveBeenLastCalledWith(mod.CHARGE_LUA, 1, TPM, '50', '60', String(NOON));
+    evalMock.mockClear();
+    for (const bad of ['-5', 'abc', '1e12']) await mod.reconcileTpm('key-1', 100, asReported(bad), NOON);
+    expect(evalMock).not.toHaveBeenCalled();
+  });
+
   it('ignores an absurd usage figure rather than blocking the key on it', async () => {
     const mod = await loadWith('two-way');
     await mod.reconcileTpm('key-1', 100, 1e12, NOON);
@@ -206,11 +229,13 @@ describe('reconcileTpm', () => {
     expect(evalMock).toHaveBeenCalledWith(mod.CHARGE_LUA, 1, TPM, String(MAX_USAGE_TOKENS - 100), '60', String(NOON));
   });
 
-  it('with the fast estimate, charges an overrun even though reconcile was left at refund', async () => {
+  it('with the fast estimate, charges an overrun with reconcile left unset, or set to refund', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const mod = await loadWith('', 'fast');
-    await mod.reconcileTpm('key-1', 100, 150, NOON);
-    expect(evalMock).toHaveBeenCalledWith(mod.CHARGE_LUA, 1, TPM, '50', '60', String(NOON));
+    for (const reconcile of ['', 'refund']) {
+      const mod = await loadWith(reconcile, 'fast');
+      await mod.reconcileTpm('key-1', 100, 150, NOON);
+      expect(evalMock).toHaveBeenLastCalledWith(mod.CHARGE_LUA, 1, TPM, '50', '60', String(NOON));
+    }
     warn.mockRestore();
   });
 });
