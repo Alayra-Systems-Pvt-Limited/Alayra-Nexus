@@ -14,7 +14,7 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { prismaMock, store } = vi.hoisted(() => {
   const store = new Map<string, string>();
@@ -28,7 +28,10 @@ const { prismaMock, store } = vi.hoisted(() => {
 vi.mock('../lib/redis', () => ({
   redis: {
     get: vi.fn(async (k: string) => store.get(k) ?? null),
-    set: vi.fn(async (k: string, v: string) => { store.set(k, v); return 'OK'; }),
+set: vi.fn(async (k: string, v: string, ...opts: unknown[]) => {
+      if (opts.includes('NX') && store.has(k)) return null;
+      store.set(k, v); return 'OK';
+    }),
     del: vi.fn(async (k: string) => (store.delete(k) ? 1 : 0)),
   },
 }));
@@ -119,5 +122,88 @@ describe('getActiveProviders', () => {
     await getActiveProviders();
     await getActiveProviders();
     expect(prismaMock.nexusProvider.findMany).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getActiveProviders under load and failure', () => {
+  const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    delete process.env.MEMO_MAX_STALE_MS;
+  });
+
+  it('requests arriving together on a cold cache share one query', async () => {
+    prismaMock.nexusProvider.findMany.mockResolvedValue([row('p1', 'openai')]);
+    const all = await Promise.all(Array.from({ length: 25 }, () => getActiveProviders()));
+    expect(all.every((rows) => rows.length === 1)).toBe(true);
+    expect(prismaMock.nexusProvider.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('with MEMO_MAX_STALE_MS, a failed background read keeps the pools', async () => {
+    process.env.MEMO_MAX_STALE_MS = '30000';
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    prismaMock.nexusProvider.findMany.mockResolvedValue([row('p1', 'openai')]);
+    await getActiveProviders();
+
+    vi.advanceTimersByTime(5_000);
+    const { redis } = await import('../lib/redis');
+    vi.mocked(redis.get).mockRejectedValueOnce(new Error('Connection is closed.'));
+    // Routing keeps its pools through a passing Redis failure instead of seeing none.
+    expect(await getActiveProviders()).toEqual([row('p1', 'openai')]);
+    await settle();
+    expect(await getActiveProviders()).toEqual([row('p1', 'openai')]);
+    expect(console.warn).toHaveBeenCalledOnce();
+  });
+
+  it('forgets its own copy even when Redis refuses the invalidation', async () => {
+    prismaMock.nexusProvider.findMany.mockResolvedValue([row('p1', 'openai')]);
+    await getActiveProviders();
+    prismaMock.nexusProvider.findMany.mockResolvedValue([row('p1', 'openai'), row('p2', 'groq')]);
+    store.clear();
+
+    const { redis } = await import('../lib/redis');
+    vi.mocked(redis.del).mockRejectedValueOnce(new Error('Connection is closed.'));
+    await expect(invalidateProviderCache()).rejects.toThrow('Connection is closed.');
+    expect(await getActiveProviders()).toHaveLength(2);
+  });
+});
+
+describe('the shared copy a slow read fills', () => {
+  const gate = () => {
+    let answer: (rows: unknown[]) => void = () => undefined;
+    prismaMock.nexusProvider.findMany.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }) as never);
+    return (rows: unknown[]) => answer(rows);
+  };
+  const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  it('is not written by a read that a local invalidation overtook', async () => {
+    const release = gate();
+    const slow = getActiveProviders();
+    await settle();
+
+    // A pool is added here while the read above is at the database with the old answer.
+    await invalidateProviderCache();
+    release([row('p1', 'openai')]);
+    await slow;
+    expect(store.has(PROVIDER_CACHE_KEY)).toBe(false);
+
+    prismaMock.nexusProvider.findMany.mockResolvedValue([row('p1', 'openai'), row('p2', 'groq')]);
+    expect(await getActiveProviders()).toHaveLength(2);
+  });
+
+  it('never replaces a copy another reader wrote meanwhile', async () => {
+    const release = gate();
+    const slow = getActiveProviders();
+    await settle();
+
+    const newer = JSON.stringify([row('p1', 'openai'), row('p2', 'groq')]);
+    store.set(PROVIDER_CACHE_KEY, newer);
+    release([row('p1', 'openai')]);
+    await slow;
+    expect(store.get(PROVIDER_CACHE_KEY)).toBe(newer);
   });
 });

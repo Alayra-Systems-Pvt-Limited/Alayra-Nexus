@@ -50,7 +50,7 @@ import { coreStores } from '../core/stores';
 import type { ProviderRow } from '../core/ports';
 import { redis } from '../lib/redis';
 import { PROVIDER_CACHE_KEY } from '../lib/registryCacheKey';
-import { TtlMemo } from '../lib/ttlMemo';
+import { TtlMemo, type Loader } from '../lib/ttlMemo';
 
 /**
  * Exactly the columns routing reads: the ProviderStore port's row, so the cache, the store and
@@ -66,9 +66,10 @@ const TTL_SECONDS = 60;
  *
  * Measured with `npm run bench:store-ops`: this key was fetched TWICE on every request. Free
  * against the in-process map that standalone mode uses, two network round trips against a real
- * Redis — on a value that changes when an operator edits a pool. See lib/ttlMemo.ts.
+ * Redis — on a value that changes when an operator edits a pool. See lib/ttlMemo.ts, which also
+ * covers MEMO_MAX_STALE_MS (an expired copy served while one background read replaces it).
  */
-const memo = new TtlMemo<CachedProvider[]>(5_000, 'PROVIDER_MEMO_TTL_MS');
+const memo = new TtlMemo<CachedProvider[]>(5_000, 'PROVIDER_MEMO_TTL_MS', 'the active provider pools');
 
 /**
  * Every active pool, oldest first.
@@ -79,29 +80,34 @@ const memo = new TtlMemo<CachedProvider[]>(5_000, 'PROVIDER_MEMO_TTL_MS');
  * same sequence, and routing picks the same key it always did.
  */
 export async function getActiveProviders(): Promise<CachedProvider[]> {
-  const local = memo.get(PROVIDER_CACHE_KEY);
-  if (local !== undefined) return local;
+  return memo.load(PROVIDER_CACHE_KEY, readActiveProviders);
+}
 
+/**
+ * The shared copy, else the store (which then refills the shared copy). The refill is skipped when a
+ * local invalidation overtook this read, and never replaces a copy another reader already wrote:
+ * either would put back the pools from before the change it raced.
+ */
+const readActiveProviders: Loader<CachedProvider[]> = async (current) => {
   const cached = await redis.get(PROVIDER_CACHE_KEY);
   if (cached) {
     try {
-      const rows = JSON.parse(cached) as CachedProvider[];
-      memo.set(PROVIDER_CACHE_KEY, rows);
-      return rows;
+      return JSON.parse(cached) as CachedProvider[];
     } catch { /* corrupt entry — re-read below */ }
   }
 
   const rows = await (await coreStores()).providers.listActive();
-
-  await redis.set(PROVIDER_CACHE_KEY, JSON.stringify(rows), 'EX', TTL_SECONDS);
-  memo.set(PROVIDER_CACHE_KEY, rows);
+  if (current()) await redis.set(PROVIDER_CACHE_KEY, JSON.stringify(rows), 'EX', TTL_SECONDS, 'NX');
   return rows;
-}
+};
 
 /** Call after any write that could change which pools are active, or their routing columns. */
 export async function invalidateProviderCache(): Promise<void> {
-  await redis.del(PROVIDER_CACHE_KEY);
-  // The shared copy is gone for every instance; this one also forgets its own, so the instance
-  // that took the write is never stale about its own change.
-  memo.forget();
+  try {
+    await redis.del(PROVIDER_CACHE_KEY);
+  } finally {
+    // The shared copy is gone for every instance; this one also forgets its own, so the instance
+    // that took the write is never stale about its own change — even when Redis refused the delete.
+    memo.forget();
+  }
 }
