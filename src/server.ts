@@ -14,12 +14,11 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-// The `/config` entry, not `dotenv.config()`. Two things ride on that, both easy to lose:
-// src/cli.ts steers this by setting DOTENV_CONFIG_PATH, which only the /config entry reads; and
-// since dotenv 17 the programmatic `dotenv.config()` prints "◇ injected env (N) from .env" plus a
-// promotional tip on every call, while /config keeps quiet by defaulting quiet:'true' itself. A
-// well-meant switch to the programmatic API would silently ignore `--env-file` AND put a decorative
-// glyph in the gateway's boot output.
+// The `/config` entry, not `dotenv.config()`. src/cli.ts steers it by setting DOTENV_PATH and
+// DOTENV_CONFIG_PATH, which dotenv 18 reads in that order. The /config entry also defaults `quiet`
+// to true, while the programmatic `dotenv.config()` writes "◇ injected env (N) from .env" to stderr
+// on every call, so a well-meant switch to it would put a decorative glyph in the gateway's boot
+// output.
 import 'dotenv/config';
 // Must stay in this position: after dotenv (which populates process.env) and before every other
 // import. It checks the storage configuration, and lib/redis.ts throws on import when REDIS_URL is
