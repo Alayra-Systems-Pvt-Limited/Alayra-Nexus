@@ -20,7 +20,7 @@
 // length of one unbroken run, so it is only asked about what it counts in reasonable time; 8 KiB
 // runs are pinned to the counts it produced once, offline.
 
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getEncoding } from 'js-tiktoken';
@@ -182,6 +182,9 @@ describe('countCl100k — the count js-tiktoken gives', () => {
 });
 
 describe('countCl100k — time linear in the text', () => {
+  // Load the ranks first (0.3-0.4 s), so a test run on its own does not time the load.
+  beforeAll(() => loadCl100k());
+
   // 0.05-0.4 s each on the development machine.
   it('counts 1 MiB of any shape in under 2 s', () => {
     const shapes = Object.entries(RUNS).map(([shape, alphabet]): [string, string] => [shape, fill(draw(alphabet, MiB), MiB)]);
