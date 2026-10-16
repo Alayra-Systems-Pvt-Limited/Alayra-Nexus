@@ -50,7 +50,7 @@ import { coreStores } from '../core/stores';
 import type { ProviderRow } from '../core/ports';
 import { redis } from '../lib/redis';
 import { PROVIDER_CACHE_KEY } from '../lib/registryCacheKey';
-import { TtlMemo } from '../lib/ttlMemo';
+import { TtlMemo, type Loader } from '../lib/ttlMemo';
 
 /**
  * Exactly the columns routing reads: the ProviderStore port's row, so the cache, the store and
@@ -83,8 +83,12 @@ export async function getActiveProviders(): Promise<CachedProvider[]> {
   return memo.load(PROVIDER_CACHE_KEY, readActiveProviders);
 }
 
-/** The shared copy, else the store (which then refills the shared copy). */
-async function readActiveProviders(): Promise<CachedProvider[]> {
+/**
+ * The shared copy, else the store (which then refills the shared copy). The refill is skipped when a
+ * local invalidation overtook this read, and never replaces a copy another reader already wrote:
+ * either would put back the pools from before the change it raced.
+ */
+const readActiveProviders: Loader<CachedProvider[]> = async (current) => {
   const cached = await redis.get(PROVIDER_CACHE_KEY);
   if (cached) {
     try {
@@ -93,9 +97,9 @@ async function readActiveProviders(): Promise<CachedProvider[]> {
   }
 
   const rows = await (await coreStores()).providers.listActive();
-  await redis.set(PROVIDER_CACHE_KEY, JSON.stringify(rows), 'EX', TTL_SECONDS);
+  if (current()) await redis.set(PROVIDER_CACHE_KEY, JSON.stringify(rows), 'EX', TTL_SECONDS, 'NX');
   return rows;
-}
+};
 
 /** Call after any write that could change which pools are active, or their routing columns. */
 export async function invalidateProviderCache(): Promise<void> {

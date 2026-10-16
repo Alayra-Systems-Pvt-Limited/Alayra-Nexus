@@ -113,9 +113,11 @@ function parseStored(text: string, normalize: Normalize): { models: AiModel[]; t
  *
  * The setting is read past the settings memo on purpose (see `readSettingFresh`): what is built
  * here becomes the copy every instance reads, so it must come from the shared value, not from
- * whatever this process last remembered of it.
+ * whatever this process last remembered of it. For the same reason the refill is skipped once
+ * `current()` says a local registry update overtook this read, and never replaces a copy that is
+ * already there: either would put the registry from before the update back for a minute.
  */
-export async function loadRegistry(normalize: Normalize): Promise<AiModel[]> {
+export async function loadRegistry(normalize: Normalize, current: () => boolean = () => true): Promise<AiModel[]> {
   const cached = await redis.get(REGISTRY_CACHE_KEY);
   if (cached) {
     const models = sharedCopy.read(cached, (text) => parseShared(text, normalize));
@@ -124,7 +126,7 @@ export async function loadRegistry(normalize: Normalize): Promise<AiModel[]> {
 
   const raw = await readSettingFresh(REGISTRY_SETTING);
   const built = storedCopy.read(raw ?? '', (text) => parseStored(text, normalize));
-  await redis.set(REGISTRY_CACHE_KEY, built.text, 'EX', SHARED_COPY_TTL_SECONDS);
+  if (current()) await redis.set(REGISTRY_CACHE_KEY, built.text, 'EX', SHARED_COPY_TTL_SECONDS, 'NX');
   // The next read of the shared copy returns exactly this text: no need to parse it back.
   sharedCopy.remember(built.text, built.models);
   return built.models;

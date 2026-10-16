@@ -20,7 +20,10 @@ const { prismaMock, redisMock, store } = vi.hoisted(() => {
   const store = new Map<string, string>();
   const redisMock = {
     get: vi.fn(async (k: string) => store.get(k) ?? null),
-    set: vi.fn(async (k: string, v: string) => { store.set(k, v); return 'OK'; }),
+set: vi.fn(async (k: string, v: string, ...opts: unknown[]) => {
+      if (opts.includes('NX') && store.has(k)) return null;
+      store.set(k, v); return 'OK';
+    }),
     del: vi.fn(async (k: string) => (store.delete(k) ? 1 : 0)),
   };
   const prismaMock = {
@@ -57,7 +60,7 @@ describe('getSetting', () => {
   it('reads through to the database and back-fills Redis on a cold miss', async () => {
     prismaMock.appSettings.findUnique.mockResolvedValue({ value: 'on' });
     expect(await getSetting('GUARDRAILS_ENABLED')).toBe('on');
-    expect(redisMock.set).toHaveBeenCalledWith('nexus:setting:GUARDRAILS_ENABLED', 'on', 'EX', 300);
+    expect(redisMock.set).toHaveBeenCalledWith('nexus:setting:GUARDRAILS_ENABLED', 'on', 'EX', 300, 'NX');
   });
 
   it('does not touch Redis again inside the memo window', async () => {
@@ -231,3 +234,18 @@ describe('readSettingFresh', () => {
 function changedElsewhere(key: string, value: string): void {
   store.set(`nexus:setting:${key}`, value);
 }
+
+describe('the shared copy a slow read fills', () => {
+  it('never replaces a newer value written while the read was at the database', async () => {
+    // Instance B misses the shared copy and reads the old hash; instance A rotates the key meanwhile.
+    let answer: (row: { value: string }) => void = () => undefined;
+    prismaMock.appSettings.findUnique.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    const slow = readSettingFresh('NEXUS_API_KEY_HASH');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    await setSetting('NEXUS_API_KEY_HASH', 'new-hash');
+    answer({ value: 'old-hash' });
+    expect(await slow).toBe('old-hash');
+    expect(store.get('nexus:setting:NEXUS_API_KEY_HASH')).toBe('new-hash');
+  });
+});

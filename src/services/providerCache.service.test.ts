@@ -28,7 +28,10 @@ const { prismaMock, store } = vi.hoisted(() => {
 vi.mock('../lib/redis', () => ({
   redis: {
     get: vi.fn(async (k: string) => store.get(k) ?? null),
-    set: vi.fn(async (k: string, v: string) => { store.set(k, v); return 'OK'; }),
+set: vi.fn(async (k: string, v: string, ...opts: unknown[]) => {
+      if (opts.includes('NX') && store.has(k)) return null;
+      store.set(k, v); return 'OK';
+    }),
     del: vi.fn(async (k: string) => (store.delete(k) ? 1 : 0)),
   },
 }));
@@ -166,5 +169,41 @@ describe('getActiveProviders under load and failure', () => {
     vi.mocked(redis.del).mockRejectedValueOnce(new Error('Connection is closed.'));
     await expect(invalidateProviderCache()).rejects.toThrow('Connection is closed.');
     expect(await getActiveProviders()).toHaveLength(2);
+  });
+});
+
+describe('the shared copy a slow read fills', () => {
+  const gate = () => {
+    let answer: (rows: unknown[]) => void = () => undefined;
+    prismaMock.nexusProvider.findMany.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }) as never);
+    return (rows: unknown[]) => answer(rows);
+  };
+  const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  it('is not written by a read that a local invalidation overtook', async () => {
+    const release = gate();
+    const slow = getActiveProviders();
+    await settle();
+
+    // A pool is added here while the read above is at the database with the old answer.
+    await invalidateProviderCache();
+    release([row('p1', 'openai')]);
+    await slow;
+    expect(store.has(PROVIDER_CACHE_KEY)).toBe(false);
+
+    prismaMock.nexusProvider.findMany.mockResolvedValue([row('p1', 'openai'), row('p2', 'groq')]);
+    expect(await getActiveProviders()).toHaveLength(2);
+  });
+
+  it('never replaces a copy another reader wrote meanwhile', async () => {
+    const release = gate();
+    const slow = getActiveProviders();
+    await settle();
+
+    const newer = JSON.stringify([row('p1', 'openai'), row('p2', 'groq')]);
+    store.set(PROVIDER_CACHE_KEY, newer);
+    release([row('p1', 'openai')]);
+    await slow;
+    expect(store.get(PROVIDER_CACHE_KEY)).toBe(newer);
   });
 });

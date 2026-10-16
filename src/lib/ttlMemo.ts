@@ -55,6 +55,10 @@
 //
 // A background read that fails keeps the last good value (still within that bound) and says so in
 // the log. It never empties the entry, and never turns a passing outage into a failed request.
+//
+// A loader is handed `current()`, which turns false once a local write or `forget` has overtaken
+// its read. A loader that also writes what it read back to the shared copy checks it first, so a
+// read that started before a change cannot put the old value back in Redis either.
 
 import { envInt } from './envNumber';
 
@@ -81,6 +85,12 @@ export interface LoadOptions {
   /** The current time; tests pass it instead of faking the clock. */
   now?: number;
 }
+
+/**
+ * Reads the value. `current()` is false once a local write or `forget` has overtaken this read: its
+ * result is then discarded, and a loader must not write it back to a shared copy either.
+ */
+export type Loader<T> = (current: () => boolean) => Promise<T>;
 
 interface Entry<T> {
   value: T;
@@ -124,9 +134,9 @@ export class TtlMemo<T> {
    * `MEMO_MAX_STALE_MS` set, an expired value younger than that is returned at once while the read
    * runs in the background. A memo switched off (window 0) calls `loader` every time, as before.
    */
-  load(key: string, loader: () => Promise<T>, options: LoadOptions = {}): Promise<T> {
+  load(key: string, loader: Loader<T>, options: LoadOptions = {}): Promise<T> {
     const ttl = this.ttlMs();
-    if (ttl === 0) return loader();
+    if (ttl === 0) return loader(() => true);
 
     const now = options.now ?? Date.now();
     const held = this.entries.get(key);
@@ -167,12 +177,14 @@ export class TtlMemo<T> {
    * The one read for `key`: the one under way, or a new one. `background` is true when the read was
    * started for a caller that was served the held value instead of waiting for it.
    */
-  private read(key: string, loader: () => Promise<T>, startedAt: number, background: boolean): Promise<T> {
+  private read(key: string, loader: Loader<T>, startedAt: number, background: boolean): Promise<T> {
     const underway = this.reading.get(key);
     if (underway !== undefined) return underway;
 
-    const current = (): boolean => this.reading.get(key) === run;
-    const run: Promise<T> = new Promise<T>((resolve) => resolve(loader())).then(
+    // `run` is unset only while the loader's first synchronous step runs, before anything can overtake it.
+    let run: Promise<T> | undefined = undefined;
+    const current = (): boolean => run === undefined || this.reading.get(key) === run;
+    run = new Promise<T>((resolve) => resolve(loader(current))).then(
       (value) => {
         if (current()) {
           this.reading.delete(key);

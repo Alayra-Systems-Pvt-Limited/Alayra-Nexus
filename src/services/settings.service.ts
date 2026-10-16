@@ -85,7 +85,10 @@ export async function readSettingFresh(key: string): Promise<string | null> {
   if (cached !== null) return cached === '__null__' ? null : cached;
 
   const value = await (await coreStores()).settings.get(key);
-  await redis.set(`nexus:setting:${key}`, value ?? '__null__', 'EX', CACHE_TTL);
+  // NX: only fill a copy that is still missing. A `setSetting` on any instance that landed while this
+  // read was at the database wrote the newer value; overwriting it would hand the old one (a rotated
+  // master key's hash, say) to every instance for the copy's five minutes.
+  await redis.set(`nexus:setting:${key}`, value ?? '__null__', 'EX', CACHE_TTL, 'NX');
   return value;
 }
 

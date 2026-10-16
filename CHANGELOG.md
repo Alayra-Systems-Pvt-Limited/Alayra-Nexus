@@ -40,11 +40,19 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
-- **A change is no longer undone on the instance that made it.** A memo read already under way when
-  this instance changed a setting, the registry or the pools could finish after the change and store
-  the value from before it, so the instance that made the change served the old value for up to the
-  memo window. Such a read is now discarded. The registry and pool memos are also dropped when Redis
-  refuses the delete that invalidates the shared copy.
+- **A change is no longer undone by a read already under way on the same instance.** A memo read in
+  progress when this instance changed a setting, the registry or the pools could finish after the
+  change and keep the value from before it, and a registry or pool read that had gone to the
+  database also wrote that old value back as the shared Redis copy, where every instance read it for
+  up to a minute. Such a read is now discarded and writes nothing back. The registry and pool memos
+  are also dropped when Redis refuses the delete that invalidates the shared copy. A read on
+  another instance that started before the change can still refill the deleted registry or pool
+  copy with the old value, for at most that copy's minute, as before.
+- **A slow read no longer overwrites a newer shared copy.** When a setting's Redis copy had expired,
+  a read that reached the database before a change made on any instance could write the old value
+  over the new one, and every instance then read it for the copy's five minutes, a rotated master
+  key's hash included. The setting, registry and pool copies are now filled only while they are
+  still missing (`SET … NX`); a change itself still overwrites them.
 - **The shared registry copy is rebuilt from the stored setting, not from this instance's memo of
   it.** When the copy was missing, an instance rebuilt it through its settings memo, which could
   still hold the registry from before another instance's change, and wrote that back as the copy

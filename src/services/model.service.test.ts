@@ -32,7 +32,9 @@ vi.mock('./settings.service', () => ({
   setSetting: vi.fn(async (_k: string, v: string) => { store.value = v; }),
 }));
 
-import { normalizeModel, removeModelById, removeModelsForProvider, getModelRegistry, clearRegistryMemo } from './model.service';
+import {
+  normalizeModel, removeModelById, removeModelsForProvider, getModelRegistry, clearRegistryMemo, updateModelRegistry,
+} from './model.service';
 
 // Writing the store directly is how this suite arranges a registry, and that now bypasses TWO
 // caches rather than one: the shared copy in the KV, and an in-process memo in front of it. The
@@ -223,5 +225,25 @@ describe('getModelRegistry parses only what changed', () => {
     await getModelRegistry();
     expect(settings.readSettingFresh).toHaveBeenCalledWith('AI_MODEL_REGISTRY');
     expect(settings.getSetting).not.toHaveBeenCalled();
+  });
+});
+
+describe('a registry read overtaken by an update on this instance', () => {
+  it('neither keeps nor writes back the registry from before the update', async () => {
+    const settings = await import('./settings.service');
+    const { redis } = await import('../lib/redis');
+    seed([model('old', 'openai')]);
+    let answer: (text: string) => void = () => undefined;
+    vi.mocked(settings.readSettingFresh).mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    vi.mocked(redis.set).mockClear();
+
+    const slow = getModelRegistry();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await updateModelRegistry([normalizeModel(model('new', 'openai'))]);
+    answer(JSON.stringify([model('old', 'openai')]));
+
+    expect((await slow).map((m) => m.id)).toEqual(['old']); // it asked before the update
+    expect(vi.mocked(redis.set).mock.calls.filter(([key]) => key === 'nexus:model_registry')).toEqual([]);
+    expect((await getModelRegistry()).map((m) => m.id)).toEqual(['new']);
   });
 });

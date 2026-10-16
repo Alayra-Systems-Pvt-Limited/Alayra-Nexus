@@ -176,7 +176,7 @@ export function clearRegistryMemo(): void { registryMemo.forget(); }
 
 /** Every registry model, normalised. Shared and read-only: callers filter or copy, never modify. */
 export async function getModelRegistry(): Promise<AiModel[]> {
-  return registryMemo.load(REGISTRY_CACHE_KEY, () => loadRegistry(normalizeModel));
+  return registryMemo.load(REGISTRY_CACHE_KEY, (current) => loadRegistry(normalizeModel, current));
 }
 
 /**

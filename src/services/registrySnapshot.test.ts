@@ -21,7 +21,10 @@ const { kv, setting } = vi.hoisted(() => ({ kv: new Map<string, string>(), setti
 vi.mock('../lib/redis', () => ({
   redis: {
     get: vi.fn(async (k: string) => kv.get(k) ?? null),
-    set: vi.fn(async (k: string, v: string) => { kv.set(k, v); return 'OK'; }),
+set: vi.fn(async (k: string, v: string, ...opts: unknown[]) => {
+      if (opts.includes('NX') && kv.has(k)) return null;
+      kv.set(k, v); return 'OK';
+    }),
   },
 }));
 vi.mock('./settings.service', () => ({ readSettingFresh: vi.fn(async () => setting.value) }));
@@ -71,6 +74,22 @@ describe('loadRegistry', () => {
     expect(await loadRegistry(normalize)).toBe(first);
     expect(kv.get(REGISTRY_CACHE_KEY)).toBe(JSON.stringify(first));
     expect(normalize).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes no shared copy from a read that a local update overtook', async () => {
+    setting.value = stored('old');
+    await loadRegistry(normalize, () => false);
+    expect(kv.has(REGISTRY_CACHE_KEY)).toBe(false);
+  });
+
+  it('never replaces a shared copy another process wrote while this one was reading', async () => {
+    const { readSettingFresh } = await import('./settings.service');
+    vi.mocked(readSettingFresh).mockImplementationOnce(async () => {
+      kv.set(REGISTRY_CACHE_KEY, stored('newer'));
+      return stored('old');
+    });
+    await loadRegistry(normalize);
+    expect(kv.get(REGISTRY_CACHE_KEY)).toBe(stored('newer'));
   });
 
   it('treats an unreadable shared copy as missing, and an unreadable setting as empty', async () => {

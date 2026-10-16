@@ -262,3 +262,17 @@ describe('local writes win over a read already under way', () => {
     expect(loader).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('the loader is told when its read has been overtaken', () => {
+  it('current() stays true for a read nothing overtook, and turns false after set() or forget()', async () => {
+    const seen: (() => boolean)[] = [];
+    const read = () => (current: () => boolean) => { seen.push(current); return new Promise<string>(() => undefined); };
+
+    void memo.load('a', read(), { now: 0 });
+    void memo.load('b', read(), { now: 0 });
+    void memo.load('c', read(), { now: 0 });
+    memo.set('b', 'written', 0);
+    memo.forget('c');
+    expect(seen.map((current) => current())).toEqual([true, false, false]);
+  });
+});
