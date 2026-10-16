@@ -156,7 +156,7 @@ describe('countCl100k — the count js-tiktoken gives', () => {
 });
 
 describe('countCl100k — time linear in the text', () => {
-  // About 0.1 s each on the development machine; js-tiktoken needed hours for the runs.
+  // 0.05-0.4 s each on the development machine; js-tiktoken needed hours for the runs.
   it('counts 1 MiB of any shape in under 2 s', () => {
     const shapes = Object.entries(RUNS).map(([shape, alphabet]): [string, string] => [shape, fill(draw(alphabet, MiB), MiB)]);
     shapes.push(
@@ -197,8 +197,8 @@ describe('countCl100k — one piece longer than SLICE_BYTES', () => {
   }
 
   it('never counts below the exact count, and at most 11 tokens a cut above it', () => {
-    // [shape, seed, cuts]. Without the per-cut margin, each one-cut run here counts one token LOW;
-    // without it, letters 2 and punctuation 8 count 2 and 3 tokens HIGH, the most measured.
+    // [shape, seed, cuts]. With no margin, each one-cut run here counts one token low, and the
+    // four-cut letters 2 and punctuation 8 count 2 and 3 tokens high.
     const alphabets: Record<string, string> = { ...RUNS, ab: 'ab' };
     const cases: [string, number, number][] = [
       ['letters', 13, 1], ['letters', 17, 1], ['punctuation', 19, 1], ['punctuation', 25, 1], ['ab', 26, 1],
@@ -212,6 +212,23 @@ describe('countCl100k — one piece longer than SLICE_BYTES', () => {
       expect(count - exact, `${shape} seed ${seed}`).toBeLessThanOrEqual(cuts * 11);
     }
   }, 60_000);
+
+  it('holds at the worst cuts measured: 2 tokens low and 3 tokens high before the margin', () => {
+    // Found by search: the cut at SLICE_BYTES moves the first count by +2 (English words run
+    // together, behind random letters) and the second by -3 (underscores behind three plus signs).
+    // A margin under 2 fails the first, one over 8 the second.
+    const cases: [string, number][] = [
+      [drawBytes(RUNS.letters, SLICE_BYTES - 19, 1) + 'beforelazyoverbrowntokencountsroutinglazyju', 2],
+      ['+++' + '_'.repeat(SLICE_BYTES + 997), -3],
+    ];
+    for (const [text, moved] of cases) {
+      const bytes = utf8Bytes(text), exact = heapMerge(bytes);
+      expect(exact - heapMerge(bytes, 0, SLICE_BYTES) - heapMerge(bytes, SLICE_BYTES), 'the cut').toBe(moved);
+      const count = countCl100k(text);
+      expect(count).toBeGreaterThanOrEqual(exact);
+      expect(count - exact).toBeLessThanOrEqual(11);
+    }
+  });
 
   it('keeps its working memory bounded however long the piece', () => {
     const text = draw(RUNS.letters, 4 * MiB, 3);
