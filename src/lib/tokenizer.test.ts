@@ -20,15 +20,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 // The setting is cleared before the module loads, so these tests mean the same with it set in the
 // shell; each mode is then loaded explicitly where it is tested.
 const encodes = vi.hoisted(() => { delete process.env.NEXUS_TPM_ESTIMATE; return { n: 0 }; });
-vi.mock('js-tiktoken', async (importOriginal) => {
-  const real = await importOriginal<typeof import('js-tiktoken')>();
-  return {
-    ...real,
-    getEncoding: (name: Parameters<typeof real.getEncoding>[0]) => {
-      const enc = real.getEncoding(name);
-      return { encode: (text: string) => { encodes.n++; return enc.encode(text); } };
-    },
-  };
+vi.mock('./bpeCount', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./bpeCount')>();
+  return { ...real, countCl100k: (text: string) => { encodes.n++; return real.countCl100k(text); } };
 });
 
 import {

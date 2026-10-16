@@ -14,27 +14,22 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-import { getEncoding, type Tiktoken } from 'js-tiktoken';
+import { countCl100k } from './bpeCount';
 import { estimateTokens, TPM_ESTIMATE } from './tokenEstimate';
 
 export { readTpmEstimate, TPM_ESTIMATE, type TpmEstimate } from './tokenEstimate';
 
-// A single shared encoder, lazily initialized. cl100k_base is a reasonable,
-// provider-neutral proxy for admission *estimates* — this number is only used to
-// reserve budget before a request goes out, not for billing (real usage from the
-// provider reconciles it afterward), so it does not need to match each provider's
-// exact tokenizer.
-let enc: Tiktoken | null = null;
-function encoder(): Tiktoken {
-  if (!enc) enc = getEncoding('cl100k_base');
-  return enc;
-}
+// cl100k_base is a reasonable, provider-neutral proxy for admission *estimates*: this number
+// reserves budget before a request goes out, and the provider's real usage reconciles it afterward,
+// so it does not need to match each provider's exact tokenizer. It is counted by bpeCount.ts, which
+// gives js-tiktoken's exact count in time linear in the text (js-tiktoken's own merge is quadratic
+// in the length of one unbroken word, and one long word could stall the event loop for seconds).
 
 /** Token count of a single string, with a safe character-based fallback. */
 export function countTokens(text: string): number {
   if (!text) return 0;
   try {
-    return encoder().encode(text).length;
+    return countCl100k(text);
   } catch {
     return Math.ceil(text.length / 4);
   }

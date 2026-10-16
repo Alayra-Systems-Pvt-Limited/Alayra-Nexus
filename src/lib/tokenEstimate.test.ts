@@ -18,15 +18,9 @@ import { describe, it, expect, vi } from 'vitest';
 
 // Every call into the tokenizer is counted, so a test can prove the estimate never makes one.
 const encodes = vi.hoisted(() => ({ n: 0 }));
-vi.mock('js-tiktoken', async (importOriginal) => {
-  const real = await importOriginal<typeof import('js-tiktoken')>();
-  return {
-    ...real,
-    getEncoding: (name: Parameters<typeof real.getEncoding>[0]) => {
-      const enc = real.getEncoding(name);
-      return { encode: (text: string) => { encodes.n++; return enc.encode(text); } };
-    },
-  };
+vi.mock('./bpeCount', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./bpeCount')>();
+  return { ...real, countCl100k: (text: string) => { encodes.n++; return real.countCl100k(text); } };
 });
 
 import { estimateTokens, TOKEN_ESTIMATE_WEIGHTS } from './tokenEstimate';
