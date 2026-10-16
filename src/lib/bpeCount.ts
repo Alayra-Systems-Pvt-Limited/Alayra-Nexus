@@ -19,9 +19,8 @@
 // The tokenizer cuts text into pieces (a word, a run of punctuation, a run of whitespace), then
 // merges each piece's bytes: the adjacent pair with the lowest rank first, the leftmost on a tie,
 // until no pair is a token. js-tiktoken finds that pair by building a string key for every pair
-// after every merge, which costs the square of the piece's length: one unbroken run of 2 KiB of
-// letters, spaces or punctuation took half a second, 16 KiB half a minute or more, and ordinary
-// Chinese about 8 s a MiB, all on the event loop, where every other request waits.
+// after every merge, so its time grows with the square of the piece's length, and one long
+// unbroken run could block the event loop for a long time.
 //
 // This counts the same tokens from the same data (js-tiktoken's own cl100k ranks and piece pattern)
 // by the same rule. Only the search for the next pair changes, the way tiktoken itself does it: a

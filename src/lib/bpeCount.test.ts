@@ -18,7 +18,7 @@
 // reference: the same text goes through both, with no special token allowed or refused (`[], []`),
 // so the text of one such as `<|endoftext|>` counts as text. Its own merge is quadratic in the
 // length of one unbroken run, so it is only asked about what it counts in reasonable time; 8 KiB
-// runs are pinned to the counts it produced once, offline: 4 to 8 s each.
+// runs are pinned to the counts it produced once, offline.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -182,7 +182,7 @@ describe('countCl100k — the count js-tiktoken gives', () => {
 });
 
 describe('countCl100k — time linear in the text', () => {
-  // 0.05-0.4 s each on the development machine; js-tiktoken needed hours for the runs.
+  // 0.05-0.4 s each on the development machine.
   it('counts 1 MiB of any shape in under 2 s', () => {
     const shapes = Object.entries(RUNS).map(([shape, alphabet]): [string, string] => [shape, fill(draw(alphabet, MiB), MiB)]);
     shapes.push(
@@ -198,7 +198,7 @@ describe('countCl100k — time linear in the text', () => {
     }
   }, 120_000);
 
-  it('counts a 16 KiB run in under 0.2 s (js-tiktoken: half a minute or more)', () => {
+  it('counts a 16 KiB run in under 0.2 s', () => {
     for (const [shape, alphabet] of Object.entries(RUNS)) {
       const text = fill(draw(alphabet, 16384), 16384);
       const started = performance.now();
