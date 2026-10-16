@@ -36,10 +36,11 @@
 // 31-43 % for code, 17-27 % for JSON and 22 % across the other languages. It never exceeds the
 // UTF-8 byte count, which no token count can.
 //
-// Crafted text can still count low. Whitespace and control characters cannot: every repeated mix of
-// up to four spaces, tabs, line feeds and carriage returns was checked against the tokenizer, and
-// the other ASCII control characters and the C1 controls (U+0080-U+009F) count at their byte count,
-// the most they can be. But a long run of random letters can count as little as a fifth of its real
+// Whitespace and control characters count high wherever they were checked: every repeated mix of up
+// to four spaces, tabs, line feeds and carriage returns (each against the tokenizer), and the other
+// ASCII control characters and the C1 controls (U+0080-U+009F), which count at their byte count, the
+// most they can be. Crafted text can still count low: some longer mixes of \r and \n ("\r\r\n\r\n"
+// repeated counts at 0.84), and a long run of random letters, at as little as a fifth of its real
 // tokens. So `fast` always runs with two-way reconcile (admission.ts), which charges the difference
 // once the provider reports it.
 //

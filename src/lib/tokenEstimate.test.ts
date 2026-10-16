@@ -107,7 +107,7 @@ describe('estimateTokens — errs high, never far', () => {
   });
 });
 
-describe('estimateTokens — whitespace and control characters never count low', () => {
+describe('estimateTokens — whitespace and control characters count high', () => {
   // Each of these once counted at a fraction of the tokenizer: tab shared the space's run, so a
   // run of " \t" cost almost nothing, \r rode along with \n at 0.04 a character, a \r after \n\n
   // was not seen as the new token it is, and C1 controls counted as accented letters.
@@ -137,17 +137,19 @@ describe('estimateTokens — whitespace and control characters never count low',
     expect(estimateTokens(text)).toBeGreaterThanOrEqual(countTokens(text));
   });
 
+  // 340 patterns, each repeated to 240 characters: one run of whitespace is one piece for the tokenizer,
+  // which takes time that grows with the square of its length, so longer strings make this slow.
   it('counts every repeated mix of up to four spaces, tabs, line feeds and carriage returns high', () => {
     const units = [' ', '\t', '\r', '\n'];
     let patterns = units;
     for (let length = 1; length <= 4; length++) {
       for (const p of patterns) {
-        const text = p.repeat(Math.ceil(600 / p.length));
+        const text = p.repeat(Math.ceil(240 / p.length));
         expect(estimateTokens(text), JSON.stringify(p)).toBeGreaterThanOrEqual(countTokens(text));
       }
       patterns = patterns.flatMap((p) => units.map((u) => p + u));
     }
-  });
+  }, 30_000);
 });
 
 describe('estimateTokens — bounded by the UTF-8 byte count', () => {
