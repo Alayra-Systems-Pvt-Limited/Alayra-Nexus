@@ -11,32 +11,38 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
-- **A key's TPM reservation can be counted without the tokenizer: `NEXUS_TPM_ESTIMATE=fast`.**
-  Before a request is routed, Nexus reserves its input tokens plus its `max_tokens` against the
-  chosen key's tokens-per-minute limit. The input was counted with the cl100k tokenizer, on the
-  event loop, before routing: about 33 ms for a 128 KB English prompt, 67 ms for 128 KB of JSON and
-  1.36 s for 128 KB of Chinese, which every other request on that process waited behind. With
-  `fast`, a one-pass estimate counts it instead: about 1 ms at 128 KB and under 0.05 ms at 2 KB on
-  a laptop, and it never calls the tokenizer. **It is not bytes / 4.** Measured against the
-  tokenizer, bytes / 4 was off by 22-30 % on four sample prompts (English 5.05 bytes a token, code
-  3.14, Chinese 2.94, JSON 2.81) and up to 75 % low on other real text (minified JavaScript,
-  Traditional Chinese, Czech, Georgian, Armenian), and a low estimate lets a key past its limit. So
-  the estimate counts what the tokenizer cuts text into (runs of letters, groups of digits,
-  punctuation, runs of spaces, tabs, line breaks and carriage returns, and characters by script),
-  with weights fitted to sit just above the tokenizer and 5 % headroom on top. On 402 samples of
-  real text and 111 held-out ones (English, code, minified JavaScript, JSON, IDs, base64, emoji, and
-  51 languages in 17 scripts) it never counted fewer tokens than the tokenizer; its median was
-  32-34 % above for English, 31-43 % for code, 17-27 % for JSON and 22 % for other languages. On
-  the four sample prompts it lands at 1.38x (English), 1.06x (code), 1.42x (Chinese) and 1.22x
-  (JSON). It never exceeds the prompt's UTF-8 byte count. Whitespace and control characters never
-  count low: tabs, lone carriage returns, CRLF and every mix of them were checked against the
-  tokenizer. Crafted text can still count low: a long run of random letters with no spaces counts
-  at about a fifth of its tokens.
-  **What changes for a caller:** reservations are larger, so a prompt whose estimate plus `max_tokens` exceeds a key's
-  whole TPM limit, while its tokenizer count did not, is refused by that key, and routing tries the
-  next one. The reservation is corrected to the provider's reported usage afterwards, as before.
-  The default, `tokenizer`, behaves exactly as before. Usage rows, and the count recorded when a
-  provider reports no usage, keep using the tokenizer; the estimate is never used for cost.
+- **A chat request's TPM reservation can be counted without the tokenizer: `NEXUS_TPM_ESTIMATE=fast`.**
+  Before a chat request (`/v1/chat/completions`, `/v1/messages`) is routed, Nexus reserves its
+  input tokens plus its `max_tokens` against the chosen key's tokens-per-minute limit. The input was
+  counted with the cl100k tokenizer, on the event loop, before routing: about 33 ms for a 128 KB
+  English prompt, 67 ms for 128 KB of JSON and 1.36 s for 128 KB of Chinese, which every other
+  request on that process waited behind. With `fast`, a one-pass estimate counts it instead: about
+  1 ms at 128 KB and under 0.05 ms at 2 KB on a laptop, and it never calls the tokenizer. **It is
+  not bytes / 4.** Measured against the tokenizer, bytes / 4 was off by 22-30 % on four sample
+  prompts (English 5.05 bytes a token, code 3.14, Chinese 2.94, JSON 2.81) and up to 75 % low on
+  other real text (minified JavaScript, Traditional Chinese, Czech, Georgian, Armenian), and a low
+  estimate lets a key past its limit. So the estimate counts what the tokenizer cuts text into
+  (runs of letters, groups of digits, punctuation, runs of spaces, tabs, line breaks and carriage
+  returns, and characters by script), with weights fitted to sit just above the tokenizer and 5 %
+  headroom on top. On 402 samples of real text and 111 held-out ones (English, code, minified
+  JavaScript, JSON, IDs, base64, emoji, and 51 languages in 17 scripts) it never counted fewer
+  tokens than the tokenizer; its median was 32-34 % above for English, 31-43 % for code, 17-27 %
+  for JSON and 22 % for other languages. On the four sample prompts it lands at 1.38x (English),
+  1.06x (code), 1.42x (Chinese) and 1.22x (JSON). It never exceeds the prompt's UTF-8 byte count.
+  Whitespace and control characters never count low: tabs, lone carriage returns, CRLF and every
+  mix of them were checked against the tokenizer. Crafted text can still count low: a long run of
+  random letters with no spaces counts at about a fifth of its tokens.
+  **A refusal on size stays exact.** When the estimate plus `max_tokens` is above a key's whole TPM
+  limit, the key would refuse the request even with an empty window, although the exact count might
+  fit. Routing then counts the prompt with the tokenizer and decides on that count, so a prompt is
+  refused for its size exactly when it is today: an 80,000-token prompt still goes through a key
+  with a 100,000-token limit. The tokenizer runs only for prompts that big. Otherwise a reservation
+  is larger than the exact count until the answer corrects it, so a busy key's window fills a little
+  sooner within the minute and routing moves on to the next key a little earlier.
+  **Where it applies:** chat admission only. Embeddings, completions, images and speech still
+  reserve with the tokenizer, and usage rows still use it, including the count recorded after the
+  answer when a provider reports no usage. The estimate is never used for cost. The default,
+  `tokenizer`, behaves exactly as before.
 - **Usage above a TPM reservation can now count against the key: `NEXUS_TPM_RECONCILE=two-way`.**
   When an answer comes back, Nexus corrects the key's per-minute window from the reservation to
   the usage the provider reported. Until now it only ever gave tokens back: when a request used

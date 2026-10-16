@@ -19,6 +19,7 @@ import { defineScript } from './kv/memory';
 import { openKey, probeKey, PROBE_TTL_SECONDS, type BreakerGate } from './breaker';
 import { rpmKey, tpmKey, usersKey, RPM_TPM_WINDOW_SECONDS, MAXUSERS_WINDOW_SECONDS } from './admission';
 import { RATE_WINDOW_LUA, rateWindow, rateCount, windowTtl } from './rateWindow';
+import type { TokenReserve } from './tokenizer';
 
 // Pick the first usable key in a pool and reserve on it, in ONE round trip.
 //
@@ -233,10 +234,11 @@ return { -1, '' }
  */
 export async function selectAndReserve(
   candidates: Candidate[],
-  reserveTokens: number,
+  reserve: number | TokenReserve,
   userId: string | null | undefined,
 ): Promise<Selection | null> {
   if (candidates.length === 0) return null;
+  const reserveTokens = tokensFor(reserve, candidates);
 
   const keys: string[] = [];
   const limits: string[] = [];
@@ -271,4 +273,15 @@ export async function selectAndReserve(
 
   const gate = String(result[1]);
   return { index: oneBased - 1, gate: gate === 'probe' ? 'probe' : 'closed' };
+}
+
+/**
+ * What to reserve against these candidates. An estimate bigger than a candidate's whole TPM limit
+ * would be refused by that key on an empty window, and on every retry, so it is counted exactly
+ * first (see TokenReserve). Below every whole limit, the estimate is used as it is.
+ */
+function tokensFor(reserve: number | TokenReserve, candidates: Candidate[]): number {
+  if (typeof reserve === 'number') return reserve;
+  if (!reserve.exact && candidates.some((c) => reserve.tokens > c.tpmLimit)) return reserve.makeExact();
+  return reserve.tokens;
 }

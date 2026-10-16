@@ -174,3 +174,23 @@ export function estimateTokens(text: string): number {
   // At least one token for any text (a lone space is one), and never more than one per byte.
   return Math.min(bytes, Math.max(1, Math.ceil(sum * W.headroom)));
 }
+
+// ── The setting that turns it on ─────────────────────────────────────────────────────────────────
+
+export type TpmEstimate = 'tokenizer' | 'fast';
+
+/**
+ * NEXUS_TPM_ESTIMATE: `tokenizer` (the default, as before) counts a reservation's input with the
+ * tokenizer; `fast` uses `estimateMessageTokens`. Read once, at load: the reservation is computed
+ * on every request, and reading the environment costs about a microsecond each time.
+ */
+export function readTpmEstimate(raw = process.env.NEXUS_TPM_ESTIMATE): TpmEstimate {
+  const value = raw?.trim().toLowerCase();
+  if (!value || value === 'tokenizer') return 'tokenizer';
+  if (value === 'fast') return 'fast';
+  console.warn(`⚠️  NEXUS_TPM_ESTIMATE="${raw}" was ignored — use "tokenizer" or "fast". Using tokenizer.`);
+  return 'tokenizer';
+}
+
+/** The mode this process runs in, read once. admission.ts reads it too: `fast` runs with two-way reconcile. */
+export const TPM_ESTIMATE: TpmEstimate = readTpmEstimate();

@@ -15,7 +15,9 @@
  */
 
 import { getEncoding, type Tiktoken } from 'js-tiktoken';
-import { estimateTokens } from './tokenEstimate';
+import { estimateTokens, TPM_ESTIMATE } from './tokenEstimate';
+
+export { readTpmEstimate, TPM_ESTIMATE, type TpmEstimate } from './tokenEstimate';
 
 // A single shared encoder, lazily initialized. cl100k_base is a reasonable,
 // provider-neutral proxy for admission *estimates* — this number is only used to
@@ -85,22 +87,43 @@ export function estimateMessageTokens(messages: unknown[]): number {
 
 // ── Which count the reservation uses ─────────────────────────────────────────────────────────────
 
-export type TpmEstimate = 'tokenizer' | 'fast';
-
 /**
- * NEXUS_TPM_ESTIMATE: `tokenizer` (the default, as before) counts a reservation's input with the
- * tokenizer; `fast` uses `estimateMessageTokens`. Read once, at load: the reservation is computed
- * on every request, and reading the environment costs about a microsecond each time.
+ * A request's TPM reservation, as routing uses it.
+ *
+ * With NEXUS_TPM_ESTIMATE=fast it starts as the estimate, which errs high. Routing calls
+ * `makeExact()` when that estimate is bigger than a candidate key's WHOLE limit: such a key would
+ * refuse the request even with nothing else in its window, every time it was asked, although the
+ * exact count may well fit. So a refusal on size is always decided on the tokenizer's count, and
+ * the tokenizer runs only for prompts that big. With the tokenizer (the default) it is exact from
+ * the start, and `makeExact()` does nothing.
  */
-export function readTpmEstimate(raw = process.env.NEXUS_TPM_ESTIMATE): TpmEstimate {
-  const value = raw?.trim().toLowerCase();
-  if (!value || value === 'tokenizer') return 'tokenizer';
-  if (value === 'fast') return 'fast';
-  console.warn(`⚠️  NEXUS_TPM_ESTIMATE="${raw}" was ignored — use "tokenizer" or "fast". Using tokenizer.`);
-  return 'tokenizer';
+export interface TokenReserve {
+  /** Tokens to reserve: the estimate until `makeExact()` runs, then the tokenizer's count. */
+  readonly tokens: number;
+  /** True once `tokens` is the tokenizer's count. */
+  readonly exact: boolean;
+  /** Count with the tokenizer (once) and reserve that from here on. Returns the new `tokens`. */
+  makeExact(): number;
 }
 
-const TPM_ESTIMATE: TpmEstimate = readTpmEstimate();
+/** The reservation for one request: its input, counted per NEXUS_TPM_ESTIMATE, plus its output allowance. */
+export function planReserve(messages: unknown[], maxTokens: number | undefined, defaultMaxTokens: number): TokenReserve {
+  const output = typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : defaultMaxTokens;
+  if (TPM_ESTIMATE !== 'fast') {
+    const tokens = countMessageTokens(messages) + output;
+    return { tokens, exact: true, makeExact: () => tokens };
+  }
+  let tokens = estimateMessageTokens(messages) + output;
+  let exact = false;
+  return {
+    get tokens() { return tokens; },
+    get exact() { return exact; },
+    makeExact() {
+      if (!exact) { tokens = countMessageTokens(messages) + output; exact = true; }
+      return tokens;
+    },
+  };
+}
 
 /**
  * Tokens to reserve for one request: estimated input + the (bounded) output the
@@ -108,7 +131,5 @@ const TPM_ESTIMATE: TpmEstimate = readTpmEstimate();
  * reserve is used; reconciliation later corrects the reservation to actuals.
  */
 export function computeReserve(messages: unknown[], maxTokens: number | undefined, defaultMaxTokens: number): number {
-  const input = TPM_ESTIMATE === 'fast' ? estimateMessageTokens(messages) : countMessageTokens(messages);
-  const output = typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : defaultMaxTokens;
-  return input + output;
+  return planReserve(messages, maxTokens, defaultMaxTokens).tokens;
 }

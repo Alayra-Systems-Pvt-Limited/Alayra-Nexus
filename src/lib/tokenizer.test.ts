@@ -168,3 +168,46 @@ describe('computeReserve — which count it uses', () => {
     expect(mod.computeReserve(chinese, 100, 2048)).toBeGreaterThanOrEqual(countMessageTokens(chinese) + 100);
   });
 });
+
+describe('planReserve — an estimate that can be made exact', () => {
+  const english = [{ role: 'user', content: 'Count every token of this prompt before routing it, please. '.repeat(40) }];
+
+  async function loadWith(value: string) {
+    vi.stubEnv('NEXUS_TPM_ESTIMATE', value);
+    vi.resetModules();
+    return import('./tokenizer');
+  }
+
+  it('is exact from the start by default, and making it exact changes nothing', async () => {
+    const mod = await loadWith('');
+    const plan = mod.planReserve(english, 100, 2048);
+    expect(plan.exact).toBe(true);
+    expect(plan.tokens).toBe(mod.countMessageTokens(english) + 100);
+    encodes.n = 0;
+    expect(plan.makeExact()).toBe(plan.tokens);
+    expect(encodes.n).toBe(0);
+  });
+
+  it('with fast, starts as the estimate and becomes the exact count once asked', async () => {
+    const mod = await loadWith('fast');
+    encodes.n = 0;
+    const plan = mod.planReserve(english, 100, 2048);
+    expect(plan.exact).toBe(false);
+    expect(plan.tokens).toBe(mod.estimateMessageTokens(english) + 100);
+    expect(encodes.n).toBe(0);
+
+    expect(plan.makeExact()).toBe(mod.countMessageTokens(english) + 100);
+    expect(plan.exact).toBe(true);
+    expect(plan.tokens).toBe(mod.countMessageTokens(english) + 100);
+  });
+
+  it('with fast, counts with the tokenizer only once however often it is asked', async () => {
+    const mod = await loadWith('fast');
+    const plan = mod.planReserve(english, undefined, 2048);
+    encodes.n = 0;
+    plan.makeExact();
+    plan.makeExact();
+    expect(encodes.n).toBe(1);
+    expect(plan.tokens).toBe(mod.countMessageTokens(english) + 2048);
+  });
+});
