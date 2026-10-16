@@ -9,6 +9,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+
+- **`@alayrasystems/nexus-core` exports `warmTokenizer()`.** A host calls it once each process is
+  listening, and the tokenizer's data (0.3-0.4 s to load) loads in the background, so the first
+  request that counts tokens does not wait for it. The gateway's own server does this already.
+
 ### Fixed
 
 - **One long unbroken word can no longer stall the gateway for seconds.** Nexus counts a chat
