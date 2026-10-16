@@ -28,6 +28,7 @@ vi.mock('../lib/prisma', () => ({ dbEngine: 'postgres', prisma: {} }));
 vi.mock('../lib/redis',  () => ({ redis: { get: vi.fn(), set: vi.fn(), del: vi.fn() } }));
 vi.mock('./settings.service', () => ({
   getSetting: vi.fn(async () => store.value),
+  readSettingFresh: vi.fn(async () => store.value),
   setSetting: vi.fn(async (_k: string, v: string) => { store.value = v; }),
 }));
 

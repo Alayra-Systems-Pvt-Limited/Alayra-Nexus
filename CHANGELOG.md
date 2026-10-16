@@ -9,6 +9,42 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Added
+
+- **Settings, the model registry and the active pools can be refreshed in the background.** With
+  the new `MEMO_MAX_STALE_MS` set (for example `30000`), a value whose few-second memo window has
+  passed is still served while one background read replaces it, so no request waits on that read
+  and, with a large registry, no request pays every few seconds for re-reading it. The setting is
+  the oldest such a value may be when it is served: past it, the request waits for a fresh read, as
+  before. It is capped at 30 seconds and is off by default (`0`), which keeps today's behaviour:
+  nothing older than its own window (`SETTING_MEMO_TTL_MS`, `REGISTRY_MEMO_TTL_MS`,
+  `PROVIDER_MEMO_TTL_MS`, five seconds each) is served. **With it on, a change made on one instance
+  can take up to that long to reach an instance that has been idle;** under steady traffic it still
+  arrives within about the window. The master key's hash is never served this way, so a key
+  rotation still reaches every instance within its five seconds. A background read that fails keeps
+  the last good value, is logged (at most every 30 seconds per value, and again when it recovers),
+  and never leaves the value empty.
+
+### Changed
+
+- **One read when a memo expires, and the registry parsed only when it changes.** Requests that
+  find a memoised setting, registry or pool list expired now share one read instead of each making
+  its own. A registry read whose text has not changed reuses the models already parsed: at 5,000
+  models that skips about 15 ms of JSON parsing plus normalising every entry, for a comparison well
+  under a millisecond and the last text kept in memory (about 2 MB).
+
+### Fixed
+
+- **A change is no longer undone on the instance that made it.** A memo read already under way when
+  this instance changed a setting, the registry or the pools could finish after the change and store
+  the value from before it, so the instance that made the change served the old value for up to the
+  memo window. Such a read is now discarded. The registry and pool memos are also dropped when Redis
+  refuses the delete that invalidates the shared copy.
+- **The shared registry copy is rebuilt from the stored setting, not from this instance's memo of
+  it.** When the copy was missing, an instance rebuilt it through its settings memo, which could
+  still hold the registry from before another instance's change, and wrote that back as the copy
+  every instance reads, for a minute.
+
 ## [1.8.0] - 2026-10-16
 
 ### Added

@@ -16,10 +16,11 @@
 
 import { redis }                  from '../lib/redis';
 import { coreStores } from '../core/stores';
-import { getSetting, setSetting } from './settings.service';
+import { setSetting }            from './settings.service';
 import { REGISTRY_CACHE_KEY }    from '../lib/registryCacheKey';
 import { getActiveProviders }    from './providerCache.service';
 import { TtlMemo }               from '../lib/ttlMemo';
+import { loadRegistry }          from './registrySnapshot';
 import { CAPABILITIES, type Capability } from '../lib/modelSelect';
 import { readExtraPrices, type ExtraPrices } from '../lib/usagePrice';
 
@@ -90,11 +91,6 @@ const PRICE_FIELDS = [
 export class ModelNotFoundError extends Error {
   constructor(id: string) { super(`Model not found: ${id}`); this.name = 'ModelNotFoundError'; }
 }
-
-// The registry starts empty and is populated from the operator's pools on first boot
-// (see reconcilePoolsToRegistry). Shipping phantom default models would route requests
-// to providers the operator never configured.
-const DEFAULT_REGISTRY: AiModel[] = [];
 
 const TIER_DEFAULT_PRIORITY: Record<string, number> = { premium: 1, standard: 2, fast: 3 };
 
@@ -168,46 +164,19 @@ function inferPricingSource(raw: Record<string, unknown>, num: (v: unknown, d?: 
  * A few seconds in front of the Redis copy. Measured with `npm run bench:store-ops`, this key
  * was fetched TWICE per request — free against the in-process map standalone mode uses, two
  * network round trips against a real Redis, on a registry an operator edits from a dashboard.
- * See lib/ttlMemo.ts for what the window costs.
+ * See lib/ttlMemo.ts for what the window costs, and registrySnapshot.ts for how a read that finds
+ * the registry unchanged skips parsing it.
  */
-const registryMemo = new TtlMemo<AiModel[]>(5_000, 'REGISTRY_MEMO_TTL_MS');
+const registryMemo = new TtlMemo<AiModel[]>(5_000, 'REGISTRY_MEMO_TTL_MS', 'the model registry');
 
 /** Drop the in-process registry memo. Backs `POST /admin/cache/flush`, which clears the shared
  * copy directly and must clear this one too or the button appears to do nothing for a few
  * seconds. */
 export function clearRegistryMemo(): void { registryMemo.forget(); }
 
+/** Every registry model, normalised. Shared and read-only: callers filter or copy, never modify. */
 export async function getModelRegistry(): Promise<AiModel[]> {
-  const local = registryMemo.get(REGISTRY_CACHE_KEY);
-  if (local !== undefined) return local;
-
-  const cached = await redis.get(REGISTRY_CACHE_KEY);
-  if (cached) {
-    try {
-      const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed)) {
-        // Normalized here too, not just on the database path. The cached copy is whatever some
-        // process serialized earlier — including a process running the PREVIOUS release, which
-        // knew nothing about fields added since. Returning it raw silently breaks the invariant
-        // every caller relies on ("a registry model has every field"): after this upgrade, a
-        // pre-upgrade cache entry has no `pricingSource`, so unpriced models would go on being
-        // treated as free by cost routing until the key expired. The 60s TTL bounds that to a
-        // minute, but a minute of wrong routing is still wrong, and the next field added would
-        // reopen the same hole. Normalizing costs one pass over a few dozen objects, at most
-        // once per memo window.
-        const models = parsed.map((m) => normalizeModel(m as Record<string, unknown>));
-        registryMemo.set(REGISTRY_CACHE_KEY, models);
-        return models;
-      }
-    } catch { /* fall through */ }
-  }
-  const raw = await getSetting('AI_MODEL_REGISTRY');
-  let stored: unknown[] = DEFAULT_REGISTRY;
-  if (raw && raw !== '[]') { try { const p = JSON.parse(raw); if (Array.isArray(p)) stored = p; } catch { /* use defaults */ } }
-  const models = stored.map((m) => normalizeModel(m as Record<string, unknown>));
-  await redis.set(REGISTRY_CACHE_KEY, JSON.stringify(models), 'EX', 60);
-  registryMemo.set(REGISTRY_CACHE_KEY, models);
-  return models;
+  return registryMemo.load(REGISTRY_CACHE_KEY, () => loadRegistry(normalizeModel));
 }
 
 /**
@@ -257,8 +226,8 @@ export async function reconcilePoolsToRegistry(): Promise<number> {
 
 export async function updateModelRegistry(models: AiModel[]): Promise<void> {
   await setSetting('AI_MODEL_REGISTRY', JSON.stringify(models));
-  await redis.del(REGISTRY_CACHE_KEY);
-  registryMemo.forget();
+  // Forgotten even when Redis refuses the delete: the writer is never stale about its own change.
+  try { await redis.del(REGISTRY_CACHE_KEY); } finally { registryMemo.forget(); }
 }
 
 /**

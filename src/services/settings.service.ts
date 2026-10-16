@@ -48,42 +48,44 @@
 // every extra second after that buys a rounding error while widening the window in which two
 // instances disagree about, say, whether guardrails are on.
 //
-// SETTING_MEMO_TTL_MS=0 disables the memo and restores a Redis round trip per read.
+// SETTING_MEMO_TTL_MS=0 disables the memo and restores a Redis round trip per read. MEMO_MAX_STALE_MS
+// (lib/ttlMemo.ts) lets an expired setting be served while one background read replaces it, for at
+// most that long after it was read — except the master key's hash, below.
 
 import { coreStores } from '../core/stores';
 import { redis }  from '../lib/redis';
+import { TtlMemo } from '../lib/ttlMemo';
 
 const CACHE_TTL = 300; // 5 min, in Redis
 
-const DEFAULT_MEMO_TTL_MS = 5_000;
+/** Per-process, and holding `null` as a real value — an unset setting is read just as often. */
+const memo = new TtlMemo<string | null>(5_000, 'SETTING_MEMO_TTL_MS', 'the setting');
 
-function memoTtlMs(): number {
-  const raw = Number(process.env.SETTING_MEMO_TTL_MS);
-  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_MEMO_TTL_MS;
+/**
+ * Settings never served past their own window. The gateway's master key is checked against this
+ * hash on every request, and a rotation is how an operator shuts out a leaked key: it must reach
+ * every instance within the few seconds it always has, whatever MEMO_MAX_STALE_MS says.
+ */
+const NEVER_STALE = new Set(['NEXUS_API_KEY_HASH']);
+
+export function getSetting(key: string): Promise<string | null> {
+  return memo.load(key, () => readSettingFresh(key), { stale: !NEVER_STALE.has(key) });
 }
 
-/** Per-process, and holding `null` as a real value — an unset setting is read just as often. */
-const memo = new Map<string, { value: string | null; expiresAt: number }>();
-
-export async function getSetting(key: string): Promise<string | null> {
-  const ttl = memoTtlMs();
-  const now = Date.now();
-
-  if (ttl > 0) {
-    const hit = memo.get(key);
-    if (hit !== undefined && now < hit.expiresAt) return hit.value;
-  }
-
+/**
+ * A setting read past this process's memo: the shared copy, else the database.
+ *
+ * For a reader that memoises what it builds from the value — the model registry is the one today.
+ * Reading through this memo as well would stack the two windows, and worse: that reader writes what
+ * it built back to Redis as the copy every instance reads, so an old value held here would be handed
+ * to all of them for as long as that copy lives.
+ */
+export async function readSettingFresh(key: string): Promise<string | null> {
   const cached = await redis.get(`nexus:setting:${key}`);
-  if (cached !== null) {
-    const value = cached === '__null__' ? null : cached;
-    if (ttl > 0) memo.set(key, { value, expiresAt: now + ttl });
-    return value;
-  }
+  if (cached !== null) return cached === '__null__' ? null : cached;
 
   const value = await (await coreStores()).settings.get(key);
   await redis.set(`nexus:setting:${key}`, value ?? '__null__', 'EX', CACHE_TTL);
-  if (ttl > 0) memo.set(key, { value, expiresAt: now + ttl });
   return value;
 }
 
@@ -92,8 +94,7 @@ export async function setSetting(key: string, value: string): Promise<void> {
   await redis.set(`nexus:setting:${key}`, value, 'EX', CACHE_TTL);
   // Written through rather than dropped, so the instance that made the change never reads its own
   // stale value back — and so the next read does not pay a round trip to learn what we just wrote.
-  const ttl = memoTtlMs();
-  if (ttl > 0) memo.set(key, { value, expiresAt: Date.now() + ttl });
+  memo.set(key, value);
 }
 
 /**
@@ -103,6 +104,5 @@ export async function setSetting(key: string, value: string): Promise<void> {
  * remember" — and is also how a test with no interest in the memo opts out of it.
  */
 export function clearSettingMemo(key?: string): void {
-  if (key === undefined) memo.clear();
-  else memo.delete(key);
+  memo.forget(key);
 }
