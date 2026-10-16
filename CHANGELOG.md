@@ -34,6 +34,17 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   next one. The reservation is corrected to the provider's reported usage afterwards, as before.
   The default, `tokenizer`, behaves exactly as before. Usage rows, and the count recorded when a
   provider reports no usage, keep using the tokenizer; the estimate is never used for cost.
+- **Usage above a TPM reservation can now count against the key: `NEXUS_TPM_RECONCILE=two-way`.**
+  When an answer comes back, Nexus corrects the key's per-minute window from the reservation to
+  the usage the provider reported. Until now it only ever gave tokens back: when a request used
+  more than it reserved (a provider whose tokenizer counts more than cl100k, or an estimate that
+  ran low), the excess was never added, so the window under-counted that key for the rest of the
+  minute and could admit past its limit. With `two-way`, the excess is added to the current window
+  in the same single Redis call a refund makes (a new script, `CHARGE_LUA`, with an in-memory twin
+  and its own parity test). A request that spans a minute boundary adds its excess to the new
+  minute, exactly as a refund already lands there. The default, `refund`, behaves exactly as before.
+  It pairs with `NEXUS_TPM_ESTIMATE=fast`, and is useful on its own for providers whose counts
+  run above cl100k's.
 
 ## [1.8.0] - 2026-10-16
 
