@@ -23,7 +23,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getEncoding } from 'js-tiktoken';
-import { countCl100k, heapMerge, utf8Bytes, SLICE_BYTES } from './bpeCount';
+import { countCl100k, heapMerge, loadCl100k, utf8Bytes, SLICE_BYTES } from './bpeCount';
 import { countMessageTokens, countTokens } from './tokenizer';
 
 const tiktoken = getEncoding('cl100k_base');
@@ -215,9 +215,10 @@ describe('countCl100k — one piece longer than SLICE_BYTES', () => {
 
   it('keeps its working memory bounded however long the piece', () => {
     const text = draw(RUNS.letters, 4 * MiB, 3);
+    loadCl100k(); // the ranks' own tables (about 6 MiB) are not working memory
     const before = process.memoryUsage().arrayBuffers;
     countCl100k(text);
-    // Merged whole, a 4 MiB piece needs about 144 MiB of scratch; sliced, under 3 MiB.
+    // Merged whole, a 4 MiB piece needs about 160 MiB of scratch; sliced, under 3 MiB.
     expect(process.memoryUsage().arrayBuffers - before).toBeLessThan(16 * MiB);
   }, 60_000);
 });

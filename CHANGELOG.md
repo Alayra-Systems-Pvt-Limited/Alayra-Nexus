@@ -9,6 +9,29 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Fixed
+
+- **One long unbroken word can no longer stall the gateway for seconds.** Nexus counts a chat
+  request's tokens with the cl100k tokenizer before routing it, to reserve them against a key's
+  tokens-per-minute limit, and after the answer when the provider reports no usage. The tokenizer
+  library's merge step took time that grew with the square of an unbroken run of letters, spaces
+  or punctuation: 2 KB took about half a second and 16 KB half a minute or more, and even ordinary
+  Chinese or Japanese took 8-12 s a MB. It ran on the event loop, so every other request on that
+  process waited. Nexus now counts with its own implementation of the same tokenizer: the same
+  vocabulary, pattern and merge rule, read from the same package, with the next merge found through
+  a priority queue, as the reference tokenizer does, and each pair looked up by its two token
+  numbers instead of by its text. Time now grows with the length of the text. On a development PC a
+  16 KB run takes under 5 ms, 1 MB of ordinary text (English, code, JSON, Chinese) about 0.1-0.2 s,
+  1 MB of any shape at most about 0.4 s, and a 32 MB `/v1/messages` body at most about 10 s. Counts
+  are unchanged: identical on a 4 MB corpus of real text (English, code, JSON, markdown, ten other
+  languages, emoji, base64, URLs, minified JavaScript, recorded chat payloads) and on 4,000
+  generated strings. The one exception is a single run over 64 KB with no space, digit or
+  punctuation mark to break it, which real text does not have. It is counted in 64 KB slices with
+  8 tokens added at each cut, four times the most a cut lowered a count in 52,500 measured cuts, so
+  it counts at or above the exact count and at most 11 tokens a cut above it. The tokenizer's data
+  now also loads in the background once the server is listening, instead of during the first
+  request that needs it.
+
 ## [1.8.5] - 2026-10-17
 
 ### Added

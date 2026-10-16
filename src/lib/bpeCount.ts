@@ -25,8 +25,9 @@
 //
 // This counts the same tokens from the same data (js-tiktoken's own cl100k ranks and piece pattern)
 // by the same rule. Only the search for the next pair changes, the way tiktoken itself does it: a
-// scan over integer ranks for a short piece, and for a long one a min-heap of (rank, start) over a
-// linked list of parts, so a piece of n bytes costs about n log n. Every count is identical to
+// scan for a short piece, and for a long one a min-heap of (rank, start) over a linked list of
+// parts, so a piece of n bytes costs about n log n. And a pair is looked up by its two token ranks
+// in a table built once, never by building and hashing a string. Every count is identical to
 // js-tiktoken's (bpeCount.test.ts checks a corpus of real text and thousands of generated strings).
 //
 // One exception keeps memory bounded. A single piece over SLICE_BYTES (64 KiB with no space, digit
@@ -42,21 +43,61 @@ interface Ranks { pat_str: string; special_tokens: Record<string, number>; bpe_r
 interface Cl100k {
   /** Token rank by its bytes, each byte one char of a binary (latin1) string. */
   ranks: Map<string, number>;
-  /** The longest token, in bytes: no longer pair needs a lookup. */
-  longest: number;
+  /** The rank of each single byte, which every piece starts as. */
+  byteRank: Int32Array;
   pieces: RegExp;
   special: RegExp;
 }
 
 /** Pieces up to this many bytes are merged by a scan, as tiktoken does below 100 bytes. */
 const SCAN_BYTES = 64;
-/** A longer piece is merged in slices of at most this many bytes: ~36 bytes of scratch per byte. */
+/** A longer piece is merged in slices of at most this many bytes: ~40 bytes of scratch per byte. */
 export const SLICE_BYTES = 64 * 1024;
 /** Tokens added per cut, so a sliced piece never counts below its exact count. */
 const CUT_MARGIN = 8;
 
 const NONE = 0x7fffffff;
 let data: Cl100k | null = null;
+
+// ── The pair table ──────────────────────────────────────────────────────────────────────────────
+//
+// Every part of a piece is a token, so whether two neighbours merge, and into what, depends only on
+// their two ranks. This table answers that for every pair of tokens whose bytes join into a token
+// (open addressing on Int32Arrays), so a merge never builds a string or hashes one.
+
+let pairLeft = new Int32Array(0), pairRight = new Int32Array(0), pairJoined = new Int32Array(0);
+let pairMask = 0, pairShift = 0;
+
+const pairSlot = (left: number, right: number): number =>
+  Math.imul(Math.imul(left, 0x9e3779b1) ^ right, 0x85ebca6b) >>> pairShift;
+
+/** The rank of the token `left` and `right` join into, or NONE. */
+function joined(left: number, right: number): number {
+  for (let i = pairSlot(left, right); ; i = (i + 1) & pairMask) {
+    const l = pairLeft[i];
+    if (l === left && pairRight[i] === right) return pairJoined[i];
+    if (l === -1) return NONE;
+  }
+}
+
+function buildPairs(ranks: Map<string, number>): void {
+  const left: number[] = [], right: number[] = [], into: number[] = [];
+  for (const [bytes, rank] of ranks) {
+    for (let k = 1; k < bytes.length; k++) {
+      const a = ranks.get(bytes.substring(0, k)), b = ranks.get(bytes.substring(k));
+      if (a !== undefined && b !== undefined) { left.push(a); right.push(b); into.push(rank); }
+    }
+  }
+  let bits = 1;
+  while (1 << bits < left.length * 1.6) bits++; // at most 5/8 full
+  pairMask = (1 << bits) - 1; pairShift = 32 - bits;
+  pairLeft = new Int32Array(1 << bits).fill(-1); pairRight = new Int32Array(1 << bits); pairJoined = new Int32Array(1 << bits);
+  for (let e = 0; e < left.length; e++) {
+    let i = pairSlot(left[e], right[e]);
+    while (pairLeft[i] !== -1) i = (i + 1) & pairMask;
+    pairLeft[i] = left[e]; pairRight[i] = right[e]; pairJoined[i] = into[e];
+  }
+}
 
 function load(): Cl100k {
   // The rank file alone, rather than js-tiktoken's index, which loads every encoding it ships.
@@ -65,20 +106,18 @@ function load(): Cl100k {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const src = require('js-tiktoken/ranks/cl100k_base') as Ranks;
   const ranks = new Map<string, number>();
-  let longest = 0;
   for (const line of src.bpe_ranks.split('\n')) {
     if (!line) continue;
     const fields = line.split(' ');
     const offset = Number.parseInt(fields[1], 10);
-    for (let i = 2; i < fields.length; i++) {
-      const bytes = Buffer.from(fields[i], 'base64').toString('latin1');
-      ranks.set(bytes, offset + i - 2);
-      if (bytes.length > longest) longest = bytes.length;
-    }
+    for (let i = 2; i < fields.length; i++) ranks.set(Buffer.from(fields[i], 'base64').toString('latin1'), offset + i - 2);
   }
+  buildPairs(ranks);
+  const byteRank = new Int32Array(256);
+  for (let b = 0; b < 256; b++) byteRank[b] = ranks.get(String.fromCharCode(b)) ?? NONE;
   const escape = (s: string) => s.replace(/[\\^$*+?.()|[\]{}]/g, '\\$&');
   return {
-    ranks, longest,
+    ranks, byteRank,
     pieces: new RegExp(src.pat_str, 'gu'),
     special: new RegExp(Object.keys(src.special_tokens).map(escape).join('|')),
   };
@@ -89,37 +128,32 @@ export function loadCl100k(): void {
   data ??= load();
 }
 
-function rankOf(d: Cl100k, bytes: string, from: number, to: number): number {
-  if (to - from > d.longest) return NONE;
-  return d.ranks.get(bytes.substring(from, to)) ?? NONE;
-}
+// ── A short piece: scan the pairs for the lowest rank ───────────────────────────────────────────
 
-// ── A short piece: scan the pairs' ranks for the lowest ─────────────────────────────────────────
-
-const starts = new Int32Array(SCAN_BYTES + 1), pairRanks = new Int32Array(SCAN_BYTES + 1);
+const parts = new Int32Array(SCAN_BYTES), pairRanks = new Int32Array(SCAN_BYTES);
 
 function scanMerge(d: Cl100k, bytes: string): number {
-  const n = bytes.length;
-  for (let i = 0; i <= n; i++) starts[i] = i;
-  for (let i = 0; i + 1 < n; i++) pairRanks[i] = rankOf(d, bytes, i, i + 2);
-  let parts = n;
-  while (parts > 1) {
+  let n = bytes.length;
+  for (let i = 0; i < n; i++) parts[i] = d.byteRank[bytes.charCodeAt(i)];
+  for (let i = 0; i + 1 < n; i++) pairRanks[i] = joined(parts[i], parts[i + 1]);
+  while (n > 1) {
     let best = NONE, at = -1;
-    for (let i = 0; i < parts - 1; i++) if (pairRanks[i] < best) { best = pairRanks[i]; at = i; }
+    for (let i = 0; i < n - 1; i++) if (pairRanks[i] < best) { best = pairRanks[i]; at = i; }
     if (at < 0) break;
-    starts.copyWithin(at + 1, at + 2, parts + 1);
-    pairRanks.copyWithin(at + 1, at + 2, parts - 1);
-    parts--;
-    if (at < parts - 1) pairRanks[at] = rankOf(d, bytes, starts[at], starts[at + 2]);
-    if (at > 0) pairRanks[at - 1] = rankOf(d, bytes, starts[at - 1], starts[at + 1]);
+    parts[at] = best;
+    parts.copyWithin(at + 1, at + 2, n);
+    pairRanks.copyWithin(at + 1, at + 2, n - 1);
+    n--;
+    if (at < n - 1) pairRanks[at] = joined(best, parts[at + 1]);
+    if (at > 0) pairRanks[at - 1] = joined(parts[at - 1], best);
   }
-  return parts;
+  return n;
 }
 
 // ── A long piece: a min-heap of (rank, start) over a linked list of parts ───────────────────────
 
 const POS = 2 ** 32;
-let next = new Int32Array(0), prev = new Int32Array(0), rankAt = new Int32Array(0);
+let next = new Int32Array(0), prev = new Int32Array(0), token = new Int32Array(0), rankAt = new Int32Array(0);
 let heap = new Float64Array(0), size = 0;
 
 function push(key: number): void {
@@ -150,33 +184,33 @@ export function heapMerge(bytes: string, from = 0, to = bytes.length): number {
   const n = to - from;
   if (n < 2) return n;
   if (next.length < n) {
-    next = new Int32Array(n); prev = new Int32Array(n); rankAt = new Int32Array(n);
+    next = new Int32Array(n); prev = new Int32Array(n); token = new Int32Array(n); rankAt = new Int32Array(n);
     heap = new Float64Array(3 * n); // n - 1 first pairs, then at most two per merge
   }
   size = 0;
-  for (let i = 0; i < n; i++) { next[i] = i + 1; prev[i] = i - 1; }
+  for (let i = 0; i < n; i++) { next[i] = i + 1; prev[i] = i - 1; token[i] = d.byteRank[bytes.charCodeAt(from + i)]; }
   for (let i = 0; i + 1 < n; i++) {
-    const r = rankOf(d, bytes, from + i, from + i + 2);
+    const r = joined(token[i], token[i + 1]);
     rankAt[i] = r;
     if (r !== NONE) push(r * POS + i);
   }
   rankAt[n - 1] = NONE;
-  let parts = n;
+  let count = n;
   while (size > 0) {
     const key = pop(), r = Math.floor(key / POS), s = key - r * POS;
     if (rankAt[s] !== r) continue; // stale: the pair at s changed, or s was merged away
     const t = next[s], u = next[t];
-    next[s] = u; if (u < n) prev[u] = s;
-    rankAt[t] = -1; parts--;
-    const right = u < n ? rankOf(d, bytes, from + s, from + next[u]) : NONE;
+    token[s] = r; next[s] = u; if (u < n) prev[u] = s;
+    rankAt[t] = -1; count--;
+    const right = u < n ? joined(r, token[u]) : NONE;
     rankAt[s] = right; if (right !== NONE) push(right * POS + s);
     const p = prev[s];
     if (p >= 0) {
-      const left = rankOf(d, bytes, from + p, from + u);
+      const left = joined(token[p], r);
       rankAt[p] = left; if (left !== NONE) push(left * POS + p);
     }
   }
-  return parts;
+  return count;
 }
 
 /** Tokens of one piece over SCAN_BYTES: exact up to SLICE_BYTES, then sliced (see above). */
