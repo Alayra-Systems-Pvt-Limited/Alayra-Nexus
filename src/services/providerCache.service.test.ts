@@ -89,7 +89,7 @@ describe('getActiveProviders', () => {
     expect(arg.select).toBeDefined();
     expect(arg.select.createdAt).toBeUndefined();
     expect(Object.keys(arg.select).sort()).toEqual([
-      'authHeader', 'authPrefix', 'baseUrl', 'extraHeaders', 'id', 'preferredModel', 'provider', 'tier',
+      'authHeader', 'authPrefix', 'baseUrl', 'extraHeaders', 'id', 'nativeMessages', 'preferredModel', 'provider', 'tier',
     ]);
   });
 

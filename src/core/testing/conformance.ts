@@ -63,7 +63,7 @@ const providerCases: ConformanceCase[] = [
       assert.deepEqual(rows[1], {
         id: 'pool-anthropic', baseUrl: 'https://api.anthropic.com', provider: 'anthropic',
         authHeader: 'x-api-key', authPrefix: null, tier: 'premium', preferredModel: 'claude-x',
-        extraHeaders: '{"anthropic-version":"2023-06-01"}',
+        extraHeaders: '{"anthropic-version":"2023-06-01"}', nativeMessages: '{"allow":["speed"]}',
       });
     },
   },

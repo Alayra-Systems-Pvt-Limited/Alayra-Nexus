@@ -151,6 +151,7 @@ export const COLUMN_FACTS: ColumnFacts = {
     modelFetchUrl: 'opt:nodef',
     modelIdPath: 'req:def',
     name: 'req:nodef',
+    nativeMessages: 'opt:nodef',
     preferredModel: 'opt:nodef',
     provider: 'req:nodef',
     slug: 'req:nodef',

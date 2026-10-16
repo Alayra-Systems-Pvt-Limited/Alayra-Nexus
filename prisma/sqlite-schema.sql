@@ -23,7 +23,8 @@ CREATE TABLE "NexusProvider" (
     "preferredModel" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "updatedAt" DATETIME NOT NULL,
+    "nativeMessages" TEXT
 );
 
 -- CreateTable

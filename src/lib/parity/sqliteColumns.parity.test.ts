@@ -68,10 +68,11 @@ const columnsOf = async (db: PrismaClient, table: string) =>
 const select = { inputTokens: true, outputTokens: true, totalTokens: true, estimatedUsd: true, ...Object.fromEntries(Object.keys(KINDS).map((k) => [k, true])) };
 
 describe('the column list', () => {
-  it('names only nullable INTEGER columns that the committed DDL has', () => {
+  it('names only nullable columns that the committed DDL has, with the same type', () => {
     for (const c of ADDED_COLUMNS) {
       const line = tableBody(DDL, c.table).split('\n').map((l) => l.trim()).find((l) => l.startsWith(`"${c.column}" `));
-      expect(line, `${c.table}.${c.column} is not in prisma/sqlite-schema.sql`).toBe(`"${c.column}" ${c.type},`);
+      // A table's last column has no trailing comma.
+      expect(line?.replace(/,$/, ''), `${c.table}.${c.column} is not in prisma/sqlite-schema.sql`).toBe(`"${c.column}" ${c.type}`);
     }
   });
 
@@ -117,7 +118,9 @@ describe('booting a database created by 1.7.0', () => {
     const fresh = emptyDatabase();
     const r = await ensureSqliteSchema(fresh);
     expect(r).toMatchObject({ created: true, added: [] });
-    expect(await columnsOf(upgraded, 'TokenUsage')).toEqual(await columnsOf(fresh, 'TokenUsage'));
+    for (const table of new Set(ADDED_COLUMNS.map((c) => c.table))) {
+      expect(await columnsOf(upgraded, table)).toEqual(await columnsOf(fresh, table));
+    }
     await Promise.all([upgraded.$disconnect(), fresh.$disconnect()]);
   });
 

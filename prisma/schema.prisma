@@ -29,6 +29,12 @@ model NexusProvider {
   isActive       Boolean    @default(true)
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+  // How this pool serves Anthropic Messages requests in Anthropic's own format (read only for the
+  // `anthropic` provider; see services/proxy/anthropicPolicy.ts). A JSON object string, e.g.
+  // {"enabled":true,"allow":["speed"]}. null means the defaults: native only when the auth header
+  // is x-api-key, and only request fields Nexus can price are forwarded. Last, so a SQLite file that
+  // gains it later (lib/sqliteColumns.ts) ends with the same column order as a fresh one.
+  nativeMessages String?
   keys           NexusKey[]
 }
 

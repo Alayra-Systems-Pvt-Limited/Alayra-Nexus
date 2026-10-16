@@ -27,9 +27,13 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   the request is either scanned or already forwarded unscanned today; anything else keeps the
   translated path. Admission, routing, sticky keys, budgets, the time limits and the hang-up
   handling are the same on both paths, and deciding costs no database or Redis call. A native
-  answer is not stored in the response cache. **For `@alayrasystems/nexus-core` hosts:**
-  `handleAnthropicMessages` serves `/v1/messages` this way; `createAnthropicReply` now also
-  returns `passThrough()`.
+  answer is not stored in the response cache. A pool can carry settings for this path in the new
+  nullable `NexusProvider.nativeMessages` column, set through the admin API: PostgreSQL gets
+  migration `0021_provider_native_messages` (additive, gives up after five seconds), and a
+  standalone SQLite file created by an earlier version gains the column at start. **For
+  `@alayrasystems/nexus-core` hosts:** `handleAnthropicMessages` serves `/v1/messages` this way;
+  `createAnthropicReply` now also returns `passThrough()`; `ProviderRow` gains an optional
+  `nativeMessages`, which the conformance checks expect a store to return.
 - **Cache reads, cache writes and per-use server tools are priced at their own rates.** A usage
   row's cost, and so every team budget, used to price the whole prompt at the input price. With
   prompt caching working on Anthropic, that overstated a cached coding session about six times

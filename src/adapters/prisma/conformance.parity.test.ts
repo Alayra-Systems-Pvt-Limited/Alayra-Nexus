@@ -62,8 +62,8 @@ async function seed(db: PrismaClient, f: CoreFixture): Promise<void> {
     data: f.providers.map((p) => ({
       id: p.id, name: p.name, slug: p.slug, provider: p.provider, baseUrl: p.baseUrl,
       authHeader: p.authHeader, authPrefix: p.authPrefix, tier: p.tier, preferredModel: p.preferredModel,
-      extraHeaders: p.extraHeaders, modelFetchUrl: p.modelFetchUrl, modelIdPath: p.modelIdPath,
-      isActive: p.isActive, createdAt: p.createdAt,
+      extraHeaders: p.extraHeaders, nativeMessages: p.nativeMessages ?? null,
+      modelFetchUrl: p.modelFetchUrl, modelIdPath: p.modelIdPath, isActive: p.isActive, createdAt: p.createdAt,
     })),
   });
   await db.nexusKey.createMany({

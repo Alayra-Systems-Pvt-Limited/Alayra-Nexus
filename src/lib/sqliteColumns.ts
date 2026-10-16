@@ -18,9 +18,10 @@
 //
 // A standalone gateway builds its SQLite file once, from the committed DDL, and never upgrades it
 // (see sqliteBootstrap.ts). That held while no release added a column to a table a running gateway
-// already had. 1.8.0 adds six to TokenUsage, and a file created by an older version would fail
-// every usage write that carried one ("no such column"), the usage-by-day read and every backup:
-// the generated client names each column of the model, whether or not the file has it.
+// already had. 1.8.0 adds six to TokenUsage and one to NexusProvider, and a file created by an older
+// version would fail every usage write that carried one ("no such column"), every routing read, the
+// usage-by-day read and every backup: the generated client names each column of the model, whether
+// or not the file has it.
 //
 // So this adds exactly the columns listed below, and only to a table that exists and lacks them.
 // It is deliberately not a migration system: every entry is a NULLABLE column with no default, the
@@ -34,7 +35,7 @@ import type { PrismaClient } from '@prisma/client';
 export interface AddedColumn {
   table:  string;
   column: string;
-  type:   'INTEGER';
+  type:   'INTEGER' | 'TEXT';
 }
 
 /** Nullable columns added to an existing table since standalone mode shipped, oldest first. */
@@ -46,6 +47,8 @@ export const ADDED_COLUMNS: readonly AddedColumn[] = [
   { table: 'TokenUsage', column: 'cacheWrite1hTokens', type: 'INTEGER' },
   { table: 'TokenUsage', column: 'cacheMissTokens',    type: 'INTEGER' },
   { table: 'TokenUsage', column: 'reasoningTokens',    type: 'INTEGER' },
+  // 1.8.0: a pool's Anthropic Messages settings (services/proxy/anthropicPolicy.ts).
+  { table: 'NexusProvider', column: 'nativeMessages',  type: 'TEXT' },
 ];
 
 /** SQL identifiers here come from the constant above, never from input; quoting is for the casing. */
