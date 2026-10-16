@@ -109,8 +109,14 @@ describe('estimateTokens — errs high, never far', () => {
 
 describe('estimateTokens — whitespace and control characters never count low', () => {
   // Each of these once counted at a fraction of the tokenizer: tab shared the space's run, so a
-  // run of " \t" cost almost nothing, and \r rode along with \n at 0.04 a character.
+  // run of " \t" cost almost nothing, \r rode along with \n at 0.04 a character, a \r after \n\n
+  // was not seen as the new token it is, and C1 controls counted as accented letters.
   const crafted: Record<string, string> = {
+    'CR-LF-LF': '\r\n\n'.repeat(700),
+    'LF-CR-LF': '\n\r\n'.repeat(700),
+    'LF-LF-CR': '\n\n\r'.repeat(700),
+    'C1 controls': Array.from({ length: 32 }, (_, i) => String.fromCharCode(0x80 + i)).join('').repeat(30),
+    'C1 next line between words': 'a\u0085'.repeat(700),
     'space-tab': ' \t'.repeat(1_000),
     'tab-tab-space': '\t\t '.repeat(700),
     'tab-space': '\t '.repeat(1_000),
@@ -128,10 +134,22 @@ describe('estimateTokens — whitespace and control characters never count low',
   it.each(Object.entries(crafted))('counts %s at or above the tokenizer', (_kind, text) => {
     expect(estimateTokens(text)).toBeGreaterThanOrEqual(countTokens(text));
   });
+
+  it('counts every repeated mix of up to three spaces, tabs, line feeds and carriage returns high', () => {
+    const units = [' ', '\t', '\r', '\n'];
+    let patterns = units;
+    for (let length = 1; length <= 3; length++) {
+      for (const p of patterns) {
+        const text = p.repeat(Math.ceil(600 / p.length));
+        expect(estimateTokens(text), JSON.stringify(p)).toBeGreaterThanOrEqual(countTokens(text));
+      }
+      patterns = patterns.flatMap((p) => units.map((u) => p + u));
+    }
+  });
 });
 
 describe('estimateTokens — bounded by the UTF-8 byte count', () => {
-  it.each(['a', '!', ' ', '\n', '7', 'é', 'Ж', 'Ա', 'ع', 'अ', 'ა', '中', 'あ', '한', '“', '😀'])(
+  it.each(['a', '!', ' ', '\n', '7', '\u0085', 'é', 'Ж', 'Ա', 'ع', 'अ', 'ა', '中', 'あ', '한', '“', '😀'])(
     'never counts %j above its bytes',
     (ch) => {
       expect(estimateTokens(ch)).toBeGreaterThanOrEqual(1);
