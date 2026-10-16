@@ -245,10 +245,26 @@ describe("Anthropic's own event stream (the native passthrough)", () => {
     expect(t.usage()).toEqual({ input: 2310, output: null });
   });
 
+  it('keeps each part of the prompt when a later figure leaves it out, and takes cumulative ones as they come', () => {
+    const later = ev('message_delta', { type: 'message_delta', usage: {
+      input_tokens: 10, cache_read_input_tokens: null, cache_creation_input_tokens: 400, output_tokens: 42,
+      server_tool_use: { web_search_requests: 3 },
+    } });
+    const t = read(start + later);
+    expect(t.usage()).toEqual({ input: 2410, output: 42 });
+    expect(t.serverToolUse()).toEqual({ web_search_requests: 3 });
+  });
+
+  it('marks a stream that carried Anthropic\'s error event as failed', () => {
+    expect(read(start + end).failed()).toBe(false);
+    expect(read(start + ev('error', { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } })).failed()).toBe(true);
+  });
+
   it('is not used for OpenAI streams, which keep their own reading', () => {
     const t = createStreamTally();
     t.push(start + end);
     t.end();
     expect(t.usage()).toBeNull();
+    expect(t.serverToolUse()).toBeUndefined();
   });
 });

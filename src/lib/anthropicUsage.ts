@@ -21,6 +21,15 @@
 // written to it. A usage row's `inputTokens` means the whole prompt (OpenAI's `prompt_tokens`, which
 // counts cached tokens too), so the three are added here. The split itself is kept as the row's
 // cache columns (usageDetail.ts), not lost.
+//
+// A stream reports usage more than once: `message_start` carries the prompt, and `message_delta`
+// carries running totals, where any field may be null (not reported this time). So the parts are
+// kept apart and each is replaced only by a number; the sum is taken at the end. Adding them on
+// every frame would let a delta whose cache fields are null cut the prompt down to its uncached part.
+//
+// Server tools billed per use (web search) are reported beside the tokens, in `server_tool_use`.
+
+import type { ServerToolUse } from './usagePrice';
 
 export interface AnthropicTokens {
   /** The whole prompt: uncached + cache reads + cache writes. Undefined when not reported. */
@@ -29,19 +38,61 @@ export interface AnthropicTokens {
   output?: number;
 }
 
+/** The parts of one request's usage, as reported so far. */
+export interface AnthropicUsageParts {
+  uncached?:      number;
+  cacheRead?:     number;
+  cacheWrite?:    number;
+  output?:        number;
+  serverToolUse?: ServerToolUse;
+}
+
 const count = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : undefined;
 
+const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * Fold one usage block into `parts`, field by field: a field that is not a count leaves the earlier
+ * figure as it was. `output: false` skips the output figure (a stream's opening frame carries a
+ * placeholder there, not the answer's size).
+ */
+export function mergeAnthropicUsage(parts: AnthropicUsageParts, usage: unknown, { output = true } = {}): void {
+  if (!isObject(usage)) return;
+  const set = (key: Exclude<keyof AnthropicUsageParts, 'serverToolUse'>, v: unknown) => {
+    const n = count(v);
+    if (n !== undefined) parts[key] = n;
+  };
+  set('uncached', usage.input_tokens);
+  set('cacheRead', usage.cache_read_input_tokens);
+  set('cacheWrite', usage.cache_creation_input_tokens);
+  if (output) set('output', usage.output_tokens);
+  if (isObject(usage.server_tool_use)) {
+    for (const [name, v] of Object.entries(usage.server_tool_use)) {
+      const n = count(v);
+      if (n !== undefined) parts.serverToolUse = { ...parts.serverToolUse, [name]: n };
+    }
+  }
+}
+
+/** Input (the whole prompt) and output from the parts. Input is known once the uncached part is. */
+export function anthropicTotals(parts: AnthropicUsageParts): AnthropicTokens {
+  const out: AnthropicTokens = {};
+  if (parts.uncached !== undefined) out.input = parts.uncached + (parts.cacheRead ?? 0) + (parts.cacheWrite ?? 0);
+  if (parts.output !== undefined) out.output = parts.output;
+  return out;
+}
+
 /** Read one Anthropic usage block. Never throws; a field that is not a count is left undefined. */
 export function readAnthropicTokens(usage: unknown): AnthropicTokens {
-  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return {};
-  const u = usage as Record<string, unknown>;
-  const uncached = count(u.input_tokens);
-  const out: AnthropicTokens = {};
-  if (uncached !== undefined) {
-    out.input = uncached + (count(u.cache_read_input_tokens) ?? 0) + (count(u.cache_creation_input_tokens) ?? 0);
-  }
-  const output = count(u.output_tokens);
-  if (output !== undefined) out.output = output;
-  return out;
+  const parts: AnthropicUsageParts = {};
+  mergeAnthropicUsage(parts, usage);
+  return anthropicTotals(parts);
+}
+
+/** The per-use server tools a usage block reports (`web_search_requests`, ...), or undefined. */
+export function readServerToolUse(usage: unknown): ServerToolUse | undefined {
+  const parts: AnthropicUsageParts = {};
+  mergeAnthropicUsage(parts, usage);
+  return parts.serverToolUse;
 }

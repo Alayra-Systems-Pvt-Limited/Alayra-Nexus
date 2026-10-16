@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readAnthropicTokens } from './anthropicUsage';
+import { anthropicTotals, mergeAnthropicUsage, readAnthropicTokens, readServerToolUse, type AnthropicUsageParts } from './anthropicUsage';
 
 describe('readAnthropicTokens', () => {
   it('adds cache reads and writes to the uncached input, so input means the whole prompt', () => {
@@ -32,5 +32,23 @@ describe('readAnthropicTokens', () => {
     expect(readAnthropicTokens({ input_tokens: null, output_tokens: 'many' })).toEqual({});
     expect(readAnthropicTokens(undefined)).toEqual({});
     expect(readAnthropicTokens([1, 2])).toEqual({});
+  });
+});
+
+describe('mergeAnthropicUsage', () => {
+  it('replaces a part only with a number, so a null later figure keeps the earlier one', () => {
+    const parts: AnthropicUsageParts = {};
+    mergeAnthropicUsage(parts, { input_tokens: 10, cache_read_input_tokens: 2000, cache_creation_input_tokens: 300, output_tokens: 1 }, { output: false });
+    mergeAnthropicUsage(parts, { input_tokens: 10, cache_read_input_tokens: null, output_tokens: 42 });
+    expect(parts).toEqual({ uncached: 10, cacheRead: 2000, cacheWrite: 300, output: 42 });
+    expect(anthropicTotals(parts)).toEqual({ input: 2310, output: 42 });
+  });
+});
+
+describe('readServerToolUse', () => {
+  it('reads the per-use counts, and nothing when there are none', () => {
+    expect(readServerToolUse({ server_tool_use: { web_search_requests: 2, web_fetch_requests: 0, bad: 'x' } }))
+      .toEqual({ web_search_requests: 2, web_fetch_requests: 0 });
+    expect(readServerToolUse({ input_tokens: 1 })).toBeUndefined();
   });
 });

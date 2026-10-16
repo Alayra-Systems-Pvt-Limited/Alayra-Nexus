@@ -46,7 +46,8 @@
 
 import { createChunkDecoder } from './chunkDecoder';
 import { mergeUsageDetail, readUsageDetail, type UsageDetail } from './usageDetail';
-import { readAnthropicTokens } from './anthropicUsage';
+import { anthropicTotals, mergeAnthropicUsage, type AnthropicUsageParts } from './anthropicUsage';
+import type { ServerToolUse } from './usagePrice';
 
 /** `output` is null when the stream ended before the provider reported it (a caller hung up). */
 export interface StreamUsage { input: number; output: number | null }
@@ -76,6 +77,14 @@ export interface StreamTally {
   detail(): UsageDetail;
   /** True if a frame was dropped for being implausibly large; the content may have a hole. */
   degraded(): boolean;
+  /**
+   * True if the provider reported a failure inside the stream. Anthropic sends an `error` event (an
+   * overload, say) on a stream that began with 200, after which the stream ends cleanly; without
+   * this, that ending would count as a success.
+   */
+  failed(): boolean;
+  /** Server tools billed per use, as an Anthropic stream reported them; undefined when none. */
+  serverToolUse(): ServerToolUse | undefined;
 }
 
 /**
@@ -107,6 +116,9 @@ export function createStreamTally(format: StreamFormat = 'openai'): StreamTally 
   let usage: StreamUsage | null = null;
   const detail: UsageDetail = {};
   let dropped  = false;
+  let failed   = false;
+  /** An Anthropic stream's usage, part by part (see anthropicUsage.ts for why not one total). */
+  const parts: AnthropicUsageParts = {};
 
   const readFrame = (raw: string): void => {
     const line = raw.trim();
@@ -146,11 +158,14 @@ export function createStreamTally(format: StreamFormat = 'openai'): StreamTally 
       if (typeof piece === 'string') content += piece;
       return;
     }
-    const reported = frame.type === 'message_start' ? frame.message?.usage : frame.type === 'message_delta' ? frame.usage : undefined;
+    if (frame.type === 'error') { failed = true; return; }
+    const delta = frame.type === 'message_delta';
+    const reported = frame.type === 'message_start' ? frame.message?.usage : delta ? frame.usage : undefined;
     if (!reported) return;
-    const t = readAnthropicTokens(reported);
-    if (t.input !== undefined) usage = { input: t.input, output: usage?.output ?? null };
-    if (frame.type === 'message_delta' && t.output !== undefined && usage) usage = { ...usage, output: t.output };
+    // The opening frame's output figure is a placeholder, not the answer's size.
+    mergeAnthropicUsage(parts, reported, { output: delta });
+    const t = anthropicTotals(parts);
+    if (t.input !== undefined) usage = { input: t.input, output: t.output ?? null };
     mergeUsageDetail(detail, readUsageDetail(reported));
   };
 
@@ -172,6 +187,8 @@ export function createStreamTally(format: StreamFormat = 'openai'): StreamTally 
     usage:    () => usage,
     detail:   () => ({ ...detail }),
     degraded: () => dropped,
+    failed:   () => failed,
+    serverToolUse: () => (parts.serverToolUse ? { ...parts.serverToolUse } : undefined),
     end() {
       consume(decoder.flush());
       // A stream cut mid-frame leaves a line with no newline. Read it: a provider that ends without

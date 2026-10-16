@@ -58,6 +58,22 @@ export function cutFrame(reason: Exclude<CutReason, 'client'>, format: StreamFor
   return `data: ${JSON.stringify({ error: { message, type: 'upstream_timeout', code: `stream_${reason}` } })}\n\n`;
 }
 
+/**
+ * Tracks whether the bytes relayed so far end on an event boundary (a blank line), so the gateway
+ * writes its own frame only between events, never inside one the provider had not finished.
+ */
+export function eventBoundary(): { push(chunk: string | Uint8Array): void; closed(): boolean } {
+  /** The last few characters relayed; only line endings matter, so bytes map one to one. */
+  let tail = '';
+  return {
+    push(chunk) {
+      const end = typeof chunk === 'string' ? chunk.slice(-4) : String.fromCharCode(...chunk.subarray(-4));
+      tail = (tail + end).slice(-4);
+    },
+    closed: () => tail === '' || tail.endsWith('\n\n') || tail.endsWith('\r\n\r\n') || tail.endsWith('\r\r'),
+  };
+}
+
 /** Serialize one assistant message as a single OpenAI-style streaming chunk + DONE. */
 export function toSingleSseChunk(data: Record<string, unknown>): string {
   const first  = Array.isArray(data.choices) ? data.choices[0] as { message?: { content?: unknown }; finish_reason?: string } : undefined;
