@@ -27,7 +27,9 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   the request is either scanned or already forwarded unscanned today; anything else keeps the
   translated path. Admission, routing, sticky keys, budgets, the time limits and the hang-up
   handling are the same on both paths, and deciding costs no database or Redis call. A native
-  answer is not stored in the response cache. A pool can carry settings for this path in the new
+  answer is not stored in the response cache, and a `/v1/messages` request is now cached under a
+  digest of what it sent, so two requests that translate alike (the same question about two
+  different PDFs) no longer share an answer. A pool can carry settings for this path in the new
   nullable `NexusProvider.nativeMessages` column, set through the admin API: PostgreSQL gets
   migration `0021_provider_native_messages` (additive, gives up after five seconds), and a
   standalone SQLite file created by an earlier version gains the column at start. **For

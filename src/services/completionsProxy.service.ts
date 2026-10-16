@@ -67,7 +67,7 @@ export async function handleProxy(
   if (guarded.answered) return guarded.result;
 
   // Exact-match response cache, checked before any provider is chosen.
-  const cache = await lookUpResponseCache(run, admission.value.scope, admission.value.pinnedModelId, isStream);
+  const cache = await lookUpResponseCache(run, admission.value.scope, admission.value.pinnedModelId, isStream, options.anthropicNative?.body);
   if (cache.answered) return cache.result;
 
   // Choose a key and call the provider; a failed call is answered inside.
