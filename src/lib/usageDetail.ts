@@ -29,11 +29,11 @@
 // OpenAI-compatible proxy in front of Anthropic (which passes Anthropic's names through inside an
 // OpenAI-shaped block) is read exactly like Anthropic itself.
 //
-// Recorded as reported, never derived. `inputTokens` and `outputTokens` keep their meaning, and
-// nothing here changes what a request costs: the registry has no cache prices yet, and pricing a
-// row differently because a provider volunteered more detail would change old figures for new
-// reasons. Absent means the provider did not say, which is not the same as zero, so a field is set
-// only when its value is a real count.
+// Recorded as reported, never derived. `inputTokens` and `outputTokens` keep their meaning. What the
+// cache kinds cost is decided in usagePrice.ts: at their own rates for Anthropic and for any model
+// whose registry entry sets them, and at the input price, as before, for everyone else. Absent means
+// the provider did not say, which is not the same as zero, so a field is set only when its value is
+// a real count.
 
 import type { UsageTokenKinds } from '../core/ports';
 

@@ -29,13 +29,7 @@ import type { RequestTrace } from '../lib/requestTrace';
 import { isUsageAnonymized } from './usagePrivacy.service';
 import { hashIdentifier }    from '../lib/audit';
 import { mergeUsageDetail, type UsageDetail } from '../lib/usageDetail';
-
-// Handles both inputPricePer1k (old) and inputCostPer1M (new dashboard format)
-function modelCost(m: Record<string, unknown>, input: number, output: number): number {
-  const iPer1k = (m.inputPricePer1k  as number | undefined) ?? ((m.inputCostPer1M  as number | undefined) ?? 0) / 1000;
-  const oPer1k = (m.outputPricePer1k as number | undefined) ?? ((m.outputCostPer1M as number | undefined) ?? 0) / 1000;
-  return (input / 1000) * iPer1k + (output / 1000) * oPer1k;
-}
+import { tokenCost, type ServerToolUse } from '../lib/usagePrice';
 
 // Per-modality cost (Phase 6.3b/6.3c). A non-token unit is priced from the model's
 // per-unit price: images per image, synthesized speech per 1,000,000 characters (the
@@ -83,8 +77,12 @@ export interface RecordTokenUsageParams {
   // failed, and calling it a success would quietly inflate the success rate.
   outcome?:          string;
   // The extra token kinds the provider reported (cache reads and writes, reasoning); see
-  // lib/usageDetail.ts. Recorded on the row as reported, and never part of the price.
+  // lib/usageDetail.ts. Recorded on the row as reported. Cache reads and writes are priced at their
+  // own rates where the model has them (lib/usagePrice.ts).
   detail?:           UsageDetail;
+  // Server tools the provider ran and bills per use (`usage.server_tool_use`), priced from the
+  // model's registry entry and counted toward the budget like the tokens.
+  serverToolUse?:    ServerToolUse;
 }
 
 /**
@@ -115,7 +113,7 @@ export async function recordTokenUsage(p: RecordTokenUsageParams, trace?: Reques
     // Explicit fallback: a model not in the registry is treated as zero estimated spend.
     if (m) {
       price = unit === 'token'
-        ? modelCost(m, p.inputTokens, p.outputTokens)
+        ? tokenCost(m, p.provider, p.inputTokens, p.outputTokens, p.detail, p.serverToolUse)
         : unitCost(m, unit, quantity);
       priced = m.pricingSource !== 'unset';
     }

@@ -311,9 +311,9 @@ export interface AiModel {
   priority: number; capabilities: string[]; hasVision: boolean; hasFIM: boolean; hasToolCalling: boolean;
   inputCostPer1M: number; outputCostPer1M: number;
   imagePrice: number; speechPricePer1MChars: number; transcriptionPrice: number;
-  audioInputPer1M: number; audioOutputPer1M: number;
-  pricingSource: PricingSource;
-  contextWindow: number; maxTokens: number;
+  audioInputPer1M: number; audioOutputPer1M: number; // the optional prices below: absent = not set (usagePrice.ts), never 0
+  pricingSource: PricingSource; cacheReadCostPer1M?: number; cacheWrite5mCostPer1M?: number; cacheWrite1hCostPer1M?: number;
+  contextWindow: number; maxTokens: number; webSearchCostPer1K?: number; webFetchCostPer1K?: number;
 }
 export interface ModelsResponse { models: AiModel[]; capabilities: string[]; }
 
@@ -328,7 +328,7 @@ export interface FetchedModel {
 }
 
 // Mirrors GET /admin/models/pricing-catalog (pricingCatalog.service.ts) — indicative auto-fill data.
-export interface PricingCatalogEntry {
+export interface PricingCatalogEntry extends Partial<Pick<AiModel, 'cacheReadCostPer1M' | 'cacheWrite5mCostPer1M' | 'cacheWrite1hCostPer1M' | 'webSearchCostPer1K' | 'webFetchCostPer1K'>> {
   match: string; provider: string; displayName: string; capabilities: string[];
   inputCostPer1M?: number; outputCostPer1M?: number; imagePrice?: number;
   speechPricePer1MChars?: number; transcriptionPrice?: number;

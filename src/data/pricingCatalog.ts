@@ -15,6 +15,7 @@
  */
 
 import type { Capability } from '../lib/modelSelect';
+import type { ExtraPrices } from '../lib/usagePrice';
 
 // ── Pricing catalog (Phase 7.4c) ──────────────────────────────────────────────
 // A curated, bundled starting reference so an operator can auto-fill a model's price and limits
@@ -24,7 +25,7 @@ import type { Capability } from '../lib/modelSelect';
 // prefix, so a dated variant (claude-3-5-sonnet-20241022) inherits its base entry; the longest
 // matching prefix wins. All token prices are per 1,000,000 tokens.
 
-export interface PricingCatalogEntry {
+export interface PricingCatalogEntry extends ExtraPrices {
   match:                  string;      // exact model string or a prefix
   provider:               string;
   displayName:            string;
@@ -62,6 +63,13 @@ export const PRICING_CATALOG: PricingCatalogEntry[] = [
   { match: 'claude-3-5-sonnet', provider: 'anthropic', displayName: 'Claude 3.5 Sonnet', capabilities: ['chat'], inputCostPer1M: 3, outputCostPer1M: 15, contextWindow: 200000, maxTokens: 8192, hasVision: true, hasToolCalling: true },
   { match: 'claude-3-5-haiku', provider: 'anthropic', displayName: 'Claude 3.5 Haiku', capabilities: ['chat'], inputCostPer1M: 0.8, outputCostPer1M: 4, contextWindow: 200000, maxTokens: 8192, hasToolCalling: true },
   { match: 'claude-3-haiku', provider: 'anthropic', displayName: 'Claude 3 Haiku', capabilities: ['chat'], inputCostPer1M: 0.25, outputCostPer1M: 1.25, contextWindow: 200000, maxTokens: 4096, hasVision: true },
+  // These read the prompt cache below Anthropic's usual 0.1x, so their cache prices are set rather
+  // than derived; web search is $10 per 1,000 and web fetch is free beyond tokens. All from
+  // https://platform.claude.com/docs/en/about-claude/pricing (read 2026-10-16).
+  { match: 'claude-opus-5-5', provider: 'anthropic', displayName: 'Claude Opus 5.5', capabilities: ['chat'], inputCostPer1M: 4, outputCostPer1M: 20, cacheReadCostPer1M: 0.2, cacheWrite5mCostPer1M: 5, cacheWrite1hCostPer1M: 8, webSearchCostPer1K: 10, webFetchCostPer1K: 0 },
+  { match: 'claude-sonnet-5-5', provider: 'anthropic', displayName: 'Claude Sonnet 5.5', capabilities: ['chat'], inputCostPer1M: 2, outputCostPer1M: 10, cacheReadCostPer1M: 0.1, cacheWrite5mCostPer1M: 2.5, cacheWrite1hCostPer1M: 4, webSearchCostPer1K: 10, webFetchCostPer1K: 0 },
+  { match: 'claude-fable-5-1', provider: 'anthropic', displayName: 'Claude Fable 5.1', capabilities: ['chat'], inputCostPer1M: 10, outputCostPer1M: 50, cacheReadCostPer1M: 0.25, cacheWrite5mCostPer1M: 12.5, cacheWrite1hCostPer1M: 20, webSearchCostPer1K: 10, webFetchCostPer1K: 0 },
+  { match: 'claude-mythos-5-1', provider: 'anthropic', displayName: 'Claude Mythos 5.1', capabilities: ['chat'], inputCostPer1M: 10, outputCostPer1M: 50, cacheReadCostPer1M: 0.25, cacheWrite5mCostPer1M: 12.5, cacheWrite1hCostPer1M: 20, webSearchCostPer1K: 10, webFetchCostPer1K: 0 },
 
   // ── Google ──
   // Google's OpenAI-compatible /models lists ids like `gemini-flash-lite-latest` alongside the

@@ -21,7 +21,7 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   `anthropic-beta` headers, and Anthropic's answer, stream, or error comes back untouched, marked
   `X-Nexus-Native: anthropic`. Usage records the whole prompt as input (uncached plus cache reads
   plus cache writes, the same meaning `prompt_tokens` has) with the cache reads and the 5-minute
-  and 1-hour cache writes beside it; pricing is unchanged. Every other provider keeps the
+  and 1-hour cache writes beside it, priced at their own rates (see the next entry). Every other provider keeps the
   translation, and so does a request whose input guardrails redacted it or whose output rules need
   to read the answer. With input guardrails on, the native path is used only when every part of
   the request is either scanned or already forwarded unscanned today; anything else keeps the
@@ -30,13 +30,26 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   answer is not stored in the response cache. **For `@alayrasystems/nexus-core` hosts:**
   `handleAnthropicMessages` serves `/v1/messages` this way; `createAnthropicReply` now also
   returns `passThrough()`.
+- **Cache reads, cache writes and per-use server tools are priced at their own rates.** A usage
+  row's cost, and so every team budget, used to price the whole prompt at the input price. With
+  prompt caching working on Anthropic, that overstated a cached coding session about six times
+  (cache reads cost a tenth of the input price) and understated 1-hour cache writes (twice the input
+  price). A registry model can now set `cacheReadCostPer1M`, `cacheWrite5mCostPer1M` and
+  `cacheWrite1hCostPer1M`, and the model editor has boxes for them. When one is not set, Anthropic
+  models use Anthropic's published multipliers of the input price (0.1x, 1.25x and 2x); every other
+  provider is priced exactly as before, all input at the input price. A cache-write total reported
+  without its 5-minute and 1-hour split is priced at the 1-hour rate. Server tools billed per use
+  and reported in the usage block (web search and web fetch) are priced from the model's new
+  `webSearchCostPer1K` and `webFetchCostPer1K` and counted toward the budget. The pricing catalog
+  gains Claude Opus 5.5, Sonnet 5.5, Fable 5.1 and Mythos 5.1, whose cache reads cost less than
+  0.1x, with Anthropic's published prices. Older registry entries read as before.
 - **Usage records every token kind the provider reports.** Cache reads, cache writes (with
   Anthropic's 5-minute and 1-hour split), DeepSeek's cache misses and reasoning tokens are read from
   the provider's usage block, streamed or not, under OpenAI, Anthropic, DeepSeek and Gemini names,
   and stored in six new nullable `TokenUsage` columns: `cachedInputTokens`, `cacheWriteTokens`,
   `cacheWrite5mTokens`, `cacheWrite1hTokens`, `cacheMissTokens` and `reasoningTokens`. A column is
-  null when the provider did not report that kind, so older rows read exactly as before. Nothing is
-  priced differently: cost is still input and output at the model's two prices. Responses still pass
+  null when the provider did not report that kind, so older rows read exactly as before. Cache reads
+  and writes are priced at their own rates where known (the entry above). Responses still pass
   the provider's usage object through unchanged. PostgreSQL gets migration `0020_usage_token_kinds`,
   which is additive and gives up after five seconds rather than queue behind a long query on the
   table (the next start runs it again). A standalone SQLite database created by an earlier version
