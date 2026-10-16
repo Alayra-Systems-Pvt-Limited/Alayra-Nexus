@@ -208,6 +208,18 @@ describe('reconcileTpm', () => {
     expect(evalMock).not.toHaveBeenCalled();
   });
 
+  it('still counts a usage figure reported as a string of digits, within the same bounds', async () => {
+    const asReported = (figure: string) => figure as unknown as number;
+    await reconcileTpm('key-1', 100, asReported('30'), NOON);
+    expect(evalMock).toHaveBeenLastCalledWith(RECONCILE_LUA, 1, TPM, '70', '60', String(NOON));
+    const mod = await loadWith('two-way');
+    await mod.reconcileTpm('key-1', 100, asReported('150'), NOON);
+    expect(evalMock).toHaveBeenLastCalledWith(mod.CHARGE_LUA, 1, TPM, '50', '60', String(NOON));
+    evalMock.mockClear();
+    for (const bad of ['-5', 'abc', '1e12']) await mod.reconcileTpm('key-1', 100, asReported(bad), NOON);
+    expect(evalMock).not.toHaveBeenCalled();
+  });
+
   it('ignores an absurd usage figure rather than blocking the key on it', async () => {
     const mod = await loadWith('two-way');
     await mod.reconcileTpm('key-1', 100, 1e12, NOON);

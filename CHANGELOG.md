@@ -76,12 +76,13 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
-- **A TPM reconcile ignores a usage figure that is negative or not a number.** When an answer comes
-  back, Nexus gives the key's per-minute window back what the request reserved and did not use. A
-  negative usage figure was given back as more than the request reserved, which emptied the window
-  of every other request's reservation and let the key admit past its limit for the rest of the
-  minute, and a figure that was not a number was passed on to the Redis script. Either is now
-  ignored, and the reservation stands until the window rolls over.
+- **A TPM reconcile ignores a usage figure that is negative or not a finite number.** When an
+  answer comes back, Nexus gives the key's per-minute window back what the request reserved and did
+  not use. A negative usage figure, or negative infinity, was given back as more than the request
+  reserved. The refund is clamped to what the window holds, so it emptied the window of every other
+  request's reservation and let the key admit past its limit for the rest of the minute. A figure
+  that was not a number reached the Redis script as `NaN`. Each is now ignored, and the reservation
+  stands until the window rolls over. A figure reported as a string of digits still counts, as before.
 
 ## [1.8.0] - 2026-10-16
 
