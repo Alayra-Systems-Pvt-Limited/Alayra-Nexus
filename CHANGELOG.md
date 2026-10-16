@@ -33,13 +33,14 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   mix of them were checked against the tokenizer. Crafted text can still count low: a long run of
   random letters with no spaces counts at about a fifth of its tokens. So `fast` always runs with
   two-way reconcile (next entry), which charges the difference once the provider reports it.
-  **A refusal on size stays exact.** When the estimate plus `max_tokens` is above a key's whole TPM
-  limit, the key would refuse the request even with an empty window, although the exact count might
-  fit. Routing then counts the prompt with the tokenizer and decides on that count, so a prompt is
-  refused for its size exactly when it is today: an 80,000-token prompt still goes through a key
-  with a 100,000-token limit. The tokenizer runs only for prompts that big. Otherwise a reservation
-  is larger than the exact count until the answer corrects it, so a busy key's window fills a little
-  sooner within the minute and routing moves on to the next key a little earlier.
+  **A refusal is always decided on the exact count.** When the estimate plus `max_tokens` is above
+  a key's whole TPM limit, or a pass over the keys refuses the estimate, routing counts the prompt
+  with the tokenizer and decides on that count, once per request. So a request is refused exactly
+  when it is today: an 80,000-token prompt still goes through a key with a 100,000-token limit, and
+  a 70,000-token prompt still goes through that key while it holds 10,000 tokens of other traffic.
+  Only a refused request, or one bigger than a key's whole limit, pays for the tokenizer. The
+  reservations a key holds are estimates until their answers come back, so a busy key's window
+  fills a little sooner within the minute.
   **Where it applies:** chat admission only. Embeddings, completions, images and speech still
   reserve with the tokenizer, and usage rows still use it, including the count recorded after the
   answer when a provider reports no usage. The estimate is never used for cost. The default,

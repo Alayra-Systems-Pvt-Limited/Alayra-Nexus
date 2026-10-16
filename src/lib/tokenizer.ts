@@ -91,11 +91,11 @@ export function estimateMessageTokens(messages: unknown[]): number {
  * A request's TPM reservation, as routing uses it.
  *
  * With NEXUS_TPM_ESTIMATE=fast it starts as the estimate, which errs high. Routing calls
- * `makeExact()` when that estimate is bigger than a candidate key's WHOLE limit: such a key would
- * refuse the request even with nothing else in its window, every time it was asked, although the
- * exact count may well fit. So a refusal on size is always decided on the tokenizer's count, and
- * the tokenizer runs only for prompts that big. With the tokenizer (the default) it is exact from
- * the start, and `makeExact()` does nothing.
+ * `makeExact()` before it would refuse on it (selectAndReserve): when the estimate is bigger than a
+ * candidate key's WHOLE limit, and when a pass over the keys refused the estimate. Either refusal
+ * could be the estimate's own margin, and repeat on every retry, although the exact count fits.
+ * So a refusal is always decided on the tokenizer's count, and only a refused request pays for
+ * it. With the tokenizer (the default) it is exact from the start, and `makeExact()` does nothing.
  */
 export interface TokenReserve {
   /** Tokens to reserve: the estimate until `makeExact()` runs, then the tokenizer's count. */
