@@ -160,6 +160,7 @@ const answerIn = (sse: string) => sse.split('\n').filter((l) => l.startsWith('da
   try { return (JSON.parse(l.slice(6)) as { choices: { delta: { content: string } }[] }).choices[0].delta.content; } catch { return ''; }
 }).join('');
 
+const providerClosed = () => vi.waitFor(() => expect(provider.closedAt, 'the provider socket never closed').toBeGreaterThan(0), { timeout: 3_000 });
 const usageRow = () => recordTokenUsage.mock.calls[0]?.[0] as unknown as { outputTokens: number; outcome: string };
 const fullAnswer = Array.from({ length: FRAMES }, (_, i) => word(i)).join('');
 const frames = (s: string, marker: string) => s.split(marker).length - 1;
@@ -172,8 +173,10 @@ describe.each([
     const { received, hungUpAt } = await callAndHangUp(path, body, (r) => frames(r, marker) >= 3);
     await vi.waitFor(() => expect(recordTokenUsage).toHaveBeenCalledTimes(1), { timeout: 3_000 });
 
-    // The provider's socket closed promptly, long before its answer would have ended.
-    expect(provider.closedAt, 'the provider socket never closed').toBeGreaterThan(0);
+    // The provider's socket closed promptly, long before its answer would have ended. Waited for:
+    // the row can be written before this process has handled the socket's close event, and the
+    // bound is on when it closed, not on when the test looked.
+    await providerClosed();
     expect(provider.closedAt - hungUpAt).toBeLessThan(1_000);
     expect(provider.finished).toBe(false);
     expect(provider.frames).toBeLessThan(FRAMES / 2);
@@ -200,7 +203,7 @@ describe('a caller who hangs up before the provider has answered', () => {
     const { hungUpAt } = await callAndHangUp('/v1/chat/completions', { messages: [{ role: 'user', content: 'go' }] }, () => false, 150);
     await vi.waitFor(() => expect(recordOutcome).toHaveBeenCalledTimes(1), { timeout: 3_000 });
 
-    expect(provider.closedAt, 'the provider socket never closed').toBeGreaterThan(0);
+    await providerClosed();
     expect(provider.closedAt - hungUpAt).toBeLessThan(1_000);
     expect(recordOutcome).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'client_cancelled' }));
     expect(recordTokenUsage).not.toHaveBeenCalled();

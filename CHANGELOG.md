@@ -155,6 +155,10 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   during a full run; the same hook takes 130-210ms with a warm file cache, and 40-45ms without the
   compilers. `test/schemalessFastify.ts` supplies compilers that throw if a schema ever asks for
   one. None of these routes has a schema, and a reply without one is serialised the same way.
+- **The client-disconnect test waits for the provider socket's close event** rather than reading
+  it the moment the usage row is written. Under load the row can be written first (once in twelve
+  runs of the four proxy suites together). The check that the socket closed within a second of the
+  caller leaving is unchanged.
 
 ## [1.7.0] - 2026-10-11
 
