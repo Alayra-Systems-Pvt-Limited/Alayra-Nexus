@@ -35,7 +35,7 @@ const { prismaMock, redisMock, store } = vi.hoisted(() => {
 vi.mock('../lib/redis', () => ({ redis: redisMock }));
 vi.mock('../lib/prisma', () => ({ prisma: prismaMock }));
 
-import { clearSettingMemo, getSetting, setSetting } from './settings.service';
+import { clearSettingMemo, getSetting, readSettingFresh, setSetting } from './settings.service';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -47,7 +47,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   delete process.env.SETTING_MEMO_TTL_MS;
+  delete process.env.MEMO_MAX_STALE_MS;
   clearSettingMemo();
 });
 
@@ -156,3 +158,76 @@ describe('clearSettingMemo', () => {
     expect(redisMock.get).toHaveBeenCalledTimes(3); // A twice, B once
   });
 });
+
+describe('with MEMO_MAX_STALE_MS: served while it is re-read', () => {
+  // Only Date is faked, so a background read can still run to completion on real timers.
+  const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  beforeEach(() => {
+    process.env.MEMO_MAX_STALE_MS = '30000';
+    vi.useFakeTimers({ toFake: ['Date'] });
+  });
+
+  it('a change made on another instance reaches this one within the bound', async () => {
+    prismaMock.appSettings.findUnique.mockResolvedValue({ value: 'on' });
+    expect(await getSetting('GUARDRAILS_ENABLED')).toBe('on');
+    changedElsewhere('GUARDRAILS_ENABLED', 'off');
+
+    vi.advanceTimersByTime(5_000);
+    // Expired: the held value answers at once, and the one read it starts brings the change.
+    expect(await getSetting('GUARDRAILS_ENABLED')).toBe('on');
+    await settle();
+    expect(await getSetting('GUARDRAILS_ENABLED')).toBe('off');
+    expect(redisMock.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('a reader idle past the bound waits for the current value', async () => {
+    prismaMock.appSettings.findUnique.mockResolvedValue({ value: 'on' });
+    await getSetting('GUARDRAILS_ENABLED');
+    changedElsewhere('GUARDRAILS_ENABLED', 'off');
+
+    vi.advanceTimersByTime(30_000);
+    expect(await getSetting('GUARDRAILS_ENABLED')).toBe('off');
+  });
+
+  it('never serves the master key hash past its own window', async () => {
+    // Rotating the key is how an operator shuts out a leaked one.
+    prismaMock.appSettings.findUnique.mockResolvedValue({ value: 'old-hash' });
+    expect(await getSetting('NEXUS_API_KEY_HASH')).toBe('old-hash');
+    changedElsewhere('NEXUS_API_KEY_HASH', 'new-hash');
+
+    vi.advanceTimersByTime(5_000);
+    expect(await getSetting('NEXUS_API_KEY_HASH')).toBe('new-hash');
+  });
+
+  it('a failed background read keeps the setting and is logged', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    prismaMock.appSettings.findUnique.mockResolvedValue({ value: 'on' });
+    await getSetting('CACHE_ENABLED');
+
+    vi.advanceTimersByTime(5_000);
+    redisMock.get.mockRejectedValueOnce(new Error('Connection is closed.'));
+    expect(await getSetting('CACHE_ENABLED')).toBe('on');
+    await settle();
+    expect(await getSetting('CACHE_ENABLED')).toBe('on');
+    expect(console.warn).toHaveBeenCalledOnce();
+  });
+});
+
+describe('readSettingFresh', () => {
+  it('reads the shared copy every time, and never fills the memo', async () => {
+    prismaMock.appSettings.findUnique.mockResolvedValue({ value: 'v1' });
+    expect(await readSettingFresh('AI_MODEL_REGISTRY')).toBe('v1');
+    changedElsewhere('AI_MODEL_REGISTRY', 'v2');
+    expect(await readSettingFresh('AI_MODEL_REGISTRY')).toBe('v2');
+
+    await getSetting('AI_MODEL_REGISTRY');
+    expect(redisMock.get).toHaveBeenCalledTimes(3);
+  });
+});
+
+/** What another instance's setSetting leaves behind: the shared copy, changed. */
+function changedElsewhere(key: string, value: string): void {
+  store.set(`nexus:setting:${key}`, value);
+}

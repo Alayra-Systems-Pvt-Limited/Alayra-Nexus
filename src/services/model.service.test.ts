@@ -181,3 +181,47 @@ describe('getModelRegistry normalizes the cached copy too', () => {
     expect(models.map((m) => m.id)).toEqual(['from-store']);
   });
 });
+
+describe('getModelRegistry parses only what changed', () => {
+  beforeEach(() => { store.value = '[]'; clearRegistryMemo(); });
+
+  it('returns the same models, unparsed, while the stored text is unchanged', async () => {
+    seed([model('a', 'openai')]);
+    const first = await getModelRegistry();
+    clearRegistryMemo();
+    // Same text, so the same array: the lists derived from it (registrySnapshot.ts) stay built.
+    expect(await getModelRegistry()).toBe(first);
+  });
+
+  it('parses again the moment the stored text changes', async () => {
+    seed([model('a', 'openai')]);
+    const first = await getModelRegistry();
+    seed([model('a', 'openai'), model('b', 'groq')]);
+    const second = await getModelRegistry();
+    expect(second).not.toBe(first);
+    expect(second.map((m) => m.id)).toEqual(['a', 'b']);
+  });
+
+  it('reuses the parse of an unchanged shared copy too', async () => {
+    const { redis } = await import('../lib/redis');
+    // Two reads, two separate strings with the same text: what Redis hands back each time.
+    const text = () => JSON.stringify([model('shared', 'openai')]);
+    (redis.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce(text()).mockResolvedValueOnce(text());
+    clearRegistryMemo();
+    const first = await getModelRegistry();
+    clearRegistryMemo();
+    expect(await getModelRegistry()).toBe(first);
+    expect(first.map((m) => m.id)).toEqual(['shared']);
+  });
+
+  it('reads the stored registry past the settings memo', async () => {
+    // What is built here is written back as the shared copy every instance reads. Built from an
+    // old memoised setting, it would hand that old registry to all of them for a minute.
+    const settings = await import('./settings.service');
+    vi.mocked(settings.getSetting).mockClear();
+    seed([model('a', 'openai')]);
+    await getModelRegistry();
+    expect(settings.readSettingFresh).toHaveBeenCalledWith('AI_MODEL_REGISTRY');
+    expect(settings.getSetting).not.toHaveBeenCalled();
+  });
+});
