@@ -656,6 +656,8 @@ curl http://<your-host>:3000/v1/chat/completions \
 | `ABUSE_RATE_LIMIT_MAX` | No | Requests **per credential** per window before the abuse guard trips (default: `12000`). This is DoS/abuse protection, **not** a throughput cap — see [Rate limits, explained](#rate-limits-explained). |
 | `ABUSE_RATE_LIMIT_WINDOW` | No | Abuse-guard window (default: `1 minute`) |
 | `NEXUS_DEFAULT_MAX_TOKENS` | No | Output tokens reserved against a key's TPM budget when a request omits `max_tokens` (default: `2048`; reconciled to real usage afterward) |
+| `NEXUS_TPM_ESTIMATE` | No | How a request's input is counted for its key's TPM reservation: `tokenizer` (default, exact cl100k) or `fast`, a one-pass estimate that skips the tokenizer (about 1 ms instead of 33 ms-1.4 s for a 128 KB prompt) and counted at or above it on every kind of real text measured; see the CHANGELOG |
+| `NEXUS_TPM_RECONCILE` | No | How a reservation is corrected to the provider's reported usage: `refund` (default) only gives unused tokens back; `two-way` also adds usage above the reservation to the key's window |
 | `UPSTREAM_TTFT_MS` | No | Abort if a provider doesn't return response headers within this many ms (default: `20000`) |
 | `UPSTREAM_BODY_MS` | No | Non-streaming: max ms to read the full response body (default: `60000`) |
 | `UPSTREAM_STREAM_IDLE_MS` | No | Streaming: max ms gap between chunks before a hung stream is aborted (default: `30000`) |
