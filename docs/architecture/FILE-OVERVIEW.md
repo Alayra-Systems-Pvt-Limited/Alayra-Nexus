@@ -17,7 +17,8 @@ for the layering rule and the request path.
 | `scope.ts` | BYOK routing scope. One value drives both key selection and the response-cache namespace |
 | `responseCache.ts` | Exact-match cache key, entry shape, and SSE↔JSON replay conversion |
 | `guardrails.ts` | Rule compilation and block/redact evaluation over messages and output |
-| `tokenizer.ts` | `js-tiktoken` token counting and the pre-admission reserve estimate |
+| `tokenizer.ts` | Token counting (`countTokens`, `countMessageTokens`), the pre-admission reserve estimate, and `warmTokenizer` |
+| `bpeCount.ts` | The exact cl100k count behind `countTokens`, in time linear in the text: `js-tiktoken`'s rank file (pinned) and pattern, a scan or heap merge on token ranks, and 64 KiB slices for one longer run |
 | `notify.ts` | Operator-notification pure core: event catalogue, config normalization, per-event message text, and the coalescing key |
 | `sso.ts` | Enterprise-SSO pure core: PKCE/state/nonce generation, the OIDC authorize-URL builder, scope normalization, and the claim → role mapping |
 | `audit.ts` | Audit/compliance pure core: which requests to record, the action slug for a route, secret-field redaction, IP anonymization, and retention-day clamping |
