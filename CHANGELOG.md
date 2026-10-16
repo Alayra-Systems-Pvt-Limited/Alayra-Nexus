@@ -9,6 +9,18 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Changed
+
+- **dotenv 17 → 18, and the launcher sets the new names dotenv reads first.** dotenv 18 adds
+  `DOTENV_PATH` and `DOTENV_OVERRIDE`, reads them ahead of `DOTENV_CONFIG_PATH` and
+  `DOTENV_CONFIG_OVERRIDE`, and honours them in every `dotenv.config()` call. The `alayra-nexus`
+  launcher pointed the server's `dotenv/config` only through `DOTENV_CONFIG_PATH`, so a
+  `DOTENV_PATH` left in the shell would have loaded a file nobody named, and a `DOTENV_OVERRIDE`
+  would have let that file outrank the environment the launcher assembled. It now sets
+  `DOTENV_PATH` and `DOTENV_CONFIG_PATH` to the same file, and both override names to `false`. Boot
+  output is unchanged: `dotenv/config` still defaults to quiet. dotenv 18 also drops `.env.vault`,
+  `DOTENV_KEY` and the `dotenv_config_*` command-line options, none of which Nexus used.
+
 ## [1.8.0] - 2026-10-16
 
 ### Added
