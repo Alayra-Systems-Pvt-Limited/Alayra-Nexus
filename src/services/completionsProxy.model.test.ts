@@ -101,7 +101,7 @@ describe('the caller names a model', () => {
     await handleProxy({ model: 'gpt-4o', messages } as never, fakeReply() as never);
 
     expect(discoverBestPool).toHaveBeenCalledWith(
-      expect.any(Number), expect.anything(), expect.anything(), 'chat', null, null, 'gpt4o',
+      expect.objectContaining({ tokens: expect.any(Number) }), expect.anything(), expect.anything(), 'chat', null, null, 'gpt4o',
     );
   });
 

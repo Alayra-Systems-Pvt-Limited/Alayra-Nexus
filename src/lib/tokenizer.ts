@@ -15,6 +15,9 @@
  */
 
 import { getEncoding, type Tiktoken } from 'js-tiktoken';
+import { estimateTokens, TPM_ESTIMATE } from './tokenEstimate';
+
+export { readTpmEstimate, TPM_ESTIMATE, type TpmEstimate } from './tokenEstimate';
 
 // A single shared encoder, lazily initialized. cl100k_base is a reasonable,
 // provider-neutral proxy for admission *estimates* — this number is only used to
@@ -54,19 +57,72 @@ function extractText(content: unknown): string {
   return '';
 }
 
-/**
- * Estimate the input tokens of an OpenAI-style messages array. Adds a small
- * per-message overhead to approximate the chat format's role/delimiter tokens.
- */
-export function countMessageTokens(messages: unknown[]): number {
+/** Sum a per-text count over an OpenAI-style messages array, plus 4 per message for the chat format. */
+function sumMessages(messages: unknown[], count: (text: string) => number): number {
   let total = 0;
   for (const m of messages) {
     if (m && typeof m === 'object' && 'content' in m) {
-      total += countTokens(extractText((m as { content: unknown }).content));
+      total += count(extractText((m as { content: unknown }).content));
       total += 4; // approximate per-message formatting overhead
     }
   }
   return Math.max(1, total);
+}
+
+/**
+ * Count the input tokens of an OpenAI-style messages array with the tokenizer. Adds a small
+ * per-message overhead to approximate the chat format's role/delimiter tokens.
+ *
+ * This is the exact count, and it stays exact: usage rows fall back to it when a provider does not
+ * report usage, so it must never become an estimate.
+ */
+export function countMessageTokens(messages: unknown[]): number {
+  return sumMessages(messages, countTokens);
+}
+
+/** `countMessageTokens`, estimated: the same messages, the same per-message overhead, no tokenizer. */
+export function estimateMessageTokens(messages: unknown[]): number {
+  return sumMessages(messages, estimateTokens);
+}
+
+// ── Which count the reservation uses ─────────────────────────────────────────────────────────────
+
+/**
+ * A request's TPM reservation, as routing uses it.
+ *
+ * With NEXUS_TPM_ESTIMATE=fast it starts as the estimate, which errs high. Routing calls
+ * `makeExact()` before it would refuse on it (selectAndReserve): when the estimate is bigger than a
+ * candidate key's WHOLE limit, and when a pass over the keys refused the estimate. Either refusal
+ * could be the estimate's own margin, and repeat on every retry, although the exact count fits.
+ * So a refusal is always decided on the tokenizer's count, and only a refused request pays for
+ * it. With the tokenizer (the default) it is exact from the start, and `makeExact()` does nothing.
+ */
+export interface TokenReserve {
+  /** Tokens to reserve: the estimate until `makeExact()` runs, then the tokenizer's count. */
+  readonly tokens: number;
+  /** True once `tokens` is the tokenizer's count. */
+  readonly exact: boolean;
+  /** Count with the tokenizer (once) and reserve that from here on. Returns the new `tokens`. */
+  makeExact(): number;
+}
+
+/** The reservation for one request: its input, counted per NEXUS_TPM_ESTIMATE, plus its output allowance. */
+export function planReserve(messages: unknown[], maxTokens: number | undefined, defaultMaxTokens: number): TokenReserve {
+  const output = typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : defaultMaxTokens;
+  if (TPM_ESTIMATE !== 'fast') {
+    const tokens = countMessageTokens(messages) + output;
+    return { tokens, exact: true, makeExact: () => tokens };
+  }
+  let tokens = estimateMessageTokens(messages) + output;
+  let exact = false;
+  return {
+    get tokens() { return tokens; },
+    get exact() { return exact; },
+    makeExact() {
+      if (!exact) { tokens = countMessageTokens(messages) + output; exact = true; }
+      return tokens;
+    },
+  };
 }
 
 /**
@@ -75,7 +131,5 @@ export function countMessageTokens(messages: unknown[]): number {
  * reserve is used; reconciliation later corrects the reservation to actuals.
  */
 export function computeReserve(messages: unknown[], maxTokens: number | undefined, defaultMaxTokens: number): number {
-  const input = countMessageTokens(messages);
-  const output = typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : defaultMaxTokens;
-  return input + output;
+  return planReserve(messages, maxTokens, defaultMaxTokens).tokens;
 }

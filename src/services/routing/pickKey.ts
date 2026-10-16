@@ -17,6 +17,7 @@
 import { coreStores } from '../../core/stores';
 import type { ProviderRow } from '../../core/ports';
 import { selectAndReserve } from '../../lib/selectKey';
+import type { TokenReserve } from '../../lib/tokenizer';
 import { shouldWriteLastUsed } from '../../lib/lastUsed';
 import { getKeyRow, setKeyRow, getKeyList, setKeyList } from '../../lib/keyRowCache';
 import type { RoutingScope } from '../../lib/scope';
@@ -28,7 +29,7 @@ import { buildRoute, type NexusRoute, type RouteModel } from './route';
 /** Try the keys of one pool, least-recently-used first; null when none has headroom. */
 export async function tryPickKey(
   providerRow: ProviderRow,
-  reserveTokens: number,
+  reserveTokens: number | TokenReserve,
   ownerTeamId: string | null,
   model: RouteModel,
   userId: string | null,
@@ -93,7 +94,7 @@ export async function tryPickKey(
  */
 export async function tryStickyKey(
   keyId: string,
-  reserveTokens: number,
+  reserveTokens: number | TokenReserve,
   scope: RoutingScope,
   pickModel: (provider: ProviderRow) => RouteModel | null,
   userId: string | null,

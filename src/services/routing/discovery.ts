@@ -19,6 +19,7 @@ import { getStickyKeyId } from '../../lib/sticky';
 import { costOrder, effectivePrice } from '../../lib/routing';
 import { selectModels, type SelectableModel, type Capability } from '../../lib/modelSelect';
 import type { RoutingScope } from '../../lib/scope';
+import type { TokenReserve } from '../../lib/tokenizer';
 import { getCostWeight } from '../routing.service';
 import { getModelRegistry, activeProviderSlugs } from '../model.service';
 import { registryPrices } from '../registrySnapshot';
@@ -39,7 +40,7 @@ import { SHARED_SCOPE, TIER_ORDER, type NexusRoute, type RouteModel } from './ro
  */
 async function sweepModels(
   candidates: SelectableModel[],
-  reserveTokens: number,
+  reserveTokens: number | TokenReserve,
   ownerTeamId: string | null,
   userId: string | null,
 ): Promise<NexusRoute | null> {
@@ -88,7 +89,7 @@ type PriceOf = (p: { preferredModel: string | null }) => number | null;
  * runs at startup, so this is rare). Never used by non-chat endpoints.
  */
 async function legacySweepTiers(
-  reserveTokens: number,
+  reserveTokens: number | TokenReserve,
   ownerTeamId: string | null,
   costWeight: number,
   priceOf: PriceOf,
@@ -129,7 +130,7 @@ async function legacySweepTiers(
  * Returns null when every eligible key is out of RPM or TPM headroom.
  */
 export async function discoverBestPool(
-  reserveTokens: number,
+  reserveTokens: number | TokenReserve,
   sessionKey?: string | null,
   scope: RoutingScope = SHARED_SCOPE,
   capability: Capability = 'chat',
