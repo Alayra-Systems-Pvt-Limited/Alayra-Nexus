@@ -15,6 +15,8 @@
  */
 
 import type { FastifyReply } from 'fastify';
+import { anthropicErrorType, sseEvent } from '../../lib/anthropic';
+import type { StreamFormat } from '../../lib/streamTally';
 import { STREAM_IDLE_MS, STREAM_MAX_MS } from './config';
 
 // ── Server-sent events ────────────────────────────────────────────────────────
@@ -44,10 +46,13 @@ export function openEventStream(reply: FastifyReply, headers: Record<string, str
  * last thing the reader saw was an ordinary token. Silence is the wrong answer here — a truncated
  * reply that looks whole is worse than an error, because it gets used.
  */
-export function cutFrame(reason: Exclude<CutReason, 'client'>): string {
+export function cutFrame(reason: Exclude<CutReason, 'client'>, format: StreamFormat = 'openai'): string {
   const message = reason === 'idle'
     ? `The provider sent nothing for ${Math.round(STREAM_IDLE_MS / 1000)}s, so this answer is incomplete.`
     : `This answer passed the ${Math.round(STREAM_MAX_MS / 60000)}-minute limit for one request and is incomplete.`;
+  // Anthropic's own convention, for a stream relayed untouched: an `error` event, as Anthropic itself
+  // sends when a stream fails part-way.
+  if (format === 'anthropic') return sseEvent('error', { type: 'error', error: { type: anthropicErrorType(504), message } });
   // OpenAI's own mid-stream convention: an `error` object in the data frame, and no `[DONE]` —
   // a `[DONE]` after this would read to most clients as a clean finish.
   return `data: ${JSON.stringify({ error: { message, type: 'upstream_timeout', code: `stream_${reason}` } })}\n\n`;

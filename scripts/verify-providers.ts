@@ -208,7 +208,8 @@ export function usageFromStream(body: string): { input: number; output: number }
   const tally = createStreamTally();
   tally.push(Buffer.from(body, 'utf8'));
   tally.end();
-  return tally.usage() ?? undefined;
+  const usage = tally.usage();
+  return usage && usage.output !== null ? { input: usage.input, output: usage.output } : undefined;
 }
 
 export function streamUsageSupported(result: StreamProbeResult): boolean {

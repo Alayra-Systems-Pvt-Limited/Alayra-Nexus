@@ -46,15 +46,29 @@
 
 import { createChunkDecoder } from './chunkDecoder';
 import { mergeUsageDetail, readUsageDetail, type UsageDetail } from './usageDetail';
+import { readAnthropicTokens } from './anthropicUsage';
 
-export interface StreamUsage { input: number; output: number }
+/** `output` is null when the stream ended before the provider reported it (a caller hung up). */
+export interface StreamUsage { input: number; output: number | null }
+
+/**
+ * Which event stream is being read. `openai` is every chat-completions stream. `anthropic` is
+ * Anthropic's own Messages stream, relayed untouched by the native passthrough: its usage arrives in
+ * `message_start` (the prompt) and `message_delta` (the output, at the end), and its text in
+ * `content_block_delta` events.
+ */
+export type StreamFormat = 'openai' | 'anthropic';
 
 export interface StreamTally {
   /** Feed one chunk exactly as it came off the upstream reader — bytes or text, either is fine. */
   push(chunk: string | Uint8Array): void;
   /** No more chunks are coming. Flushes a half-arrived character and a half-arrived line. */
   end(): void;
-  /** The assistant's answer, assembled from the content deltas seen so far. */
+  /**
+   * The assistant's answer, assembled from the content deltas seen so far. On an Anthropic stream it
+   * also holds the thinking and tool-input fragments, since it is what gets counted when no output
+   * figure arrives; such an answer is never cached.
+   */
   content(): string;
   /** The last usage the provider reported, or null if it never reported any. */
   usage(): StreamUsage | null;
@@ -76,11 +90,14 @@ interface Frame {
   usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
   /** Anthropic's own event stream reports its first usage inside `message_start`. */
   message?: { usage?: unknown };
+  /** Anthropic's event type, and a content delta's text, thinking or tool-input fragment. */
+  type?: string;
+  delta?: { text?: unknown; thinking?: unknown; partial_json?: unknown };
   /** Gemini's own stream calls the block `usageMetadata`. */
   usageMetadata?: unknown;
 }
 
-export function createStreamTally(): StreamTally {
+export function createStreamTally(format: StreamFormat = 'openai'): StreamTally {
   // One decoder for the whole stream — see `chunkDecoder.ts` for what a fresh one per chunk does to
   // a multi-byte character that arrives in two pieces.
   const decoder = createChunkDecoder();
@@ -100,6 +117,8 @@ export function createStreamTally(): StreamTally {
     let frame: Frame;
     try { frame = JSON.parse(json) as Frame; } catch { return; }   // a keepalive, or a truncated tail
 
+    if (format === 'anthropic') { readAnthropicFrame(frame); return; }
+
     const delta = frame.choices?.[0]?.delta?.content;
     if (typeof delta === 'string') content += delta;
 
@@ -115,6 +134,24 @@ export function createStreamTally(): StreamTally {
     // Field by field, since some providers report usage more than once (see mergeUsageDetail).
     const reported = u ?? frame.message?.usage ?? frame.usageMetadata;
     if (reported) mergeUsageDetail(detail, readUsageDetail(reported));
+  };
+
+  // Anthropic's own stream. The prompt's size comes in `message_start`; the output's comes only in the
+  // closing `message_delta`, so a stream the caller left early has none, and its output is counted
+  // from the fragments that did arrive (text, thinking and tool input are all billed as output).
+  const readAnthropicFrame = (frame: Frame): void => {
+    if (frame.type === 'content_block_delta') {
+      const d = frame.delta;
+      const piece = d?.text ?? d?.thinking ?? d?.partial_json;
+      if (typeof piece === 'string') content += piece;
+      return;
+    }
+    const reported = frame.type === 'message_start' ? frame.message?.usage : frame.type === 'message_delta' ? frame.usage : undefined;
+    if (!reported) return;
+    const t = readAnthropicTokens(reported);
+    if (t.input !== undefined) usage = { input: t.input, output: usage?.output ?? null };
+    if (frame.type === 'message_delta' && t.output !== undefined && usage) usage = { ...usage, output: t.output };
+    mergeUsageDetail(detail, readUsageDetail(reported));
   };
 
   const consume = (text: string): void => {
