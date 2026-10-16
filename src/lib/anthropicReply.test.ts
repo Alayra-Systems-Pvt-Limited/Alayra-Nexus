@@ -248,3 +248,38 @@ describe('createAnthropicReply — the caller hanging up', () => {
     expect(raw.off).toBeUndefined();
   });
 });
+
+describe('createAnthropicReply — passThrough (the provider is Anthropic itself)', () => {
+  const frames = 'event: message_start\ndata: {"type":"message_start"}\n\nevent: message_stop\ndata: {"type":"message_stop"}\n\n';
+
+  it('relays a stream byte for byte, with no envelope of its own', () => {
+    const { reply, state } = fakeReply();
+    const { reply: wrap, passThrough } = createAnthropicReply(reply);
+    passThrough();
+    wrap.raw.write(new TextEncoder().encode(frames));
+    wrap.raw.end();
+    expect(state.raw).toBe(frames);
+    expect(state.ended).toBe(true);
+  });
+
+  it('relays an answer and Anthropic\'s own error body as they are', () => {
+    const { reply, state } = fakeReply();
+    const { reply: wrap, passThrough } = createAnthropicReply(reply);
+    passThrough();
+    const message = { id: 'msg_1', type: 'message', content: [{ type: 'thinking', thinking: 'hm' }] };
+    wrap.code(200).send(message);
+    expect(state.sent).toBe(message);
+    const overloaded = { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } };
+    wrap.code(529).send(JSON.stringify(overloaded));
+    expect(state.status).toBe(529);
+    expect(state.sent).toEqual(overloaded);
+  });
+
+  it('still translates an error the gateway writes itself', () => {
+    const { reply, state } = fakeReply();
+    const { reply: wrap, passThrough } = createAnthropicReply(reply);
+    passThrough();
+    wrap.code(504).send({ error: 'Upstream timed out before responding.' });
+    expect(state.sent).toEqual({ type: 'error', error: { type: 'api_error', message: 'Upstream timed out before responding.' } });
+  });
+});
