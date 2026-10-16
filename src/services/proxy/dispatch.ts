@@ -38,7 +38,8 @@ import { DEFAULT_MAX_TOKENS_RESERVE, UPSTREAM_TTFT_MS } from './config';
 import type { Admission } from './admission';
 import type { GuardedRequest } from './inputGuard';
 import { observe, type ProxyRun } from './run';
-import { answered, proceed, withProviderStreamUsage, type Stage } from './types';
+import { goesNative, nativeRequest } from './anthropicNative';
+import { answered, proceed, withProviderStreamUsage, type AnthropicNative, type Stage } from './types';
 
 // ── Dispatch: choose a key, call the provider, sort out a failed answer ───────
 
@@ -57,10 +58,13 @@ export interface Dispatched {
   refundReservation: () => void;
   traceAttempt?:     RequestTrace['attempts'][number];
   sessionId:         string;
+  /** True when the request went to Anthropic's own API as sent, and its answer is relayed untouched. */
+  native:            boolean;
 }
 
 export async function dispatchUpstream(
   run: ProxyRun, admission: Admission, guarded: GuardedRequest, messages: unknown[], isStream: boolean,
+  anthropic?: AnthropicNative,
 ): Promise<Stage<Dispatched>> {
   const { body, reply, reqHeaders, team, trace } = run;
   const { scope, pinnedModelId, strategyWeight, overBudgetDowngrade } = admission;
@@ -152,18 +156,21 @@ export async function dispatchUpstream(
     return answered(reply.code(502).send({ error: err instanceof Error ? err.message : 'Upstream blocked by SSRF policy.' }));
   }
 
-  const upstreamUrl  = `${stripTrailingSlash(route.baseUrl)}/chat/completions`;
+  // An Anthropic Messages request routed to Anthropic goes to its own API as sent (anthropicNative.ts).
+  const native = goesNative(anthropic, route, guarded, messages) ? nativeRequest(anthropic, route) : null;
+  const upstreamUrl  = native?.url ?? `${stripTrailingSlash(route.baseUrl)}/chat/completions`;
   // Forward the (possibly redacted) messages. In buffered-safe mode we request a
   // non-streamed response from upstream so we can inspect it before replaying it.
-  const upstreamBody = withProviderStreamUsage(
+  const upstreamBody = native?.body ?? withProviderStreamUsage(
     { ...body, messages: effectiveMessages, model: route.modelString, ...(bufferStream ? { stream: false } : {}) },
     route.providerSlug,
     isStream && !bufferStream,
   );
-  const headers: Record<string, string> = withExtraHeaders(route.extraHeaders, {
+  const headers: Record<string, string> = native?.headers ?? withExtraHeaders(route.extraHeaders, {
     'Content-Type': 'application/json',
     ...providerAuthHeader(route.authHeader, route.authPrefix, route.decryptedKey),
   });
+  if (native) anthropic?.passThrough();
   const sessionId = `proxy-${Date.now()}`;
 
   // A single controller governs the whole upstream call. A time-to-first-byte
@@ -236,5 +243,5 @@ export async function dispatchUpstream(
   if (traceAttempt) traceAttempt.status = upstream.status;
   span.end(); // upstream responded OK
 
-  return proceed({ route, upstream, controller, departure, session, reserve, refundReservation, traceAttempt, sessionId });
+  return proceed({ route, upstream, controller, departure, session, reserve, refundReservation, traceAttempt, sessionId, native: native !== null });
 }

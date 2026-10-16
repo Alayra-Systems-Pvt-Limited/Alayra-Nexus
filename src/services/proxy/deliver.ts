@@ -20,6 +20,7 @@ import { countMessageTokens } from '../../lib/tokenizer';
 import { reconcileTpm } from '../../lib/admission';
 import { setStickyKeyId } from '../../lib/sticky';
 import { readUsageDetail } from '../../lib/usageDetail';
+import { readAnthropicTokens } from '../../lib/anthropicUsage';
 import * as metrics from '../../lib/metrics';
 import { UPSTREAM_BODY_MS } from './config';
 import type { CacheMiss } from './cacheLookup';
@@ -52,6 +53,7 @@ export function gatewayHeaders(dispatched: Dispatched, guarded: GuardedRequest, 
     ...(route.wasDowngrade ? { 'X-Nexus-Tier-Downgrade': 'true' } : {}),
     ...(route.sticky        ? { 'X-Nexus-Sticky': 'true' } : {}),
     ...(route.byok          ? { 'X-Nexus-BYOK': 'true' } : {}),
+    ...(dispatched.native   ? { 'X-Nexus-Native': 'anthropic' } : {}),
     ...(cache.cacheStoreKey ? { 'X-Nexus-Cache': 'miss' } : {}),
     ...guarded.guardHeaders,
   };
@@ -92,8 +94,11 @@ async function settleJson(d: Delivery, data: Record<string, unknown>): Promise<v
   const { run, dispatched, guarded, cache } = d;
   const { route, reserve, traceAttempt, sessionId } = dispatched;
   const usageObj     = data.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
-  const inputTokens  = usageObj?.prompt_tokens     ?? countMessageTokens(guarded.effectiveMessages);
-  const outputTokens = usageObj?.completion_tokens  ?? 1;
+  // Anthropic's own answer (the native passthrough) names and splits its usage differently.
+  const reported     = dispatched.native ? readAnthropicTokens(data.usage)
+    : { input: usageObj?.prompt_tokens, output: usageObj?.completion_tokens };
+  const inputTokens  = reported.input  ?? countMessageTokens(guarded.effectiveMessages);
+  const outputTokens = reported.output ?? 1;
   stampUsage(run, inputTokens, outputTokens);
   observe(run, 'success'); metrics.addTokens(inputTokens, outputTokens);
   storeInCache(cache.cacheStoreKey, data, route.providerSlug, cache.cacheCfg.ttlSeconds); // cache the post-guardrails response

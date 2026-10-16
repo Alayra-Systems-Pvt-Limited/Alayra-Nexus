@@ -11,6 +11,25 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
+- **Anthropic Messages requests routed to Anthropic now go to Anthropic's own API as sent.**
+  `/v1/messages` used to translate every request to the OpenAI shape and send it to Anthropic's
+  OpenAI-compatible endpoint, which drops `cache_control`, extended thinking, `document` blocks,
+  server tools and `top_k`, so prompt caching never worked through the gateway and a long coding
+  session cost noticeably more than going direct. Now, when routing picks an Anthropic pool, the
+  caller's body goes to `<baseUrl>/messages` unchanged except for `model` (set to the one routing
+  chose), with the key's own credential and only the caller's `anthropic-version` and
+  `anthropic-beta` headers, and Anthropic's answer, stream, or error comes back untouched, marked
+  `X-Nexus-Native: anthropic`. Usage records the whole prompt as input (uncached plus cache reads
+  plus cache writes, the same meaning `prompt_tokens` has) with the cache reads and the 5-minute
+  and 1-hour cache writes beside it; pricing is unchanged. Every other provider keeps the
+  translation, and so does a request whose input guardrails redacted it or whose output rules need
+  to read the answer. With input guardrails on, the native path is used only when every part of
+  the request is either scanned or already forwarded unscanned today; anything else keeps the
+  translated path. Admission, routing, sticky keys, budgets, the time limits and the hang-up
+  handling are the same on both paths, and deciding costs no database or Redis call. A native
+  answer is not stored in the response cache. **For `@alayrasystems/nexus-core` hosts:**
+  `handleAnthropicMessages` serves `/v1/messages` this way; `createAnthropicReply` now also
+  returns `passThrough()`.
 - **Usage records every token kind the provider reports.** Cache reads, cache writes (with
   Anthropic's 5-minute and 1-hour split), DeepSeek's cache misses and reasoning tokens are read from
   the provider's usage block, streamed or not, under OpenAI, Anthropic, DeepSeek and Gemini names,

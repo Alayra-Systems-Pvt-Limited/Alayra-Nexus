@@ -19,8 +19,7 @@ import { verifyApiKey }   from '../middleware/auth.middleware';
 import { refuseDuringMaintenance } from '../middleware/maintenance.middleware';
 import { handleProxy }    from '../services/completionsProxy.service';
 import type { CompletionsBody } from '../services/completionsProxy.service';
-import { anthropicToOpenAI } from '../lib/anthropic';
-import { createAnthropicReply } from '../lib/anthropicReply';
+import { handleAnthropicMessages } from '../services/anthropicMessages.service';
 import { dispatchProxy, embeddingReserve, completionReserve, imageReserve, imageQuantity, speechReserve, speechCharacters } from '../services/proxyDispatch.service';
 import { listServableModels } from '../services/modelCatalog.service';
 import { resolveRequestScope } from '../services/byok.service';
@@ -39,13 +38,12 @@ export default async function proxyRoutes(fastify: FastifyInstance) {
   });
 
   // Anthropic Messages API (Phase 6.2) — unlocks Claude Code and the Anthropic SDKs.
-  // The request is translated to the canonical OpenAI shape and run through the exact
-  // same pipeline as /v1/chat/completions; a wrapper reply translates the OpenAI
-  // response (streaming or not) back to Anthropic on the wire. No second routing path.
+  // The request runs through the exact same pipeline as /v1/chat/completions, translated to
+  // the OpenAI shape, and its answer is translated back. When routing lands on Anthropic
+  // itself, the request goes to Anthropic's own API as sent and the answer comes back
+  // untouched, so prompt caching works. No second routing path either way.
   fastify.post('/v1/messages', { preHandler: [verifyApiKey] }, async (request, reply) => {
-    const openaiBody = anthropicToOpenAI(request.body as Record<string, unknown>) as unknown as CompletionsBody;
-    const { reply: anthropicReply } = createAnthropicReply(reply);
-    return handleProxy(openaiBody, anthropicReply, request.teamKeyId, request.headers as Record<string, unknown>, request.team);
+    return handleAnthropicMessages(request.body as Record<string, unknown>, reply, request.teamKeyId, request.headers as Record<string, unknown>, request.team);
   });
 
   // Embeddings (Phase 6.3) — unlocks RAG stacks (LangChain, LlamaIndex, …). Routed to a

@@ -37,7 +37,7 @@ export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array
 
   const reader = body.getReader();
   // Reads the stream as it goes rather than holding it: the answer and the usage, not the wire.
-  const tally  = createStreamTally();
+  const tally  = createStreamTally(dispatched.native ? 'anthropic' : 'openai');
   // Writes at the caller's pace rather than the provider's, so a slow reader slows the request
   // down instead of making this process hold the rest of their answer.
   const client = createClientWriter(reply.raw, controller.signal);
@@ -79,7 +79,7 @@ export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array
     // the provider will bill for, and the last of them may be sitting in the decoder.
     tally.end();
     // Nothing to explain to a caller who has already hung up.
-    if (cutShort && cutShort !== 'client') reply.raw.write(cutFrame(cutShort));
+    if (cutShort && cutShort !== 'client') reply.raw.write(cutFrame(cutShort, dispatched.native ? 'anthropic' : 'openai'));
     reply.raw.end();
   }
 

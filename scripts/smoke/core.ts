@@ -62,7 +62,7 @@ const PUBLIC_NAMES = [
   'configureCoreStores', 'coreStores', 'configureCoreKv', 'handleProxy', 'ProxyError',
   'withProviderStreamUsage', 'dispatchProxy', 'anthropicToOpenAI', 'createAnthropicReply',
   'listServableModels', 'resolveRequestScope', 'configureCoreCipher', 'PROVIDER_PRESETS', 'presetFor',
-  'readUsageDetail',
+  'readUsageDetail', 'handleAnthropicMessages',
 ];
 const TESTING_NAMES = ['coreStoresConformance', 'runCoreStoresConformance', 'createMemoryCoreStores', 'CONFORMANCE_FIXTURE'];
 

@@ -33,6 +33,20 @@ export interface CompletionsBody {
 
 export interface ProxyRunOptions {
   routingStrategy?: TraceRoutingStrategy;
+  /**
+   * Set for an Anthropic Messages request (`/v1/messages`): the caller's own request, so that when it
+   * is routed to Anthropic it can go there as sent. See anthropicNative.ts for when that happens.
+   */
+  anthropicNative?: AnthropicNative;
+}
+
+export interface AnthropicNative {
+  /** The caller's Messages body, as parsed. */
+  body:        Record<string, unknown>;
+  /** The caller's `anthropic-version` and `anthropic-beta` headers, when sent; nothing else. */
+  headers:     Record<string, string>;
+  /** Switch the reply to relay Anthropic's answer untouched (AnthropicReply.passThrough). */
+  passThrough: () => void;
 }
 
 export class ProxyError extends Error {
