@@ -21,7 +21,8 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import Fastify, { type FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
+import { schemalessFastify } from '../../test/schemalessFastify';
 
 vi.mock('./cache.service', () => ({ getCacheConfig: vi.fn(async () => ({ enabled: true, ttlSeconds: 60 })) }));
 const setCached = vi.fn(async () => {});
@@ -127,7 +128,7 @@ beforeAll(async () => {
   upstream = http.createServer(serveAnthropic);
   await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
-  gateway = Fastify();
+  gateway = schemalessFastify();
   gateway.post('/v1/messages', async (req, reply) =>
     handleAnthropicMessages(req.body as Record<string, unknown>, reply, undefined, req.headers as Record<string, unknown>));
   gateway.post('/v1/chat/completions', async (req, reply) => handleProxy(req.body as never, reply));

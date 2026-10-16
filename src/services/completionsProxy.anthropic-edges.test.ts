@@ -21,7 +21,8 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import Fastify, { type FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
+import { schemalessFastify } from '../../test/schemalessFastify';
 
 vi.hoisted(() => { process.env.UPSTREAM_STREAM_IDLE_MS = '200'; process.env.UPSTREAM_TTFT_MS = '800'; });
 
@@ -100,7 +101,7 @@ beforeAll(async () => {
   });
   await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
-  gateway = Fastify();
+  gateway = schemalessFastify();
   // A caller with a team key is a tenant; without one, the operator.
   gateway.post('/v1/messages', async (req, reply) => handleAnthropicMessages(req.body as Record<string, unknown>, reply,
     req.headers['x-team'] ? 'tk-1' : undefined, req.headers as Record<string, unknown>));

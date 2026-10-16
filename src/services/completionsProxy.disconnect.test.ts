@@ -23,7 +23,8 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import Fastify, { type FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
+import { schemalessFastify } from '../../test/schemalessFastify';
 
 vi.mock('./cache.service',      () => ({ getCacheConfig: vi.fn(async () => ({ enabled: true, ttlSeconds: 60 })) }));
 const setCached = vi.fn(async () => {});
@@ -122,7 +123,7 @@ beforeAll(async () => {
   await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', r));
   upstreamUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1/chat/completions`;
 
-  gateway = Fastify();
+  gateway = schemalessFastify();
   // Registered before the proxy's own listener, so it runs first: after this, a read is too late.
   gateway.addHook('onRequest', async (_req, reply) => { reply.raw.once('close', () => { callerGone = true; }); });
   gateway.post('/v1/chat/completions', async (req, reply) => handleProxy(req.body as never, reply));

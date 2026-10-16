@@ -23,7 +23,8 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import Fastify, { type FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
+import { schemalessFastify } from '../../test/schemalessFastify';
 import { compileRules, type GuardrailRule } from '../lib/guardrails';
 
 const guard = { enabled: true, bufferedSafe: false, compiled: [] as ReturnType<typeof compileRules> };
@@ -76,7 +77,7 @@ beforeAll(async () => {
   upstream = http.createServer(serve);
   await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
-  gateway = Fastify();
+  gateway = schemalessFastify();
   gateway.post('/v1/messages', async (req, reply) =>
     handleAnthropicMessages(req.body as Record<string, unknown>, reply, undefined, req.headers as Record<string, unknown>));
   gatewayUrl = await gateway.listen({ port: 0, host: '127.0.0.1' });

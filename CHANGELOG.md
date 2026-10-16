@@ -147,6 +147,14 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   `delete` mode and 0.08-0.15s in WAL. The suites that test the switch itself still start from
   `delete`, and the main column-upgrade case also runs on a file left in `delete` mode, as on a
   filesystem that refuses WAL.
+- **Four proxy suites build their test server without Fastify's schema compilers.** The Anthropic
+  passthrough, edges and guardrails suites and the client-disconnect suite mount the proxy on a real
+  loopback Fastify server in `beforeAll`, and building a Fastify instance loads its validator and
+  serializer compilers (110 modules, 449 KB) whether or not a route has a schema. On a Windows
+  machine with the checkout on a spinning disk the four hooks ran past their 10s limit together
+  during a full run; the same hook takes 130-210ms with a warm file cache, and 40-45ms without the
+  compilers. `test/schemalessFastify.ts` supplies compilers that throw if a schema ever asks for
+  one. None of these routes has a schema, and a reply without one is serialised the same way.
 
 ## [1.7.0] - 2026-10-11
 
