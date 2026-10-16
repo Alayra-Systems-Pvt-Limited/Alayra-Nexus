@@ -108,13 +108,7 @@ function statements(sql: string): string[] {
  */
 export async function ensureSqliteSchema(client: PrismaClient): Promise<SchemaBootstrapResult> {
   const before = await countTables(client);
-  if (before > 0) {
-    // One transaction, so one commit however many columns are added (seven on a 1.7.0 file) rather
-    // than one each. Measured on a busy spinning disk: about 9.7s as seven commits. And a boot that
-    // dies halfway leaves the file as it found it, not with some of the columns.
-    const added = await client.$transaction((tx) => addMissingColumns(tx));
-    return { created: false, tables: before, added };
-  }
+  if (before > 0) return { created: false, tables: before, added: await addMissingColumns(client) };
 
   let ddl: string;
   try {

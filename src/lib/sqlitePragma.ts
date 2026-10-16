@@ -41,12 +41,15 @@
 //
 // ── The limit of this, so nobody assumes more than it does ─────────────────────────────────────
 //
-// WAL does NOT make interactive transactions concurrent. Prisma's `$transaction` takes a write lock
-// on SQLite up front, even when the body only reads, so two overlapping `$transaction` calls
-// serialise in WAL exactly as they do in `delete` — measured at the full 5s busy_timeout, then
-// "database is locked". SQLite has one writer at a time and no journal mode changes that. What WAL
-// fixes is the far more common case here: plain autocommit reads and writes overlapping, which is
-// what every dashboard query and every buffered flush actually is.
+// WAL does NOT make transactions concurrent. Under Prisma 7 the SQLite adapter holds ONE connection
+// per client, and `$transaction` takes an in-process lock and then opens a plain deferred `BEGIN` on
+// it, so two overlapping `$transaction` calls in one process queue behind each other before SQLite
+// sees either. Between processes SQLite has one writer at a time, in WAL as in `delete`. A
+// transaction that READS before it first writes cannot wait for that writer: SQLite answers
+// "database is locked" at once instead of calling the busy handler, because waiting there could
+// deadlock. One that writes first waits like any statement (sqliteColumns.ts relies on this). What
+// WAL fixes is the far more common case here: plain autocommit reads and writes overlapping, which
+// is what every dashboard query and every buffered flush actually is.
 //
 // ── What this module deliberately does NOT set, and why ────────────────────────────────────────
 //
@@ -54,16 +57,15 @@
 // difference between "persistent" and "per-connection" decides whether setting something once is a
 // fix or a hazard:
 //
-//   busy_timeout   Prisma already sets it to 5000ms on EVERY pooled connection. Setting it again
-//                  would be a no-op we would then have to keep true.
+//   busy_timeout   Already 5000ms: better-sqlite3's default `timeout`, on the one connection the
+//                  adapter opens. Setting it again would be a no-op we would then have to keep true.
 //   foreign_keys   Already ON, and verified by behaviour, not by reading the pragma back: inserting
 //                  a child row with no parent raises SQLITE_CONSTRAINT (787).
-//   synchronous    NOT SET, on purpose. It is per-connection and Prisma pools several — a probe
-//                  issuing twelve concurrent reads got TWO different values back after setting it
-//                  once. So it cannot be set reliably from here at all, and half-setting it would
-//                  produce a database where some commits are flushed to disk and some are not.
-//                  That is worse than either consistent answer. FULL (SQLite's default) is the
-//                  slower and safer of the two, and it is where we leave it.
+//   synchronous    NOT SET, on purpose. It is per-connection, and under Prisma 5, which pooled
+//                  several, a probe issuing twelve concurrent reads got TWO different values back
+//                  after setting it once: some commits flushed to disk and some not, which is worse
+//                  than either consistent answer. Prisma 7 holds one connection, but FULL (SQLite's
+//                  default) is still the slower and safer of the two, and it is where we leave it.
 //
 // journal_mode is the exception that makes this module possible: it is written into the database
 // FILE HEADER, not held per connection, so one call configures every connection that will ever open

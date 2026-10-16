@@ -54,26 +54,58 @@ export const ADDED_COLUMNS: readonly AddedColumn[] = [
 /** SQL identifiers here come from the constant above, never from input; quoting is for the casing. */
 const quote = (name: string): string => `"${name.replace(/"/g, '""')}"`;
 
-/**
- * Add any listed column the database lacks. Returns `Table.column` for each one added, so the caller
- * can say what it did. A table that does not exist is left alone: creating tables is the DDL's job,
- * and a file that is not ours must not grow ours.
- */
-export async function addMissingColumns(
-  client: Pick<PrismaClient, '$queryRawUnsafe' | '$executeRawUnsafe'>,
+/** The listed columns that an existing table lacks, in list order. */
+export async function missingColumns(
+  client: Pick<PrismaClient, '$queryRawUnsafe'>,
   columns: readonly AddedColumn[] = ADDED_COLUMNS,
-): Promise<string[]> {
-  const added: string[] = [];
-  const tables = [...new Set(columns.map((c) => c.table))];
-  for (const table of tables) {
+): Promise<AddedColumn[]> {
+  const missing: AddedColumn[] = [];
+  for (const table of new Set(columns.map((c) => c.table))) {
     const present = await client.$queryRawUnsafe<{ name: string }[]>(`PRAGMA table_info(${quote(table)})`);
     if (present.length === 0) continue;
     const have = new Set(present.map((c) => c.name));
-    for (const c of columns) {
-      if (c.table !== table || have.has(c.column)) continue;
-      await client.$executeRawUnsafe(`ALTER TABLE ${quote(table)} ADD COLUMN ${quote(c.column)} ${c.type}`);
-      added.push(`${table}.${c.column}`);
+    missing.push(...columns.filter((c) => c.table === table && !have.has(c.column)));
+  }
+  return missing;
+}
+
+/**
+ * Prisma's limit for the whole upgrade transaction. Its default, 5s, is also SQLite's busy timeout,
+ * which the first ALTER may spend in full waiting for another writer; the rest must still fit.
+ */
+const UPGRADE_TRANSACTION_MS = 15_000;
+
+/**
+ * Add any listed column the database lacks, all in ONE transaction: one commit however many are
+ * added (seven separate commits measured about 9.7s on a busy spinning disk), and a start that stops
+ * part-way adds none. Returns `Table.column` for each one added, so the caller can say what it did.
+ * A table that does not exist is left alone: creating tables is the DDL's job, and a file that is not
+ * ours must not grow ours.
+ *
+ * The columns are read BEFORE the transaction, so its first statement is an ALTER. That is what lets
+ * it wait for another process writing to the file: SQLite applies its busy timeout to a transaction
+ * that starts by writing, but answers "database is locked" at once to one that read first (see
+ * sqlitePragma.ts). Measured with another process holding the write lock for 1.5s: reading inside
+ * the transaction failed in 0ms, and writing first waited, then succeeded.
+ *
+ * If another process adds one of the columns between the read and the ALTER, SQLite refuses the
+ * duplicate and the transaction rolls back; this reads once more and adds only what is still missing.
+ */
+export async function addMissingColumns(
+  client: PrismaClient,
+  columns: readonly AddedColumn[] = ADDED_COLUMNS,
+): Promise<string[]> {
+  for (let attempt = 1; ; attempt++) {
+    const missing = await missingColumns(client, columns);
+    if (missing.length === 0) return [];
+    try {
+      await client.$transaction(async (tx) => {
+        for (const c of missing) await tx.$executeRawUnsafe(`ALTER TABLE ${quote(c.table)} ADD COLUMN ${quote(c.column)} ${c.type}`);
+      }, { timeout: UPGRADE_TRANSACTION_MS });
+      return missing.map((c) => `${c.table}.${c.column}`);
+    } catch (e) {
+      if (attempt === 1 && /duplicate column name/i.test((e as Error).message)) continue;
+      throw e;
     }
   }
-  return added;
 }

@@ -23,15 +23,16 @@
 //
 // Needs no PostgreSQL, so unlike most parity files it always runs.
 
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, vi } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
+import { spawn } from 'node:child_process';
 import { copyFileSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureSqliteSchema } from '../sqliteBootstrap';
-import { ADDED_COLUMNS } from '../sqliteColumns';
+import { ADDED_COLUMNS, addMissingColumns } from '../sqliteColumns';
 import { configureSqlite } from '../sqlitePragma';
-import { openSqlite } from './harness';
+import { PARITY_TIMEOUT, openSqlite } from './harness';
 
 const DDL     = readFileSync(resolve(__dirname, '..', '..', '..', 'prisma', 'sqlite-schema.sql'), 'utf8');
 const DDL_170 = readFileSync(resolve(__dirname, '..', '__fixtures__', 'sqlite-schema-1.7.0.sql'), 'utf8');
@@ -60,17 +61,19 @@ const statements = (sql: string) => sql.split('\n').filter((l) => !l.trimStart()
 const tableBody = (sql: string, table: string) => sql.split(`CREATE TABLE "${table}" (`)[1]?.split('\n);')[0] ?? '';
 
 /**
- * The 1.7.0 database, built once per file and copied for each test that needs one. Built in ONE
- * transaction: run as 45 separate commits it took 6-12s on a spinning disk, and over a minute per
- * test during a full parallel run, where each commit waits for the disk; as one, about 0.15s.
+ * The 1.7.0 database, built once per file and per journal mode and copied for each test that needs
+ * one. Built in ONE transaction: run as 45 separate commits it took 6-12s on a spinning disk, and
+ * over a minute per test during a full parallel run, where each commit waits for the disk; as one,
+ * about 0.15s.
  *
- * Then put into WAL, because that is the state 1.7.0 left every file in: its boot ran the same
- * configureSqlite after building the schema. Closing folds the log back into the file, so the copy
- * is the whole database.
+ * 'wal' is the state 1.7.0 left a file in: its boot ran the same configureSqlite after building the
+ * schema. 'delete' is a file where WAL was refused, on a network mount for one. Closing folds the
+ * log back into the file, so the copy is the whole database.
  */
-let template170: Promise<string> | undefined;
+type Mode = 'wal' | 'delete';
+const templates: Partial<Record<Mode, Promise<string>>> = {};
 
-async function buildTemplate170(): Promise<string> {
+async function buildTemplate170(mode: Mode): Promise<string> {
   const file = newFile();
   const db = openSqlite(`file:${file}`);
   await db.$transaction(async (tx) => {
@@ -78,18 +81,21 @@ async function buildTemplate170(): Promise<string> {
     await tx.$executeRawUnsafe(`INSERT INTO "TokenUsage" ("id", "sessionId", "modelId", "modelName", "provider", "inputTokens", "outputTokens", "totalTokens", "estimatedUsd")
       VALUES ('old-1', 's', 'gpt-4o', 'gpt-4o', 'openai', 1000, 500, 1500, 0.0075)`);
   }, { maxWait: 30_000, timeout: 30_000 });
-  await configureSqlite(db);
+  if (mode === 'wal') await configureSqlite(db);
   await db.$disconnect();
   return file;
 }
 
-/** A database exactly as 1.7.0 created it, holding one usage row. */
-async function databaseFrom170(): Promise<PrismaClient> {
-  template170 ??= buildTemplate170();
+/** A new file holding a database exactly as 1.7.0 created it, with one usage row. */
+async function fileFrom170(mode: Mode = 'wal'): Promise<string> {
+  templates[mode] ??= buildTemplate170(mode);
   const file = newFile();
-  copyFileSync(await template170, file);
-  const db = openSqlite(`file:${file}`);
-  return db;
+  copyFileSync(await templates[mode], file);
+  return file;
+}
+
+async function databaseFrom170(mode: Mode = 'wal'): Promise<PrismaClient> {
+  return openSqlite(`file:${await fileFrom170(mode)}`);
 }
 
 const columnsOf = async (db: PrismaClient, table: string) =>
@@ -119,8 +125,9 @@ describe('booting a database created by 1.7.0', () => {
     await db.$disconnect();
   });
 
-  it('adds the columns, keeps the row, and reads it as nothing reported', async () => {
-    const db = await databaseFrom170();
+  it.each([['wal'], ['delete']] as const)('%s: adds the columns, keeps the row, and reads it as nothing reported', async (mode) => {
+    const db = await databaseFrom170(mode);
+    expect((await db.$queryRawUnsafe<{ journal_mode: string }[]>('PRAGMA journal_mode'))[0]?.journal_mode).toBe(mode);
     const r = await ensureSqliteSchema(db);
     expect(r).toMatchObject({ created: false, added: ADDED });
 
@@ -161,4 +168,73 @@ describe('booting a database created by 1.7.0', () => {
     expect(await columnsOf(db, 'SomebodyElses')).toEqual(['id']);
     await db.$disconnect();
   });
+});
+
+/** Another process: takes the write lock on a file, says so, and lets go after some milliseconds. */
+const HOLDER = `const Database = require(process.argv[1]); const db = new Database(process.argv[2]);
+db.exec('BEGIN IMMEDIATE'); console.log('locked');
+setTimeout(() => { db.exec('COMMIT'); console.log('released ' + Date.now()); db.close(); }, Number(process.argv[3]));`;
+
+const without = (...gone: string[]) => ADDED.filter((c) => !gone.includes(c));
+
+describe('an upgrade that fails, finds part of the work done, or meets another writer', () => {
+  it('adds none of the columns when the last one fails', async () => {
+    const db = await databaseFrom170();
+    // The last column listed twice: the eighth ALTER fails after the other seven succeeded, and fails
+    // again on the one re-read a duplicate earns.
+    const last = ADDED_COLUMNS[ADDED_COLUMNS.length - 1];
+    await expect(addMissingColumns(db, [...ADDED_COLUMNS, last])).rejects.toThrow(/duplicate column name/);
+    for (const c of ADDED_COLUMNS) expect(await columnsOf(db, c.table)).not.toContain(c.column);
+    await db.$disconnect();
+  });
+
+  it('adds only what a partly upgraded file lacks, ending in the same order as a fresh file', async () => {
+    const db = await databaseFrom170();
+    await db.$executeRawUnsafe('ALTER TABLE "TokenUsage" ADD COLUMN "cachedInputTokens" INTEGER');
+    await db.$executeRawUnsafe('ALTER TABLE "NexusProvider" ADD COLUMN "nativeMessages" TEXT');
+    expect((await ensureSqliteSchema(db)).added).toEqual(without('TokenUsage.cachedInputTokens', 'NexusProvider.nativeMessages'));
+    const fresh = emptyDatabase();
+    await ensureSqliteSchema(fresh);
+    for (const table of ['TokenUsage', 'NexusProvider']) expect(await columnsOf(db, table)).toEqual(await columnsOf(fresh, table));
+    await Promise.all([db.$disconnect(), fresh.$disconnect()]);
+  });
+
+  it('reads again and adds the rest when a column appears between its read and its write', async () => {
+    const db = await databaseFrom170();
+    // As a second gateway upgrading the same file would: one column lands just before the transaction.
+    let raced = false;
+    const racing = new Proxy(db, { get(target, key) {
+      const value = Reflect.get(target, key) as unknown;
+      if (key !== '$transaction' || raced) return typeof value === 'function' ? value.bind(target) : value;
+      return async (...args: unknown[]) => {
+        raced = true;
+        await target.$executeRawUnsafe('ALTER TABLE "TokenUsage" ADD COLUMN "cachedInputTokens" INTEGER');
+        return (value as (...a: unknown[]) => unknown).apply(target, args);
+      };
+    } });
+    expect(await addMissingColumns(racing)).toEqual(without('TokenUsage.cachedInputTokens'));
+    expect(raced).toBe(true);
+    await db.$disconnect();
+  });
+
+  it('waits for another process writing to the file, then adds every column', async () => {
+    const file = await fileFrom170();
+    const holder = spawn(process.execPath, ['-e', HOLDER, require.resolve('better-sqlite3'), file, '1500']);
+    let out = '';
+    holder.stdout.on('data', (c: Buffer) => { out += c.toString(); });
+    const closed = new Promise<number | null>((r) => holder.on('close', r));
+    await vi.waitFor(() => expect(out).toContain('locked'), { timeout: PARITY_TIMEOUT, interval: 20 });
+
+    const db = openSqlite(`file:${file}`);
+    const startedAt = Date.now();
+    const r = await ensureSqliteSchema(db);
+    const doneAt = Date.now();
+    expect(await closed).toBe(0);
+    expect(r.added).toEqual(ADDED);
+    // The lock was still held when the upgrade began, and the upgrade ended after it was let go.
+    const releasedAt = Number(/released (\d+)/.exec(out)?.[1]);
+    expect(releasedAt).toBeGreaterThan(startedAt);
+    expect(doneAt).toBeGreaterThanOrEqual(releasedAt);
+    await db.$disconnect();
+  }, PARITY_TIMEOUT);
 });

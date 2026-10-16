@@ -78,8 +78,10 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   which is additive and gives up after five seconds rather than queue behind a long query on the
   table (the next start runs it again). A standalone SQLite database created by an earlier version
   gains the same columns when the gateway starts, all in one transaction, so a start that stops
-  part-way adds none of them, and the startup log says so. That is the only change made to an
-  existing file. For `@alayrasystems/nexus-core` hosts: `UsageRow` gains the same
+  part-way adds none of them, and the startup log says so. A start that finds another process
+  writing to the file waits for it, up to SQLite's five-second busy timeout, and a column another
+  process added first is not added twice. That is the only change made to an existing file. For
+  `@alayrasystems/nexus-core` hosts: `UsageRow` gains the same
   six optional fields (type `UsageTokenKinds`), the conformance checks now require a store to accept
   a row that carries them, and `readUsageDetail` reads them from any provider's usage block.
 
@@ -143,7 +145,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   database into WAL when it starts, but the suites compared it in SQLite's default `delete` mode,
   which the gateway never runs in. On the same disk under load a single-row commit took 3.3-4.9s in
   `delete` mode and 0.08-0.15s in WAL. The suites that test the switch itself still start from
-  `delete`.
+  `delete`, and the main column-upgrade case also runs on a file left in `delete` mode, as on a
+  filesystem that refuses WAL.
 
 ## [1.7.0] - 2026-10-11
 
