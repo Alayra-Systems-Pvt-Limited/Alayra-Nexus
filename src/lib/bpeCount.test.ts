@@ -89,7 +89,7 @@ const RUNS: Record<string, string> = {
 
 const samples = JSON.parse(read('src/lib/__fixtures__/token-corpus.json')) as Record<string, string | string[]>;
 
-/** Real text: the repository's documents, data and code, two dependency files, and the fixture. */
+/** Real text from this repository: documents, data, code, the built demo, a brand image, the fixture. */
 function corpus(): [string, string][] {
   const files = ['README.md', 'CHANGELOG.md', 'SECURITY.md', 'CONTRIBUTING.md', 'package-lock.json', 'Dockerfile',
     'docker-compose.yml', 'eslint.config.mjs', 'prisma/schema.prisma', 'prisma/sqlite-schema.sql',
@@ -105,9 +105,11 @@ function corpus(): [string, string][] {
     }
   }
   const out: [string, string][] = files.map((f) => [f, read(f)]);
-  // Minified JavaScript and a real base64 blob, from the Prisma client the gateway installs.
-  out.push(['minified', read('node_modules/@prisma/client/runtime/client.js').slice(0, 131072)]);
-  out.push(['base64', read('node_modules/@prisma/client/runtime/query_compiler_fast_bg.postgresql.wasm-base64.js').slice(0, 65536)]);
+  // Minified JavaScript (the built demo, whatever its hashed file names) and base64 (a brand image).
+  const demo = readdirSync(resolve(ROOT, 'docs/demo/assets')).filter((name) => name.endsWith('.js')).sort();
+  out.push(['minified', demo.map((name) => read(`docs/demo/assets/${name}`)).join('\n').slice(0, 131072)]);
+  const image = readFileSync(resolve(ROOT, 'brand/png/alayra-nexus-crest-512.png')).toString('base64').slice(0, 65536);
+  out.push(['base64', image], ['base64 in 76-column lines', image.replace(/.{76}/g, '$&\n')]);
   // Every string in the recorded provider answers, as a chat would carry them.
   for (const f of files.filter((name) => name.startsWith('docs/provider-verification/'))) {
     const strings: string[] = [];
