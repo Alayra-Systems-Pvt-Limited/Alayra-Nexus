@@ -37,7 +37,7 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   provider, through the same signal as the time limits: before the provider answers, while a whole
   answer is arriving, or mid-stream. The request is recorded with the new outcome `client_cancelled`
   (Cancelled on the dashboard), not as a success or a provider error, and it does not count against
-  the key's circuit breaker. A cancelled stream still records the tokens streamed until then. A
+  the key's circuit breaker or in a provider's error count on the dashboard. A cancelled stream still records the tokens streamed until then. A
   stream cut short is no longer stored in the response cache: before, a stream the caller left was
   recorded as a success and its partial answer could be cached and served to the next caller. A
   Playground run stops the same way when its tab is closed. **Hosts of `@alayrasystems/nexus-core`
