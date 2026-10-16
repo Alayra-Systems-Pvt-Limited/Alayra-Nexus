@@ -9,6 +9,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.8.5] - 2026-10-17
+
 ### Added
 
 - **A chat request's TPM reservation can be counted without the tokenizer: `NEXUS_TPM_ESTIMATE=fast`.**
@@ -80,6 +82,11 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Changed
 
+- **Dependency updates.** jose 6.2.12: single sign-on now refuses an identity provider whose
+  published key set is malformed (a bad `use`, `alg` or `key_ops` value, or a `kid` that is not
+  text), as the standard requires; Google, Microsoft and Okta publish conforming key sets.
+  @fastify/rate-limit 11.2.1, @fastify/cors 11.3.1 and @fastify/helmet 13.1.2 are maintenance
+  releases with no change in behaviour.
 - **dotenv 17 → 18, and the launcher sets the new names dotenv reads first.** dotenv 18 adds
   `DOTENV_PATH` and `DOTENV_OVERRIDE`, reads them ahead of `DOTENV_CONFIG_PATH` and
   `DOTENV_CONFIG_OVERRIDE`, and honours them in every `dotenv.config()` call. The `alayra-nexus`
@@ -2968,7 +2975,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.5...HEAD
+[1.8.5]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.0...v1.8.5
 [1.8.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.6...v1.7.0
 [1.6.6]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.5...v1.6.6
