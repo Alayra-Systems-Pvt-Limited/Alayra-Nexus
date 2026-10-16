@@ -21,8 +21,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   vocabulary, pattern and merge rule, read from the same package, with the next merge found through
   a priority queue, as the reference tokenizer does, and each pair looked up by its two token
   numbers instead of by its text. Time now grows with the length of the text. On a development PC a
-  16 KB run takes under 5 ms, 1 MB of ordinary text (English, code, JSON, Chinese) about 0.1-0.2 s,
-  1 MB of any shape at most about 0.4 s, and a 32 MB `/v1/messages` body at most about 10 s. Counts
+  16 KB run takes under 10 ms, 1 MB of ordinary text (English, code, JSON, Chinese) about 0.1-0.2 s,
+  1 MB of any shape at most about 0.4 s, and a 32 MB `/v1/messages` body at most about 11 s. Counts
   are unchanged: identical on a 4 MB corpus of real text (English, code, JSON, markdown, ten other
   languages, emoji, base64, URLs, minified JavaScript, recorded chat payloads) and on 4,000
   generated strings. The one exception is a single run over 64 KB with no space, digit or
