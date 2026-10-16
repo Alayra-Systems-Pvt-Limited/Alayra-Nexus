@@ -1,0 +1,33 @@
+{
+  "_about": [
+    "Real text of kinds the repository has little of: other languages and scripts, emoji, URLs, code in other",
+    "languages, whitespace and character edge cases. bpeCount.test.ts counts each with bpeCount.ts and with",
+    "js-tiktoken and requires the same number. Written for that test; no source is copied."
+  ],
+  "chinese": "网关在把请求发送给模型供应商之前会估算令牌数量。延迟是产品的一部分，所以每一毫秒都很重要。如果供应商没有返回用量，网关会用自己的计数来记账；这个数字必须准确，不能偏低。我们在发布之前测试了英文、代码、JSON、中文、日文和韩文的文本，并比较了每一种的结果。",
+  "japanese": "日本語のテキストも含みます。ゲートウェイはリクエストを転送する前にトークン数を見積もります。カタカナとひらがなと漢字が混ざった文章は、トークナイザーにとって良いテストになります。",
+  "korean": "게이트웨이는 요청을 보내기 전에 토큰 수를 계산합니다. 한국어 문장은 띄어쓰기가 있어서 조각이 짧습니다.",
+  "russian": "Шлюз подсчитывает токены перед отправкой запроса поставщику модели. Задержка — часть продукта.",
+  "arabic": "تقوم البوابة بحساب عدد الرموز قبل إرسال الطلب إلى مزود النموذج. الكمون جزء من المنتج.",
+  "hindi": "गेटवे अनुरोध भेजने से पहले टोकन की गिनती करता है। विलंबता उत्पाद का हिस्सा है।",
+  "greek": "Η πύλη μετρά τα διακριτικά πριν στείλει το αίτημα στον πάροχο του μοντέλου.",
+  "thai": "เกตเวย์จะนับโทเค็นก่อนส่งคำขอไปยังผู้ให้บริการโมเดล ความหน่วงเป็นส่วนหนึ่งของผลิตภัณฑ์",
+  "hebrew": "השער סופר את האסימונים לפני שליחת הבקשה לספק המודל.",
+  "urdu": "گیٹ وے ماڈل فراہم کنندہ کو درخواست بھیجنے سے پہلے ٹوکن گنتا ہے۔",
+  "emoji": "Shipped it 🚀🎉 — tests pass ✅, latency 👍🏽, team 👩‍💻👨‍💻, flags 🇵🇰🇺🇸, mood 😀😅🤖✨🔥 and a family 👨‍👩‍👧‍👦.",
+  "urls": "https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/blob/main/src/lib/tokenizer.ts#L33-L40 https://example.com/search?q=token+count&lang=en-US&utm_source=newsletter&utm_medium=email&id=8f3e2c1a http://localhost:3000/v1/chat/completions?stream=true https://cdn.jsdelivr.net/npm/js-tiktoken@1.0.21/dist/index.js mailto:engineering@example.com ftp://files.example.org/pub/data_2026-10-16.tar.gz",
+  "python": "def count_tokens(text: str) -> int:\n    \"\"\"Count tokens.\"\"\"\n    if not text:\n        return 0\n    return len(enc.encode(text))\n\nclass Gateway:\n    def __init__(self, keys):\n        self.keys = {k.id: k for k in keys}\n",
+  "go": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Printf(\"%d\\n\", i)\n\t}\n}\n",
+  "rust": "fn byte_pair_merge(piece: &[u8], ranks: &HashMap<Vec<u8>, usize>) -> Vec<(usize, usize)> {\n    let mut parts: Vec<(usize, usize)> = (0..piece.len() + 1).map(|i| (i, usize::MAX)).collect();\n    parts\n}\n",
+  "java": "public final class TokenCounter {\n    private static final int LIMIT = 1_000_000;\n    public int count(String text) { return text == null ? 0 : text.length() / 4; }\n}\n",
+  "c": "#include <stdio.h>\nint main(int argc, char **argv) {\r\n\tprintf(\"%s\\n\", argv[0]);\r\n\treturn 0;\r\n}\r\n",
+  "sql": "SELECT k.id, SUM(u.input_tokens) AS input FROM usage u JOIN keys k ON k.id = u.key_id WHERE u.created_at > NOW() - INTERVAL '1 day' GROUP BY k.id ORDER BY input DESC LIMIT 50;",
+  "shell": "#!/usr/bin/env bash\nset -euo pipefail\nfor f in \"$@\"; do\n  echo \"[$(date -u +%H:%M:%S)] $f\" >&2\ndone\n",
+  "yaml": "services:\n  gateway:\n    image: alayra/nexus:1.8.6\n    environment:\n      - NEXUS_TPM_ESTIMATE=tokenizer\n    ports: [\"3000:3000\"]\n",
+  "whitespace": "a\t\tb\r\n\r\n    c    \n\n\n\t \t d    e f　g\r\r\rh \n ",
+  "contractions": "I'm sure it's fine, you'll see; we'd've known. DON'T SHOUT. They're here, aren't they? O'Neil's.",
+  "numbers": "Order 1234567890 shipped 2026-10-16T16:55:43Z for $1,299.99 (qty 3, 12.5%), lat 33.6844, lon 73.0479, ٣٤٥ ४५६",
+  "lists": "- [x] done\n- [ ] todo\n1. one\n2. two\n\n> quote\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```ts\nconst x = 1;\n```\n",
+  "special": "Mixed: café naïve résumé Ångström Straße œuvre ﬁ ligature, zero​width, soft­hyphen, combining é ä.",
+  "surrogates": "lone high \ud800 and low \udc00 surrogates, swapped \udc00\ud800, valid 𝔘𝔫𝔦𝔠𝔬𝔡𝔢 and 𠀀𠀁."
+}
