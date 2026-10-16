@@ -9,11 +9,18 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.8.6] - 2026-10-17
+
 ### Added
 
 - **`@alayrasystems/nexus-core` exports `warmTokenizer()`.** A host calls it once each process is
   listening, and the tokenizer's data (0.3-0.4 s to load) loads in the background, so the first
   request that counts tokens does not wait for it. The gateway's own server does this already.
+
+### Changed
+
+- **`js-tiktoken` is pinned to exactly 1.0.21.** Nexus now reads that package's cl100k vocabulary
+  file directly, so a new version is taken only after the counting tests have run against it.
 
 ### Fixed
 
@@ -3008,7 +3015,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.5...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.6...HEAD
+[1.8.6]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.5...v1.8.6
 [1.8.5]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.0...v1.8.5
 [1.8.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.6...v1.7.0
