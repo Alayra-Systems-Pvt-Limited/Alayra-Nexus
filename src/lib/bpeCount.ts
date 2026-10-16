@@ -29,8 +29,9 @@
 // in a table built once, never by building and hashing a string. Every count is identical to
 // js-tiktoken's (bpeCount.test.ts checks a corpus of real text and thousands of generated strings).
 //
-// One exception keeps memory bounded. A single piece over SLICE_BYTES (64 KiB with no space, digit
-// or punctuation mark to break it, which real text does not have) is merged in slices of that size.
+// One exception keeps memory bounded. A single piece over SLICE_BYTES (one unbroken run of over
+// 64 KiB of letters, of punctuation or of whitespace, which real text does not have) is merged in
+// slices of that size.
 // A cut moves the count a few tokens either way: over 52,500 random cuts in 21 shapes of run, a
 // whole run counted between 3 fewer and 2 more tokens than its two parts. So each cut adds
 // CUT_MARGIN, 8 tokens, four times the largest drop measured. In every cut measured, the count

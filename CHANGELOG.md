@@ -17,24 +17,26 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
-- **One long unbroken word can no longer stall the gateway for seconds.** Nexus counts a chat
-  request's tokens with the cl100k tokenizer before routing it, to reserve them against a key's
-  tokens-per-minute limit, and after the answer when the provider reports no usage. The tokenizer
-  library's merge step took time that grew with the square of an unbroken run's length, so one long
-  run could block the event loop for a long time. Nexus now counts with its own implementation of
-  the same tokenizer: the same vocabulary, pattern and merge rule, read from the same package, with
-  the next merge found through a priority queue, as the reference tokenizer does, and each pair
-  looked up by its two token numbers instead of by its text. Time now grows with the length of the
-  text. On a development PC a 16 KB run takes under 10 ms, 1 MB of ordinary text (English, code,
-  JSON, Chinese) about 0.1-0.2 s, 1 MB of any shape at most about 0.4 s, and a 32 MB `/v1/messages`
-  body at most about 11 s. Counts are unchanged: identical on a 4 MB corpus of real text (English,
-  code, JSON, markdown, ten other languages, emoji, base64, URLs, minified JavaScript, recorded chat
-  payloads) and on 4,000 generated strings. The one exception is a single run over 64 KB with no
-  space, digit or punctuation mark to break it, which real text does not have. It is counted in 64
-  KB slices with 8 tokens added at each cut, four times the largest drop seen. In every cut measured
-  (52,500 cuts, worst shift -3/+2 tokens) the sliced count was never lower than exact, and at most
-  11 tokens a cut above it; this is measured, not guaranteed. The tokenizer's data now also loads in
-  the background once the server is listening, instead of during the first request that needs it.
+- **Counting a request's tokens now takes time that grows with the text's length, not with the
+  square of its longest unbroken word.** Nexus counts a chat request's tokens with the cl100k
+  tokenizer before routing it, to reserve them against a key's tokens-per-minute limit, and after
+  the answer when the provider reports no usage. The tokenizer library's merge step took time that
+  grew with the square of an unbroken run's length, so one long run could block the event loop for a
+  long time. Nexus now counts with its own implementation of the same tokenizer: the same
+  vocabulary, pattern and merge rule, read from the same package, with the next merge found through
+  a priority queue, as the reference tokenizer does, and each pair looked up by its two token
+  numbers instead of by its text. Time now grows with the length of the text. On a development PC a
+  16 KB run takes about 10 ms, 1 MB of ordinary text (English, code, JSON, Chinese) about 0.1-0.2 s,
+  1 MB of the slowest shapes (a run of one character repeated, of spaces or of newlines) about
+  0.3-0.4 s, so a 32 MB `/v1/messages` body of such a run takes about 11-22 s. Counts are unchanged:
+  identical, in the tests, on about 2.4 MB of real text (English, code, JSON, markdown, ten other
+  languages, emoji, base64, URLs, minified JavaScript, recorded chat payloads) and on 4,000
+  generated strings. The one exception is a single unbroken run over 64 KB (of letters, of
+  punctuation or of whitespace), which real text does not have. It is counted in 64 KB slices with 8
+  tokens added at each cut, four times the largest drop seen. In every cut measured (52,500 cuts,
+  worst shift -3/+2 tokens) the sliced count was never lower than exact, and at most 11 tokens a cut
+  above it; this is measured, not guaranteed. The tokenizer's data now also loads in the background
+  once the server is listening, instead of during the first request that needs it.
 - **Text that contains a tokenizer special-token string, such as `<|endoftext|>`, is now counted
   exactly.** Before, the tokenizer refused such text and the whole text was estimated at a quarter
   of its length in characters. It is now counted as the ordinary text it is, the way the tokenizer
