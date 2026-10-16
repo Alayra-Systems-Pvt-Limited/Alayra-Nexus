@@ -19,14 +19,18 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 // Every call into the tokenizer is counted, so a test can prove which count a reservation used.
 // The setting is cleared before the module loads, so these tests mean the same with it set in the
 // shell; each mode is then loaded explicitly where it is tested.
-const encodes = vi.hoisted(() => { delete process.env.NEXUS_TPM_ESTIMATE; return { n: 0 }; });
+const encodes = vi.hoisted(() => { delete process.env.NEXUS_TPM_ESTIMATE; return { n: 0, loads: 0 }; });
 vi.mock('./bpeCount', async (importOriginal) => {
   const real = await importOriginal<typeof import('./bpeCount')>();
-  return { ...real, countCl100k: (text: string) => { encodes.n++; return real.countCl100k(text); } };
+  return {
+    ...real,
+    countCl100k: (text: string) => { encodes.n++; return real.countCl100k(text); },
+    loadCl100k: () => { encodes.loads++; real.loadCl100k(); },
+  };
 });
 
 import {
-  countTokens, countMessageTokens, computeReserve, estimateMessageTokens, readTpmEstimate,
+  countTokens, countMessageTokens, computeReserve, estimateMessageTokens, readTpmEstimate, warmTokenizer,
 } from './tokenizer';
 import { estimateTokens } from './tokenEstimate';
 
@@ -47,6 +51,16 @@ describe('countTokens', () => {
 
   it('counts more tokens for longer text', () => {
     expect(countTokens('a'.repeat(400))).toBeGreaterThan(countTokens('a'));
+  });
+});
+
+describe('warmTokenizer', () => {
+  it('returns at once, and loads the ranks on the next turn of the event loop', async () => {
+    encodes.loads = 0;
+    warmTokenizer();
+    expect(encodes.loads).toBe(0); // the caller (the server, once listening) is not held up
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(encodes.loads).toBe(1);
   });
 });
 

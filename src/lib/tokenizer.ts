@@ -14,7 +14,7 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-import { countCl100k } from './bpeCount';
+import { countCl100k, loadCl100k } from './bpeCount';
 import { estimateTokens, TPM_ESTIMATE } from './tokenEstimate';
 
 export { readTpmEstimate, TPM_ESTIMATE, type TpmEstimate } from './tokenEstimate';
@@ -33,6 +33,23 @@ export function countTokens(text: string): number {
   } catch {
     return Math.ceil(text.length / 4);
   }
+}
+
+/**
+ * Load the tokenizer's ranks in the background, so that no request pays for it: about 0.1-0.3 s,
+ * and more from a cold disk. With NEXUS_TPM_ESTIMATE=fast the first exact count can come in the
+ * middle of a request (the recount of a refused estimate, or the usage of a provider that reports
+ * none). Returns at once; the load runs on the next turn of the event loop. The proxy routes call
+ * it once the server is listening, in every worker (routes/proxy.ts).
+ */
+export function warmTokenizer(): void {
+  setImmediate(() => {
+    try {
+      loadCl100k();
+    } catch (err) {
+      console.warn('  Tokenizer warm-up failed; it loads on first use instead:', err instanceof Error ? err.message : err);
+    }
+  }).unref();
 }
 
 /** Extract the textual content from a chat message's `content` (string or parts array). */

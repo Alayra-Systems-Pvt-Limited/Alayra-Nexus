@@ -84,6 +84,11 @@ function load(): Cl100k {
   };
 }
 
+/** Load the ranks now rather than at the first count: tokenizer.ts `warmTokenizer` does, at boot. */
+export function loadCl100k(): void {
+  data ??= load();
+}
+
 function rankOf(d: Cl100k, bytes: string, from: number, to: number): number {
   if (to - from > d.longest) return NONE;
   return d.ranks.get(bytes.substring(from, to)) ?? NONE;

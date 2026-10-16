@@ -23,6 +23,7 @@ import { handleAnthropicMessages } from '../services/anthropicMessages.service';
 import { dispatchProxy, embeddingReserve, completionReserve, imageReserve, imageQuantity, speechReserve, speechCharacters } from '../services/proxyDispatch.service';
 import { listServableModels } from '../services/modelCatalog.service';
 import { resolveRequestScope } from '../services/byok.service';
+import { warmTokenizer } from '../lib/tokenizer';
 
 /** Anthropic's own request size limit for the Messages API. */
 export const MESSAGES_BODY_LIMIT = 32 * 1024 * 1024;
@@ -34,6 +35,12 @@ export default async function proxyRoutes(fastify: FastifyInstance) {
   // authentication. Encapsulated to this plugin, so the admin API stays answerable and an operator
   // can still watch the restore they started.
   fastify.addHook('onRequest', refuseDuringMaintenance);
+
+  // The routes below count tokens. The tokenizer's ranks load once the server is listening, in the
+  // background and in every worker, rather than inside the first request that needs an exact count
+  // (with NEXUS_TPM_ESTIMATE=fast, that can be mid-request). Not on inject() or ready(), so tests
+  // that never listen never load them.
+  fastify.addHook('onListen', async () => { warmTokenizer(); });
 
   fastify.post('/v1/chat/completions', { preHandler: [verifyApiKey] }, async (request, reply) => {
     const teamKeyId = request.teamKeyId;
