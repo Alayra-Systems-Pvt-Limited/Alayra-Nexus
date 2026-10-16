@@ -101,7 +101,8 @@ function buildPairs(ranks: Map<string, number>): void {
 function load(): Cl100k {
   // The rank file alone, rather than js-tiktoken's index, which loads every encoding it ships.
   // Required, not imported: the package maps this path with `exports`, which the compiler's
-  // CommonJS resolution does not read.
+  // CommonJS resolution does not read. This reads the file's own layout, so js-tiktoken is pinned to
+  // one exact version in both package.json files: an upgrade must re-run bpeCount.test.ts's corpus.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const src = require('js-tiktoken/ranks/cl100k_base') as Ranks;
   const ranks = new Map<string, number>();
