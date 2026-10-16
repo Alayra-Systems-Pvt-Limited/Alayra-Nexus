@@ -56,10 +56,11 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   in the same single Redis call a refund makes (a new script, `CHARGE_LUA`, with an in-memory twin
   and its own parity test). A request that spans a minute boundary adds its excess to the new
   minute, exactly as a refund already lands there. The default, `refund`, behaves exactly as before,
-  except with `NEXUS_TPM_ESTIMATE=fast`, which always runs two-way: set with `refund`, it logs one
-  warning at start-up and uses two-way. It is also useful on its own for providers whose counts
-  run above cl100k's. A usage figure above 10,000,000 tokens, more than any model reads in one
-  request, is a broken report and is never charged.
+  except with `NEXUS_TPM_ESTIMATE=fast`, which always runs two-way: left unset, two-way is what `fast`
+  means; set to `refund` or to an unknown value, it logs one warning at start-up and uses two-way.
+  It is also useful on its own for providers whose counts run above cl100k's. A usage figure above
+  10,000,000 tokens, more than any model reads in one request, is a broken report and is never
+  charged.
 
 ### Changed
 

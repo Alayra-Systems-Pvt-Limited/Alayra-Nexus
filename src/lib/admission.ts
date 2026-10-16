@@ -174,15 +174,19 @@ export function readTpmReconcile(raw = process.env.NEXUS_TPM_RECONCILE): TpmReco
 /**
  * The reconcile a process runs. The `fast` estimate can run low on crafted text (a long run of
  * random letters counts as little as a fifth of its real tokens), and only two-way reconcile charges
- * that back, so `fast` always runs with two-way, and says so once when the setting asked for refund.
+ * that back, so `fast` always runs with two-way. It warns once, and only when NEXUS_TPM_RECONCILE
+ * was set to something else; left unset, two-way is simply what `fast` means.
  */
-export function effectiveTpmReconcile(estimate: TpmEstimate, configured: TpmReconcile): TpmReconcile {
-  if (estimate !== 'fast' || configured === 'two-way') return configured;
-  console.warn('⚠️  NEXUS_TPM_ESTIMATE=fast needs two-way reconcile. Using NEXUS_TPM_RECONCILE=two-way, not refund.');
+export function effectiveTpmReconcile(estimate: TpmEstimate, raw = process.env.NEXUS_TPM_RECONCILE): TpmReconcile {
+  if (estimate !== 'fast') return readTpmReconcile(raw);
+  const value = raw?.trim().toLowerCase();
+  if (value && value !== 'two-way') {
+    console.warn(`⚠️  NEXUS_TPM_RECONCILE="${raw}" was ignored — NEXUS_TPM_ESTIMATE=fast always runs two-way.`);
+  }
   return 'two-way';
 }
 
-const TPM_RECONCILE: TpmReconcile = effectiveTpmReconcile(TPM_ESTIMATE, readTpmReconcile());
+const TPM_RECONCILE: TpmReconcile = effectiveTpmReconcile(TPM_ESTIMATE);
 
 /** No model reads this many tokens in one request. A usage figure above it is a broken report. */
 export const MAX_USAGE_TOKENS = 10_000_000;
