@@ -570,9 +570,12 @@ claude
 ```
 
 Requests route through the same pool, failover, budgets, and analytics as everything
-else. A request routed to Anthropic goes to Anthropic's own API as sent, so prompt caching,
-extended thinking, PDFs and server tools keep working; other providers get it translated to
-the OpenAI shape. On startup Claude Code reads `GET /v1/models` to populate its model picker — which
+else. A request routed to an Anthropic pool that uses `x-api-key` goes to Anthropic's own API,
+so prompt caching, extended thinking and PDFs (up to Anthropic's 32 MB request limit) keep working;
+other providers get it translated to the OpenAI shape. Request fields and server tools Nexus cannot
+price, such as fast mode or code execution, are removed unless the pool allows them, and named in
+`X-Nexus-Stripped` ([details](docs/routing.md)). With input guardrails on, a request carrying a
+PDF takes the translated path, which drops the PDF. On startup Claude Code reads `GET /v1/models` to populate its model picker — which
 now lists **your** configured models alongside the `alayra-nexus-1` auto-route entry, so
 you can pick a specific one from inside the client or leave it on auto and let Nexus
 choose.

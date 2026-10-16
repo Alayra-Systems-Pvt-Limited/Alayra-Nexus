@@ -22,10 +22,10 @@ import { createStreamTally } from '../../lib/streamTally';
 import { createClientWriter } from '../../lib/clientWriter';
 import * as metrics from '../../lib/metrics';
 import { STREAM_IDLE_MS, STREAM_MAX_MS } from './config';
-import { markHealthy, type Delivery } from './deliver';
+import { markHealthy, tpmTokens, type Delivery } from './deliver';
 import { storeStreamInCache } from './responseHelpers';
 import { observe, recordUsage, routeUsage, stampUsage } from './run';
-import { cutFrame, openEventStream, type CutReason } from './sse';
+import { cutFrame, eventBoundary, openEventStream, type CutReason } from './sse';
 
 // ── Live streaming: relay the provider's stream at the caller's pace ──────────
 
@@ -41,6 +41,9 @@ export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array
   // Writes at the caller's pace rather than the provider's, so a slow reader slows the request
   // down instead of making this process hold the rest of their answer.
   const client = createClientWriter(reply.raw, controller.signal);
+  // Whether what the caller has received so far ends on a whole event, so the gateway's own closing
+  // frame can never be spliced into the middle of the provider's.
+  const boundary = eventBoundary();
   let streamFailed = false;
   /** Set by whichever guard fires first; read once in `finally` to say what happened. */
   let cutShort: CutReason | null = null;
@@ -61,6 +64,7 @@ export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array
       clearTimeout(idleTimer);
       tally.push(value);
       await client.write(value);
+      boundary.push(value);
       if (client.gone() || departure.gone()) { cutShort ??= 'client'; break; }
       idleTimer = startIdleTimer();
     }
@@ -78,10 +82,14 @@ export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array
     // Before reading the tally either way: a stream that died mid-flight still delivered tokens
     // the provider will bill for, and the last of them may be sitting in the decoder.
     tally.end();
-    // Nothing to explain to a caller who has already hung up.
-    if (cutShort && cutShort !== 'client') reply.raw.write(cutFrame(cutShort, dispatched.native ? 'anthropic' : 'openai'));
+    // Nothing to explain to a caller who has already hung up. A stream cut part-way through one of the
+    // provider's events gets no frame either: joined to half an event it would make one malformed line,
+    // which a client reports as its own parse error instead of the gateway's message.
+    if (cutShort && cutShort !== 'client' && boundary.closed()) reply.raw.write(cutFrame(cutShort, dispatched.native ? 'anthropic' : 'openai'));
     reply.raw.end();
   }
+  // The provider's own error event inside a stream that began 200 (Anthropic's overload, say).
+  if (tally.failed()) streamFailed = true;
 
   // Three endings. A caller who hung up cancelled it: not a provider fault, not a success. A stream
   // that connected (200 headers) but hung/aborted mid-flight is a server-side fault. A clean
@@ -106,6 +114,7 @@ export async function deliverStream(d: Delivery, body: ReadableStream<Uint8Array
   // Only cache a cleanly-completed stream, and only one that was read whole: a dropped frame (or a
   // caller who left halfway) leaves a hole in the answer, and a cached hole is served to everyone.
   if (outcome === 'success' && !tally.degraded()) storeStreamInCache(cache.cacheStoreKey, answer, route.modelString, route.providerSlug, inputTokens, outputTokens, cache.cacheCfg.ttlSeconds);
-  void reconcileTpm(route.keyId, reserve, inputTokens + outputTokens).catch(() => {});
-  await recordUsage(run, { ...routeUsage(run, route, sessionId, inputTokens, outputTokens), outcome, detail: tally.detail() });
+  const detail = tally.detail();
+  void reconcileTpm(route.keyId, reserve, tpmTokens(dispatched, inputTokens, outputTokens, detail.cachedInputTokens)).catch(() => {});
+  await recordUsage(run, { ...routeUsage(run, route, sessionId, inputTokens, outputTokens), outcome, detail, serverToolUse: tally.serverToolUse() });
 }

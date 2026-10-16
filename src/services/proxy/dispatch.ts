@@ -17,8 +17,7 @@
 // Imported through nexus.service (not its routing/ modules) so tests that mock './nexus.service'
 // keep intercepting every routing call the proxy makes.
 import {
-  discoverBestPool, getNextCooldownSeconds, reportServerFailure, reportRateLimit, reportAuthFailure, reportTierExhausted,
-  type NexusRoute,
+  discoverBestPool, getNextCooldownSeconds, reportServerFailure, reportTierExhausted, type NexusRoute,
 } from '../nexus.service';
 import { getSsrfPolicy } from '../ssrf.service';
 import { noCapacityMessage } from '../modelCatalog.service';
@@ -38,7 +37,8 @@ import { DEFAULT_MAX_TOKENS_RESERVE, UPSTREAM_TTFT_MS } from './config';
 import type { Admission } from './admission';
 import type { GuardedRequest } from './inputGuard';
 import { observe, type ProxyRun } from './run';
-import { goesNative, nativeRequest } from './anthropicNative';
+import { planNative } from './anthropicNative';
+import { answerUpstreamFailure } from './upstreamFailure';
 import { answered, proceed, withProviderStreamUsage, type AnthropicNative, type Stage } from './types';
 
 // ── Dispatch: choose a key, call the provider, sort out a failed answer ───────
@@ -58,8 +58,10 @@ export interface Dispatched {
   refundReservation: () => void;
   traceAttempt?:     RequestTrace['attempts'][number];
   sessionId:         string;
-  /** True when the request went to Anthropic's own API as sent, and its answer is relayed untouched. */
+  /** True when the request went to Anthropic's own API, and its answer is relayed untouched. */
   native:            boolean;
+  /** On a native request, what was removed from the caller's body and headers (X-Nexus-Stripped). */
+  stripped:          string[];
 }
 
 export async function dispatchUpstream(
@@ -156,8 +158,8 @@ export async function dispatchUpstream(
     return answered(reply.code(502).send({ error: err instanceof Error ? err.message : 'Upstream blocked by SSRF policy.' }));
   }
 
-  // An Anthropic Messages request routed to Anthropic goes to its own API as sent (anthropicNative.ts).
-  const native = goesNative(anthropic, route, guarded, messages) ? nativeRequest(anthropic, route) : null;
+  // An Anthropic Messages request routed to Anthropic may go to its own API (anthropicNative.ts).
+  const native = await planNative(anthropic, route, guarded, messages);
   const upstreamUrl  = native?.url ?? `${stripTrailingSlash(route.baseUrl)}/chat/completions`;
   // Forward the (possibly redacted) messages. In buffered-safe mode we request a
   // non-streamed response from upstream so we can inspect it before replaying it.
@@ -220,28 +222,16 @@ export async function dispatchUpstream(
   span.setAttribute('http.status_code', upstream.status);
 
   if (!upstream.ok) {
-    const errText = await upstream.text().catch(() => 'Upstream error');
-    departure.release();
-    // Classify the failure for the circuit breaker: 429 is flat back-pressure,
-    // 401/403 is a bad credential (a ban is requested on repeat), 5xx is a server fault
-    // (strike/escalate). Other 4xx are the caller's error — the key is fine.
-    if (upstream.status === 429)                             { await reportRateLimit(keyId); metrics.providerError(route.providerSlug, 'rate_limit'); }
-    else if (upstream.status === 401 || upstream.status === 403) { await reportAuthFailure(keyId); metrics.providerError(route.providerSlug, 'auth'); }
-    else if (upstream.status >= 500)                         { await reportServerFailure(keyId, route.isProbe); metrics.providerError(route.providerSlug, 'server'); }
+    const nativeStripped = native ? native.stripped : null;
+    const result = await answerUpstreamFailure(run, { route, upstream, nativeStripped, departure, refundReservation, traceAttempt });
     span.setStatus({ code: SpanStatusCode.ERROR }); span.end();
-    refundReservation(); // rejected upstream — return the reserved budget
-    if (traceAttempt) {
-      traceAttempt.status = upstream.status;
-      traceAttempt.outcome = upstream.status === 429 ? 'rate_limited'
-        : upstream.status === 401 || upstream.status === 403 ? 'auth_error' : 'provider_error';
-    }
-    if (trace) trace.refusal = { status: upstream.status, reason: `The provider answered ${upstream.status}.` };
-    // 4xx (other than 429) is the caller's bad request; 429/auth/5xx is an upstream fault.
-    observe(run, upstream.status >= 500 || upstream.status === 429 || upstream.status === 401 || upstream.status === 403 ? 'upstream_error' : 'client_error');
-    return answered(reply.code(upstream.status).send(errText));
+    return answered(result);
   }
   if (traceAttempt) traceAttempt.status = upstream.status;
   span.end(); // upstream responded OK
 
-  return proceed({ route, upstream, controller, departure, session, reserve, refundReservation, traceAttempt, sessionId, native: native !== null });
+  return proceed({
+    route, upstream, controller, departure, session, reserve, refundReservation, traceAttempt, sessionId,
+    native: native !== null, stripped: native?.stripped ?? [],
+  });
 }

@@ -20,12 +20,13 @@ import { countMessageTokens } from '../../lib/tokenizer';
 import { reconcileTpm } from '../../lib/admission';
 import { setStickyKeyId } from '../../lib/sticky';
 import { readUsageDetail } from '../../lib/usageDetail';
-import { readAnthropicTokens } from '../../lib/anthropicUsage';
+import { readAnthropicTokens, readServerToolUse } from '../../lib/anthropicUsage';
 import * as metrics from '../../lib/metrics';
 import { UPSTREAM_BODY_MS } from './config';
 import type { CacheMiss } from './cacheLookup';
 import type { Dispatched } from './dispatch';
 import type { GuardedRequest } from './inputGuard';
+import { nativeAnswerHeaders } from './upstreamFailure';
 import { applyOutputGuardrails, storeInCache } from './responseHelpers';
 import { observe, recordUsage, routeUsage, stampUsage, type ProxyRun } from './run';
 import { openEventStream, toSingleSseChunk } from './sse';
@@ -53,7 +54,7 @@ export function gatewayHeaders(dispatched: Dispatched, guarded: GuardedRequest, 
     ...(route.wasDowngrade ? { 'X-Nexus-Tier-Downgrade': 'true' } : {}),
     ...(route.sticky        ? { 'X-Nexus-Sticky': 'true' } : {}),
     ...(route.byok          ? { 'X-Nexus-BYOK': 'true' } : {}),
-    ...(dispatched.native   ? { 'X-Nexus-Native': 'anthropic' } : {}),
+    ...(dispatched.native   ? nativeAnswerHeaders(dispatched.upstream, dispatched.stripped) : {}),
     ...(cache.cacheStoreKey ? { 'X-Nexus-Cache': 'miss' } : {}),
     ...guarded.guardHeaders,
   };
@@ -102,11 +103,22 @@ async function settleJson(d: Delivery, data: Record<string, unknown>): Promise<v
   stampUsage(run, inputTokens, outputTokens);
   observe(run, 'success'); metrics.addTokens(inputTokens, outputTokens);
   storeInCache(cache.cacheStoreKey, data, route.providerSlug, cache.cacheCfg.ttlSeconds); // cache the post-guardrails response
-  void reconcileTpm(route.keyId, reserve, inputTokens + outputTokens).catch(() => {});
-  if (traceAttempt) traceAttempt.outcome = 'success';
   // Gemini's own answer calls the block `usageMetadata`; every other format calls it `usage`.
   const detail = readUsageDetail(data.usage ?? data.usageMetadata);
-  await recordUsage(run, { ...routeUsage(run, route, sessionId, inputTokens, outputTokens), detail });
+  void reconcileTpm(route.keyId, reserve, tpmTokens(dispatched, inputTokens, outputTokens, detail.cachedInputTokens)).catch(() => {});
+  if (traceAttempt) traceAttempt.outcome = 'success';
+  const serverToolUse = dispatched.native ? readServerToolUse(data.usage) : undefined;
+  await recordUsage(run, { ...routeUsage(run, route, sessionId, inputTokens, outputTokens), detail, serverToolUse });
+}
+
+/**
+ * The tokens a request used against the key's per-minute budget. Anthropic does not count cache
+ * reads toward its input rate limit (https://platform.claude.com/docs/en/api/rate-limits), so on its
+ * own API they are left out here too; a cached session would otherwise look many times larger than the
+ * limit Anthropic applies, and be refused early. The usage row still records the whole prompt.
+ */
+export function tpmTokens(dispatched: Dispatched, input: number, output: number, cacheReads: number | undefined): number {
+  return (dispatched.native ? Math.max(0, input - (cacheReads ?? 0)) : input) + output;
 }
 
 /**

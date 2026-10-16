@@ -11,32 +11,49 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Added
 
-- **Anthropic Messages requests routed to Anthropic now go to Anthropic's own API as sent.**
+- **Anthropic Messages requests routed to Anthropic now go to Anthropic's own API.**
   `/v1/messages` used to translate every request to the OpenAI shape and send it to Anthropic's
-  OpenAI-compatible endpoint, which drops `cache_control`, extended thinking, `document` blocks,
-  server tools and `top_k`, so prompt caching never worked through the gateway and a long coding
-  session cost noticeably more than going direct. Now, when routing picks an Anthropic pool, the
-  caller's body goes to `<baseUrl>/messages` unchanged except for `model` (set to the one routing
-  chose), with the key's own credential and only the caller's `anthropic-version` and
-  `anthropic-beta` headers, and Anthropic's answer, stream, or error comes back untouched, marked
-  `X-Nexus-Native: anthropic`. Usage records the whole prompt as input (uncached plus cache reads
-  plus cache writes, the same meaning `prompt_tokens` has) with the cache reads and the 5-minute
-  and 1-hour cache writes beside it, priced at their own rates (see the next entry). Every other provider keeps the
-  translation, and so does a request whose input guardrails redacted it or whose output rules need
-  to read the answer. With input guardrails on, the native path is used only when every part of
-  the request is either scanned or already forwarded unscanned today; anything else keeps the
-  translated path. Admission, routing, sticky keys, budgets, the time limits and the hang-up
-  handling are the same on both paths, and deciding costs no database or Redis call. A native
-  answer is not stored in the response cache, and a `/v1/messages` request is now cached under a
-  digest of what it sent, so two requests that translate alike (the same question about two
-  different PDFs) no longer share an answer. `/v1/messages` accepts bodies up to 32 MB, Anthropic's
-  limit for one request, and checks the API key before reading the body. A pool can carry settings for this path in the new
-  nullable `NexusProvider.nativeMessages` column, set through the admin API: PostgreSQL gets
-  migration `0021_provider_native_messages` (additive, gives up after five seconds), and a
-  standalone SQLite file created by an earlier version gains the column at start. **For
-  `@alayrasystems/nexus-core` hosts:** `handleAnthropicMessages` serves `/v1/messages` this way;
-  `createAnthropicReply` now also returns `passThrough()`; `ProviderRow` gains an optional
-  `nativeMessages`, which the conformance checks expect a store to return.
+  OpenAI-compatible endpoint, which drops `cache_control`, extended thinking, `document` blocks and
+  `top_k`, so prompt caching never worked through the gateway and a long coding session cost
+  noticeably more than going direct. Now, when routing picks an Anthropic pool set up for
+  Anthropic's own API (auth header `x-api-key`, or the pool's new `nativeMessages.enabled`) and
+  chose the model the caller asked for, the caller's body goes to `<baseUrl>/messages` with the
+  key's own credential, the caller's `anthropic-version` (else the pool's, else `2023-06-01`), and
+  the pool's and the caller's `anthropic-beta` values together. Anthropic's answer, stream or
+  error comes back untouched, marked `X-Nexus-Native: anthropic`, with Anthropic's `retry-after`,
+  `request-id` and `x-should-retry` headers. **Nexus forwards only what it can price:** request
+  fields that change the price or the model (`speed`, `service_tier`, `inference_geo`,
+  `container`, `mcp_servers`, `fallbacks`, `context_management`, and any newer field), server tools
+  the routed model does not price (code execution, the advisor, MCP toolsets, unknown tool types;
+  web search and web fetch once the model sets their price), and a caller's beta that only switches
+  one of those on are removed, and the response names them in the new `X-Nexus-Stripped` header.
+  The request still runs. Auth-changing betas (`oauth-*`) are never sent. An operator can let such
+  fields and tools through for one pool with `nativeMessages.allow` (admin API); **whatever a pool
+  allows is billed by Anthropic but neither recorded nor limited by Nexus.** A request for another
+  model, a budget downgrade, a pool on `Authorization: Bearer`, a request whose input guardrails
+  redacted it or whose output rules need to read the answer, and, on a shared key, a request that
+  names an uploaded file all keep the translated path, as does every other provider. With input
+  guardrails on, the native path is used only when every part of the request, field by field, is
+  either scanned or already forwarded unscanned today; anything else keeps the translated path.
+  Usage records the whole prompt as input (uncached plus cache reads plus cache writes, the same
+  meaning `prompt_tokens` has) with the cache reads and the 5-minute and 1-hour cache writes beside
+  it, priced at their own rates (see the next entry), and a stream that ends with Anthropic's own
+  `error` event is recorded as a failure. Anthropic's errors count against a key by their type:
+  only `authentication_error` counts toward a ban, and a `permission_error`, which the caller can
+  provoke on this path, counts against no key. The per-minute token budget leaves out cache reads,
+  as Anthropic's own input limit does. A native answer is not stored in the response cache, and a
+  `/v1/messages` request is now cached under a digest of what it sent, so two requests that
+  translate alike (the same question about two different PDFs) no longer share an answer.
+  `/v1/messages` accepts bodies up to 32 MB, Anthropic's limit for one request, and checks the API
+  key before reading the body. Admission, routing, sticky keys, budgets, the time limits and the
+  hang-up handling are the same on both paths. Deciding costs no database or Redis call; a request
+  that declares a server tool reads the in-process model registry. A pool's settings live in the
+  new nullable `NexusProvider.nativeMessages` column: PostgreSQL gets migration
+  `0021_provider_native_messages` (additive, gives up after five seconds), and a standalone SQLite
+  file created by an earlier version gains the column at start. **For `@alayrasystems/nexus-core`
+  hosts:** `handleAnthropicMessages` serves `/v1/messages` this way; `createAnthropicReply` now also
+  returns `passThrough()`; `ProviderRow` gains an optional `nativeMessages`, which the conformance
+  checks expect a store to return.
 - **Cache reads, cache writes and per-use server tools are priced at their own rates.** A usage
   row's cost, and so every team budget, used to price the whole prompt at the input price. With
   prompt caching working on Anthropic, that overstated a cached coding session about six times
@@ -67,6 +84,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ### Fixed
 
+- **A team on a shared key no longer reads the provider's own words for a refused credential or a
+  rate limit.** A provider's 401, 403 or 429 message can name the account behind the key (an
+  organisation id in a rate-limit message, for one), and the gateway passed it to whichever team
+  hit it. For a caller using a team key on a shared provider key, the error's type and code are now
+  kept and the message is replaced with a generic one. The operator's own key, and a team on its own
+  provider key, still get the provider's words.
+- **A stream the gateway cuts short no longer splices its closing frame into a half-sent event.**
+  When a provider went quiet part-way through an event, the gateway's "this answer is incomplete"
+  frame was written straight after the partial bytes, and a client read the joined line as its own
+  parse error. The frame is now written only between events; a stream cut inside one simply ends.
 - **A caller who hangs up now stops the provider, and the request is recorded as cancelled.** When a
   client closed a streamed request early (an editor's Stop or Esc key, for example), the gateway
   went on reading the provider's answer to the end, so the provider kept generating it and a BYOK

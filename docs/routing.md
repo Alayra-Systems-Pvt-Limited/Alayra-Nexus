@@ -70,11 +70,65 @@ away on every turn. Nexus instead pins a conversation to the key that last serve
   falling back to normal tier/LRU selection only for new sessions or when the pinned key is
   cooling, banned, or out of headroom.
 - Sticky-routed responses carry an **`X-Nexus-Sticky: true`** header.
-- An Anthropic Messages request (`/v1/messages`) routed to Anthropic goes to Anthropic's own API
-  as sent, so its `cache_control` breakpoints reach the provider and later turns are read from
-  Anthropic's prompt cache. Such responses carry **`X-Nexus-Native: anthropic`**. With input
-  guardrails on, this happens only when every part of the request is either scanned or already
-  forwarded unscanned on the translated path; otherwise the request is translated as before.
+- An Anthropic Messages request (`/v1/messages`) routed to Anthropic can go to Anthropic's own API,
+  so its `cache_control` breakpoints reach the provider and later turns are read from Anthropic's
+  prompt cache. See the next section for when.
+
+</details>
+
+<details>
+<summary><b>Anthropic Messages on Anthropic's own API</b></summary>
+
+
+`/v1/messages` runs through the same admission, guardrails, routing and budgets as
+`/v1/chat/completions`, in a translated form. When routing lands on an Anthropic pool, the caller's
+own request goes to `<baseUrl>/messages` instead, and Anthropic's answer, stream or error comes back
+untouched, marked **`X-Nexus-Native: anthropic`**, with Anthropic's `retry-after`, `request-id` and
+`x-should-retry` headers. That happens only when all of these hold; otherwise the request is
+translated as before:
+
+- The pool is set up for Anthropic's own API: its auth header is `x-api-key`, or its
+  `nativeMessages.enabled` is `true`. A pool on `Authorization: Bearer` may point at an
+  OpenAI-compatible relay with no `/messages`, so it is translated unless told otherwise, and
+  `"enabled": false` turns the native path off for a pool.
+- Routing chose the model the caller asked for. A different model, and above all a budget
+  downgrade, may refuse settings written for the requested one (its thinking mode, its effort).
+- The input guardrails did not redact the request, no output rule needs to read the answer, and,
+  with input guardrails on, every part of the request is either scanned or already forwarded
+  unscanned by the translated path, checked field by field.
+- On a shared key, the request names no uploaded file or container upload: those belong to the
+  key's organisation, not the caller's.
+
+**Nexus forwards only what it can price.** Budgets and recorded cost come from token counts and the
+model registry's prices, so a request field or tool that Anthropic bills some other way is removed
+before the request leaves, and the response names it in **`X-Nexus-Stripped`**. The request still
+runs. Removed unless the pool allows them: `speed`, `service_tier`, `inference_geo`, `container`,
+`mcp_servers`, `fallbacks`, `context_management` and any field newer than this release; server tools
+the routed model does not price (web search and web fetch need `webSearchCostPer1K` and
+`webFetchCostPer1K` set on the model; code execution, the advisor, MCP toolsets and unknown tool
+types are never priced); and a caller's beta that only switches one of those on. Beta features that
+change authentication (`oauth-*`) are never sent. The pool's own `anthropic-beta` header and the
+caller's are sent together.
+
+An operator who accepts unrecorded charges on a pool lists them in its `nativeMessages`, through
+`PATCH /admin/providers/:id`:
+
+```json
+{ "nativeMessages": { "allow": ["speed", "code_execution"] } }
+```
+
+> [!WARNING]
+> Whatever a pool allows this way is billed by Anthropic but **neither recorded nor limited by
+> Nexus**. Team budgets do not see it.
+
+Anthropic's errors count against the key by their type, not their status: only
+`authentication_error` counts toward a ban, `rate_limit_error` and `billing_error` cool the key,
+`overloaded_error`, `api_error` and `timeout_error` are server faults, and everything else
+(including `permission_error`, which on this path the caller can provoke) counts against no key.
+A team using a shared key reads the type of a 401, 403 or 429 error but not Anthropic's own words,
+which can name the operator's organisation. The per-minute token budget leaves out cache reads, as
+Anthropic's own input limit does. `/v1/messages` accepts bodies up to 32 MB, Anthropic's limit for
+one request.
 
 </details>
 

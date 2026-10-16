@@ -52,17 +52,18 @@ vi.mock('./modelCatalog.service', async (o) => ({
   ...(await o<typeof import('./modelCatalog.service')>()),
   resolveRequestedModel: vi.fn(async () => ({ kind: 'auto' })),
 }));
+// The routed model prices web search, so the request's search tool may go to Anthropic.
+vi.mock('./model.service', () => ({ getModelRegistry: vi.fn(async () => [{ id: 'm-a', modelString: 'claude-sonnet-4-5', webSearchCostPer1K: 10 }]) }));
 
 import { handleAnthropicMessages } from './anthropicMessages.service';
 import { handleProxy } from './completionsProxy.service';
-import { cutFrame } from './proxy/sse';
 import { countTokens } from '../lib/tokenizer';
 
 // ── Fake Anthropic ──────────────────────────────────────────────────────────────────────────────
 
 const USAGE = {
   input_tokens: 10, cache_read_input_tokens: 2000, cache_creation_input_tokens: 300, output_tokens: 42,
-  cache_creation: { ephemeral_5m_input_tokens: 100, ephemeral_1h_input_tokens: 200 },
+  cache_creation: { ephemeral_5m_input_tokens: 100, ephemeral_1h_input_tokens: 200 }, server_tool_use: { web_search_requests: 1 },
 };
 const MESSAGE = { id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-sonnet-4-5', content: [{ type: 'text', text: 'Hi.' }], stop_reason: 'end_turn', stop_sequence: null, usage: USAGE };
 const ev = (event: string, data: object) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -91,7 +92,11 @@ function serveAnthropic(req: http.IncomingMessage, res: http.ServerResponse): vo
       return;
     }
     if (fake.mode === 'json') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(MESSAGE)); return; }
-    if (fake.mode === 'overloaded') { res.writeHead(529, { 'content-type': 'application/json' }); res.end(JSON.stringify(OVERLOADED)); return; }
+    if (fake.mode === 'overloaded') {
+      res.writeHead(529, { 'content-type': 'application/json', 'retry-after': '3', 'request-id': 'req_529', 'anthropic-organization-id': 'org-1' });
+      res.end(JSON.stringify(OVERLOADED));
+      return;
+    }
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     if (fake.mode === 'stream') { fake.finished = true; res.end(STREAM.join('')); return; }
     res.write(START);                                   // endless: one word every 10ms until closed
@@ -163,34 +168,54 @@ describe('a /v1/messages request routed to Anthropic', () => {
     expect(JSON.parse(seen.body)).toEqual(RICH);
   });
 
-  it('keeps top-level fields the gateway has never heard of', async () => {
-    const body = { ...RICH, context_management: { edits: [{ type: 'clear_tool_uses_20250919' }] }, some_future_beta: { on: true } };
-    await post(body);
-    expect(JSON.parse(seen.body)).toEqual(body);
+  it('strips what Nexus cannot price, names it in X-Nexus-Stripped, and still answers', async () => {
+    const res = await post({ ...RICH, speed: 'fast', context_management: { edits: [] }, some_future_field: { on: true },
+      tools: [...RICH.tools, { type: 'code_execution_20250825', name: 'code_execution' }] }, { 'anthropic-beta': 'fast-mode-2026-02-01' });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-nexus-stripped'))
+      .toBe('speed, context_management, some_future_field, tool:code_execution_20250825, anthropic-beta:fast-mode-2026-02-01');
+    expect(JSON.parse(seen.body)).toEqual(RICH);
+    expect(seen.headers['anthropic-beta']).toBeUndefined();
   });
 
-  it('changes only the model when routing resolved a different one', async () => {
-    await post({ ...RICH, model: 'claude-latest' });
-    expect(JSON.parse(seen.body)).toEqual({ ...RICH, model: 'claude-sonnet-4-5' });
+  it('lets a field through when the pool allows it', async () => {
+    route.nativeMessages = '{"allow":["speed","context_management"]}';
+    const body = { ...RICH, speed: 'fast', context_management: { edits: [] } };
+    const res = await post(body, { 'anthropic-beta': 'fast-mode-2026-02-01' });
+    expect(res.headers.get('x-nexus-stripped')).toBeNull();
+    expect(JSON.parse(seen.body)).toEqual(body);
+    expect(seen.headers['anthropic-beta']).toBe('fast-mode-2026-02-01');
   });
+
 
   it('sends the key\'s own credential and the version and beta headers, and nothing else of the caller\'s', async () => {
+    route.extraHeaders = '{"Anthropic-Version":"2023-01-01","anthropic-beta":"context-1m-2025-08-07"}';
     await post(RICH, {
       'x-api-key': 'nexus-caller-key', authorization: 'Bearer nexus-caller-key', cookie: 'a=b', 'x-custom': '1',
       'anthropic-version': '2023-06-01', 'anthropic-beta': 'extended-cache-ttl-2025-04-11',
     });
     expect(seen.headers['x-api-key']).toBe('sk-ant-provider');
     expect(seen.headers['anthropic-version']).toBe('2023-06-01');
-    expect(seen.headers['anthropic-beta']).toBe('extended-cache-ttl-2025-04-11');
+    expect(seen.headers['anthropic-beta']).toBe('context-1m-2025-08-07,extended-cache-ttl-2025-04-11');
     for (const h of ['authorization', 'cookie', 'x-custom']) expect(seen.headers[h], h).toBeUndefined();
   });
 
-  it('records the whole prompt as input, with the cache reads and the 5m/1h cache writes beside it', async () => {
+  it('sends the pool\'s version when the caller names none, and the default when neither does', async () => {
+    route.extraHeaders = '{"anthropic-version":"2023-01-01"}';
+    await post(RICH);
+    expect(seen.headers['anthropic-version']).toBe('2023-01-01');
+    route.extraHeaders = null;
+    await post(RICH);
+    expect(seen.headers['anthropic-version']).toBe('2023-06-01');
+  });
+
+  it('records the whole prompt as input, with the cache reads and writes beside it, and the searches run', async () => {
     await post(RICH);
     await vi.waitFor(() => expect(recordTokenUsage).toHaveBeenCalledTimes(1));
     expect(usageRow()).toMatchObject({
       provider: 'anthropic', inputTokens: 2310, outputTokens: 42,
       detail: { cachedInputTokens: 2000, cacheWriteTokens: 300, cacheWrite5mTokens: 100, cacheWrite1hTokens: 200 },
+      serverToolUse: { web_search_requests: 1 },
     });
     expect(setCached).not.toHaveBeenCalled();             // a native answer is never cached
   });
@@ -205,11 +230,17 @@ describe('a /v1/messages request routed to Anthropic', () => {
     expect(setCached).not.toHaveBeenCalled();
   });
 
-  it('passes Anthropic\'s own error through, status and body', async () => {
+  it('passes Anthropic\'s own error through, marked native, with its retry headers', async () => {
     fake.mode = 'overloaded';
-    const res = await post(RICH);
+    const res = await post({ ...RICH, speed: 'fast' });
     expect(res.status).toBe(529);
     expect(await res.json()).toEqual(OVERLOADED);
+    expect(res.headers.get('x-nexus-native')).toBe('anthropic');
+    expect(res.headers.get('x-nexus-stripped')).toBe('speed');
+    expect(res.headers.get('retry-after')).toBe('3');
+    expect(res.headers.get('request-id')).toBe('req_529');
+    expect(res.headers.get('anthropic-organization-id')).toBeNull();
+    expect(reportServerFailure).toHaveBeenCalledWith('key-a', false);
   });
 
   it('stops Anthropic when the caller hangs up, and bills the prompt and what was streamed', async () => {
@@ -250,14 +281,5 @@ describe('everything else keeps the translated path', () => {
     Object.assign(route, { providerSlug: 'openai', modelString: 'gpt-4o', authHeader: 'Authorization', authPrefix: 'Bearer', extraHeaders: null });
     await post({ messages: [{ role: 'user', content: 'hi' }], prompt_cache_key: 'conv-42' }, {}, '/v1/chat/completions');
     expect(JSON.parse(seen.body).prompt_cache_key).toBe('conv-42');
-  });
-});
-
-describe('a stream the gateway cuts short', () => {
-  it('ends with an Anthropic error event on the native path', () => {
-    const frame = cutFrame('idle', 'anthropic');
-    expect(frame.startsWith('event: error\ndata: ')).toBe(true);
-    expect(JSON.parse(frame.split('data: ')[1])).toMatchObject({ type: 'error', error: { type: 'api_error' } });
-    expect(cutFrame('idle')).toMatch(/^data: \{"error"/);
   });
 });

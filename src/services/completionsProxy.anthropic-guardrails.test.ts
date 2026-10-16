@@ -47,6 +47,8 @@ vi.mock('./modelCatalog.service', async (o) => ({
   ...(await o<typeof import('./modelCatalog.service')>()),
   resolveRequestedModel: vi.fn(async () => ({ kind: 'auto' })),
 }));
+// The routed model prices web search, so a search tool is not simply stripped before the check.
+vi.mock('./model.service', () => ({ getModelRegistry: vi.fn(async () => [{ id: 'm-a', modelString: 'claude-sonnet-4-5', webSearchCostPer1K: 10 }]) }));
 
 import { handleAnthropicMessages } from './anthropicMessages.service';
 
@@ -94,11 +96,9 @@ beforeEach(() => {
   });
 });
 
-const ask = (...messages: object[]) =>
-  fetch(`${gatewayUrl}/v1/messages`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 64, system: 'Be brief.', messages }),
-  });
+const send = (body: object) =>
+  fetch(`${gatewayUrl}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const ask = (...messages: object[]) => send({ model: 'claude-sonnet-4-5', max_tokens: 64, system: 'Be brief.', messages });
 const user = (...content: object[]) => ({ role: 'user', content });
 const text = (t: string) => ({ type: 'text', text: t });
 const toolUse = { role: 'assistant', content: [text('Looking.'), { type: 'tool_use', id: 'tu_1', name: 'read_file', input: { path: 'a.txt' } }] };
@@ -157,6 +157,21 @@ describe('with input guardrails on', () => {
     expect(await wayOf(await ask(user(text('Q')), thinking, user(text('And?'))))).toBe('translated');
   });
 
+  it('an image held as a file, or text carrying citations, keeps the translated path', async () => {
+    expect(await wayOf(await ask(user({ type: 'image', source: { type: 'file', file_id: 'file_1' } }, text('What is this?'))))).toBe('translated');
+    calls.length = 0;
+    expect(await wayOf(await ask(user({ ...text('Quote it.'), citations: [{ type: 'char_location', cited_text: 'x' }] })))).toBe('translated');
+  });
+
+  it('a server tool the model prices keeps the translated path: its results are never scanned', async () => {
+    const res = await send({ model: 'claude-sonnet-4-5', max_tokens: 64, tools: [{ type: 'web_search_20260209', name: 'web_search' }], messages: [user(text('Search.'))] });
+    expect(await wayOf(res)).toBe('translated');
+  });
+
+  it('messages that are not a list keep the translated path', async () => {
+    expect(await wayOf(await send({ model: 'claude-sonnet-4-5', max_tokens: 64, system: 'Be brief.', messages: { role: 'user', content: 'hi' } }))).toBe('translated');
+  });
+
   it('a block type nobody knows yet keeps the translated path', async () => {
     expect(await wayOf(await ask(user({ type: 'brand_new_block', payload: 'x' }, text('hi'))))).toBe('translated');
   });
@@ -178,5 +193,14 @@ describe('with guardrails off', () => {
     guard.enabled = false;
     expect(await wayOf(await ask(user(pdf, text('Summarise.'))))).toBe('native');
     expect(calls[0].body).toContain('JVBERi0x');
+  });
+
+  it('a file the key\'s organisation holds goes native only on the team\'s own key', async () => {
+    guard.enabled = false;
+    const filed = user({ type: 'document', source: { type: 'file', file_id: 'file_1' } }, text('Summarise.'));
+    expect(await wayOf(await ask(filed))).toBe('translated');
+    calls.length = 0;
+    route.byok = true;
+    expect(await wayOf(await ask(filed))).toBe('native');
   });
 });
