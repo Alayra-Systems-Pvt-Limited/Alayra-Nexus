@@ -25,7 +25,10 @@ export { readTpmEstimate, TPM_ESTIMATE, type TpmEstimate } from './tokenEstimate
 // gives js-tiktoken's exact count in time linear in the text (js-tiktoken's own merge is quadratic
 // in the length of one unbroken word, and one long word could stall the event loop for seconds).
 
-/** Token count of a single string, with a safe character-based fallback. */
+/**
+ * Token count of a single string. Text that names a special token, such as `<|endoftext|>`, is
+ * counted exactly like any other text; the character-based fallback is for an unexpected error only.
+ */
 export function countTokens(text: string): number {
   if (!text) return 0;
   try {

@@ -31,6 +31,10 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   it counts at or above the exact count and at most 11 tokens a cut above it. The tokenizer's data
   now also loads in the background once the server is listening, instead of during the first
   request that needs it.
+- **Text that contains a tokenizer special-token string, such as `<|endoftext|>`, is now counted
+  exactly.** Before, the tokenizer refused such text and the whole text was estimated at a quarter
+  of its length in characters. It is now counted as the ordinary text it is, the way the tokenizer
+  counts it when no special token is allowed.
 
 ## [1.8.5] - 2026-10-17
 

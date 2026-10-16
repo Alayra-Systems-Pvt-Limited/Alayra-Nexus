@@ -15,9 +15,10 @@
  */
 
 // bpeCount.ts must give js-tiktoken's count, exactly, in time linear in the text. js-tiktoken is the
-// reference: the same text goes through both. Its own merge is quadratic in the length of one
-// unbroken run, so it is only asked about what it counts in reasonable time; 8 KiB runs are pinned
-// to the counts it produced once, offline: 4 to 8 s each.
+// reference: the same text goes through both, with no special token allowed or refused (`[], []`),
+// so the text of one such as `<|endoftext|>` counts as text. Its own merge is quadratic in the
+// length of one unbroken run, so it is only asked about what it counts in reasonable time; 8 KiB
+// runs are pinned to the counts it produced once, offline: 4 to 8 s each.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -27,7 +28,7 @@ import { countCl100k, heapMerge, loadCl100k, utf8Bytes, SLICE_BYTES } from './bp
 import { countMessageTokens, countTokens } from './tokenizer';
 
 const tiktoken = getEncoding('cl100k_base');
-const reference = (text: string): number => tiktoken.encode(text).length;
+const reference = (text: string): number => tiktoken.encode(text, [], []).length;
 const ROOT = resolve(__dirname, '..', '..');
 const read = (path: string): string => readFileSync(resolve(ROOT, path), 'utf8');
 const MiB = 1024 * 1024;
@@ -69,6 +70,10 @@ function fill(text: string, bytes: number): string {
   return Buffer.from(out).subarray(0, bytes).toString();
 }
 
+/** cl100k's special tokens, then strings close to one that are not. */
+const MARKS = ['<|endoftext|>', '<|fim_prefix|>', '<|fim_middle|>', '<|fim_suffix|>', '<|endofprompt|>',
+  '<|endoftext|', '<endoftext|>', '<|ENDOFTEXT|>', '<|endoftext||>', '<| endoftext |>', '<||>', '<|im_start|>', '|><|'];
+
 const HAN = Array.from({ length: 2000 }, (_, i) => String.fromCharCode(0x4e00 + i * 9)).join('');
 /** Each draw from one of these is a single piece to the pre-tokenizer: the shapes that were slow. */
 const RUNS: Record<string, string> = {
@@ -92,11 +97,11 @@ function corpus(): [string, string][] {
   for (const dir of ['docs', 'docs/provider-verification']) {
     for (const name of readdirSync(resolve(ROOT, dir))) if (/\.(md|json)$/.test(name)) files.push(`${dir}/${name}`);
   }
-  // The gateway's own code, except a file that names a special token (both counters refuse it).
+  // The gateway's own code.
   for (const dir of ['src/lib', 'src/services', 'src/routes']) {
     for (const name of readdirSync(resolve(ROOT, dir), { recursive: true, encoding: 'utf8' })) {
       const path = `${dir}/${name.replace(/\\/g, '/')}`;
-      if (path.endsWith('.ts') && !path.endsWith('.test.ts') && !read(path).includes('<|')) files.push(path);
+      if (path.endsWith('.ts') && !path.endsWith('.test.ts')) files.push(path);
     }
   }
   const out: [string, string][] = files.map((f) => [f, read(f)]);
@@ -134,6 +139,11 @@ describe('countCl100k — the count js-tiktoken gives', () => {
       let text = draw(mixed, 1 + Math.floor(next() * 120), i);
       // Every 13th string carries a run long enough for the heap merge (over 64 bytes).
       if (i % 13 === 0) text += draw(Object.values(RUNS)[i % 8], 30 + Math.floor(next() * 150), i);
+      // Every 7th names a special token, or something close to one, somewhere in it.
+      if (i % 7 === 0) {
+        const at = Math.floor(next() * (text.length + 1));
+        text = text.slice(0, at) + MARKS[i % MARKS.length] + text.slice(at);
+      }
       expect(countCl100k(text), JSON.stringify(text)).toBe(reference(text));
     }
   }, 120_000);
@@ -154,11 +164,20 @@ describe('countCl100k — the count js-tiktoken gives', () => {
     }
   });
 
-  it('refuses a special token as js-tiktoken does, so countTokens keeps its fallback', () => {
-    const text = 'before <|endoftext|> after';
-    expect(() => reference(text)).toThrow();
-    expect(() => countCl100k(text)).toThrow();
-    expect(countTokens(text)).toBe(Math.ceil(text.length / 4));
+  it('counts the text of each special token, and of near misses, as text', () => {
+    const run = draw(RUNS.letters, 300, 5); // long enough for the heap merge
+    for (const mark of MARKS) {
+      const texts = [mark, `before ${mark} after`, `${mark}${mark}\n${mark}`, `abc${mark}def`, ` ${mark} `,
+        `${samples.chinese as string}${mark}`, `${run}${mark}${run}`];
+      for (const text of texts) expect(countCl100k(text), JSON.stringify(text.slice(0, 60))).toBe(reference(text));
+    }
+  });
+
+  it('counts Chinese text that names <|endoftext|> exactly, not at a quarter of its length', () => {
+    const text = `${(samples.chinese as string).repeat(4)}<|endoftext|>`;
+    const exact = reference(text);
+    expect(countTokens(text)).toBe(exact);
+    expect(exact).toBeGreaterThan(2 * Math.ceil(text.length / 4)); // about one token a character
   });
 });
 

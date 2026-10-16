@@ -38,7 +38,7 @@
 // and at most 11 tokens a cut above it.
 
 /** The shape of js-tiktoken's rank files. */
-interface Ranks { pat_str: string; special_tokens: Record<string, number>; bpe_ranks: string }
+interface Ranks { pat_str: string; bpe_ranks: string }
 
 interface Cl100k {
   /** Token rank by its bytes, each byte one char of a binary (latin1) string. */
@@ -46,7 +46,6 @@ interface Cl100k {
   /** The rank of each single byte, which every piece starts as. */
   byteRank: Int32Array;
   pieces: RegExp;
-  special: RegExp;
 }
 
 /** Pieces up to this many bytes are merged by a scan, as tiktoken does below 100 bytes. */
@@ -115,12 +114,7 @@ function load(): Cl100k {
   buildPairs(ranks);
   const byteRank = new Int32Array(256);
   for (let b = 0; b < 256; b++) byteRank[b] = ranks.get(String.fromCharCode(b)) ?? NONE;
-  const escape = (s: string) => s.replace(/[\\^$*+?.()|[\]{}]/g, '\\$&');
-  return {
-    ranks, byteRank,
-    pieces: new RegExp(src.pat_str, 'gu'),
-    special: new RegExp(Object.keys(src.special_tokens).map(escape).join('|')),
-  };
+  return { ranks, byteRank, pieces: new RegExp(src.pat_str, 'gu') };
 }
 
 /** Load the ranks now rather than at the first count: tokenizer.ts `warmTokenizer` does, at boot. */
@@ -235,13 +229,13 @@ export function utf8Bytes(piece: string): string {
 }
 
 /**
- * The cl100k token count of `text`: js-tiktoken's `encode(text).length`, exactly, for any text
- * without a single piece over SLICE_BYTES. Throws, as js-tiktoken does, on a special token such
- * as `<|endoftext|>`.
+ * The cl100k token count of `text`: js-tiktoken's `encode(text, [], []).length`, exactly, for any
+ * text without a single piece over SLICE_BYTES. The text of a special token, such as
+ * `<|endoftext|>`, is counted as the ordinary text it is, as that call counts it. (`encode(text)`
+ * refuses such text, which left countTokens to guess a quarter of its length.)
  */
 export function countCl100k(text: string): number {
   const d = data ??= load();
-  if (d.special.test(text)) throw new Error('The text contains a special token that is not allowed');
   let count = 0;
   d.pieces.lastIndex = 0;
   for (let m = d.pieces.exec(text); m !== null; m = d.pieces.exec(text)) {
