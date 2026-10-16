@@ -29,7 +29,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   handling are the same on both paths, and deciding costs no database or Redis call. A native
   answer is not stored in the response cache, and a `/v1/messages` request is now cached under a
   digest of what it sent, so two requests that translate alike (the same question about two
-  different PDFs) no longer share an answer. A pool can carry settings for this path in the new
+  different PDFs) no longer share an answer. `/v1/messages` accepts bodies up to 32 MB, Anthropic's
+  limit for one request, and checks the API key before reading the body. A pool can carry settings for this path in the new
   nullable `NexusProvider.nativeMessages` column, set through the admin API: PostgreSQL gets
   migration `0021_provider_native_messages` (additive, gives up after five seconds), and a
   standalone SQLite file created by an earlier version gains the column at start. **For

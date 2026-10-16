@@ -24,6 +24,9 @@ import { dispatchProxy, embeddingReserve, completionReserve, imageReserve, image
 import { listServableModels } from '../services/modelCatalog.service';
 import { resolveRequestScope } from '../services/byok.service';
 
+/** Anthropic's own request size limit for the Messages API. */
+export const MESSAGES_BODY_LIMIT = 32 * 1024 * 1024;
+
 export default async function proxyRoutes(fastify: FastifyInstance) {
   // Every route below, including any added later. onRequest runs BEFORE the verifyApiKey
   // preHandlers — which is required, not tidy: verifyApiKey reads the key table, and that table is
@@ -40,9 +43,15 @@ export default async function proxyRoutes(fastify: FastifyInstance) {
   // Anthropic Messages API (Phase 6.2) — unlocks Claude Code and the Anthropic SDKs.
   // The request runs through the exact same pipeline as /v1/chat/completions, translated to
   // the OpenAI shape, and its answer is translated back. When routing lands on Anthropic
-  // itself, the request goes to Anthropic's own API as sent and the answer comes back
-  // untouched, so prompt caching works. No second routing path either way.
-  fastify.post('/v1/messages', { preHandler: [verifyApiKey] }, async (request, reply) => {
+  // itself, the request can go to Anthropic's own API and the answer comes back untouched, so
+  // prompt caching works (services/proxy/anthropicNative.ts). No second routing path either way.
+  //
+  // The body may be as large as Anthropic accepts for one Messages request, 32 MB
+  // (https://platform.claude.com/docs/en/api/errors#request-size-limits), so a PDF Anthropic would
+  // take is not refused here first. The key is checked before the body is read (onRequest, not
+  // preHandler, which runs after parsing), so only an authenticated caller can make the gateway
+  // read that much.
+  fastify.post('/v1/messages', { onRequest: [verifyApiKey], bodyLimit: MESSAGES_BODY_LIMIT }, async (request, reply) => {
     return handleAnthropicMessages(request.body as Record<string, unknown>, reply, request.teamKeyId, request.headers as Record<string, unknown>, request.team);
   });
 
