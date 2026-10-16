@@ -45,6 +45,8 @@ interface Cl100k {
   ranks: Map<string, number>;
   /** The rank of each single byte, which every piece starts as. */
   byteRank: Int32Array;
+  /** The longest token's length in bytes (128): a longer piece is never one token. */
+  longest: number;
   pieces: RegExp;
 }
 
@@ -115,7 +117,9 @@ function load(): Cl100k {
   buildPairs(ranks);
   const byteRank = new Int32Array(256);
   for (let b = 0; b < 256; b++) byteRank[b] = ranks.get(String.fromCharCode(b)) ?? NONE;
-  return { ranks, byteRank, pieces: new RegExp(src.pat_str, 'gu') };
+  let longest = 0;
+  for (const bytes of ranks.keys()) longest = Math.max(longest, bytes.length);
+  return { ranks, byteRank, longest, pieces: new RegExp(src.pat_str, 'gu') };
 }
 
 /** Load the ranks now rather than at the first count: tokenizer.ts `warmTokenizer` does, at boot. */
@@ -241,7 +245,7 @@ export function countCl100k(text: string): number {
   d.pieces.lastIndex = 0;
   for (let m = d.pieces.exec(text); m !== null; m = d.pieces.exec(text)) {
     const bytes = utf8Bytes(m[0]);
-    if (bytes.length === 1 || d.ranks.has(bytes)) count++;
+    if (bytes.length === 1 || (bytes.length <= d.longest && d.ranks.has(bytes))) count++;
     else count += bytes.length <= SCAN_BYTES ? scanMerge(d, bytes) : longPiece(bytes);
   }
   return count;
