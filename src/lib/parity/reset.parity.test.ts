@@ -33,7 +33,7 @@ const enabled = !!PARITY_DATABASE_URL;
 describe.skipIf(!enabled)('factory reset empties everything, on both engines', { timeout: PARITY_TIMEOUT, shuffle: false }, () => {
   let e: Engines;
 
-  beforeAll(async () => { e = startEngines('reset'); await seedBoth(e); }, 120_000);
+  beforeAll(async () => { e = await startEngines('reset'); await seedBoth(e); }, 120_000);
   afterAll(async () => { await e?.dispose(); });
 
   it('seeded data exists first — otherwise "everything is empty" proves nothing', async () => {

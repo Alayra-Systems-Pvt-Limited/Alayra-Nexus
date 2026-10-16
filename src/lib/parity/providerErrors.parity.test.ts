@@ -31,7 +31,7 @@ const ROWS: Array<[provider: string, outcome: string]> = [
 describe.skipIf(!PARITY_DATABASE_URL)('per-provider errors leave out client cancels', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
   beforeAll(async () => {
-    e = startEngines('provider_errors');
+    e = await startEngines('provider_errors');
     for (const db of [e.pg, e.sqlite]) {
       await db.tokenUsage.deleteMany({});
       await db.tokenUsage.createMany({ data: ROWS.map(([provider, outcome], i) => ({

@@ -25,7 +25,7 @@
 
 import { describe, it, expect, afterAll } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureSqliteSchema } from '../sqliteBootstrap';
@@ -40,10 +40,15 @@ const dirs: string[] = [];
 
 afterAll(() => { for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }); } catch { /* temp dir */ } } });
 
-function emptyDatabase(): PrismaClient {
+/** A path for a new database file, in a temp directory removed after the file. */
+function newFile(): string {
   const dir = mkdtempSync(join(tmpdir(), 'nexus-cols-'));
   dirs.push(dir);
-  return openSqlite(`file:${join(dir, 'nexus.db')}`);
+  return join(dir, 'nexus.db');
+}
+
+function emptyDatabase(): PrismaClient {
+  return openSqlite(`file:${newFile()}`);
 }
 
 /** The same naive split sqliteBootstrap uses, which is safe for Prisma-generated DDL. */
@@ -53,12 +58,31 @@ const statements = (sql: string) => sql.split('\n').filter((l) => !l.trimStart()
 /** The CREATE TABLE body for one table in a DDL file. */
 const tableBody = (sql: string, table: string) => sql.split(`CREATE TABLE "${table}" (`)[1]?.split('\n);')[0] ?? '';
 
+/**
+ * The 1.7.0 database, built once per file and copied for each test that needs one. Built in ONE
+ * transaction: run as 45 separate commits it took 6-12s on a spinning disk, and over a minute per
+ * test during a full parallel run, where each commit waits for the disk; as one, about 0.15s.
+ */
+let template170: Promise<string> | undefined;
+
+async function buildTemplate170(): Promise<string> {
+  const file = newFile();
+  const db = openSqlite(`file:${file}`);
+  await db.$transaction(async (tx) => {
+    for (const s of statements(DDL_170)) await tx.$executeRawUnsafe(s);
+    await tx.$executeRawUnsafe(`INSERT INTO "TokenUsage" ("id", "sessionId", "modelId", "modelName", "provider", "inputTokens", "outputTokens", "totalTokens", "estimatedUsd")
+      VALUES ('old-1', 's', 'gpt-4o', 'gpt-4o', 'openai', 1000, 500, 1500, 0.0075)`);
+  }, { maxWait: 30_000, timeout: 30_000 });
+  await db.$disconnect();
+  return file;
+}
+
 /** A database exactly as 1.7.0 created it, holding one usage row. */
 async function databaseFrom170(): Promise<PrismaClient> {
-  const db = emptyDatabase();
-  for (const s of statements(DDL_170)) await db.$executeRawUnsafe(s);
-  await db.$executeRawUnsafe(`INSERT INTO "TokenUsage" ("id", "sessionId", "modelId", "modelName", "provider", "inputTokens", "outputTokens", "totalTokens", "estimatedUsd")
-    VALUES ('old-1', 's', 'gpt-4o', 'gpt-4o', 'openai', 1000, 500, 1500, 0.0075)`);
+  template170 ??= buildTemplate170();
+  const file = newFile();
+  copyFileSync(await template170, file);
+  const db = openSqlite(`file:${file}`);
   return db;
 }
 

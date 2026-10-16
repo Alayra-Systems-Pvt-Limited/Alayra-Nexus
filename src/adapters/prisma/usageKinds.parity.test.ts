@@ -47,7 +47,7 @@ const select = {
 
 describe.skipIf(!PARITY_DATABASE_URL)('Prisma usage store: token kinds', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
-  beforeAll(() => { e = startEngines('usage_kinds'); }, 120_000);
+  beforeAll(async () => { e = await startEngines('usage_kinds'); }, 120_000);
   afterAll(async () => { await e?.dispose(); });
 
   describe.each([['postgres'], ['sqlite']] as const)('%s', (engine) => {

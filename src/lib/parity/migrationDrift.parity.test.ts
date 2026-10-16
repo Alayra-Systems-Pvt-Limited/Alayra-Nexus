@@ -37,8 +37,8 @@ const enabled = !!PARITY_DATABASE_URL;
 const ROOT = resolve(__dirname, '..', '..', '..');
 
 describe.skipIf(!enabled)('the migrations and the schema agree', { timeout: PARITY_TIMEOUT * 4 }, () => {
-  it('replays every migration and finds nothing left to change', () => {
-    const shadow = freshDatabase('drift');
+  it('replays every migration and finds nothing left to change', async () => {
+    const shadow = await freshDatabase('drift');
 
     // `--from-migrations` is what makes this meaningful: it applies every file in prisma/migrations
     // in order to the shadow database and compares THAT against the schema. `--from-schema` would

@@ -127,6 +127,19 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   the core raises, and `docs/routing.md` states the auth rule as the code applies it: any 403
   counts, a success does not reset the count, and an unban does not clear it.
 
+### Internal
+
+- **The parity suites build their databases in-process, once per run.** Each suite's setup ran
+  `prisma db push --force-reset` once per engine, plus a child process to create its PostgreSQL
+  database: three Prisma CLI starts per suite, about fifteen per run. On a Windows machine with the
+  checkout on a spinning disk a cold `npx prisma --version` took 82s, and setup hooks ran past
+  their 120s limit, where CI on Linux spends 6-7s per suite. The PostgreSQL DDL is now generated
+  once per run by a vitest global setup (`prisma migrate diff --from-empty`, the same DDL `db push`
+  applies to an empty database), the SQLite DDL is the committed `prisma/sqlite-schema.sql`, and
+  each suite applies both in one transaction per engine. The suites no longer run `db push`, so
+  they no longer stop for the confirmation Prisma asks before that command. The 1.7.0 database the
+  column-upgrade tests start from is built once, in one transaction, and copied for each test.
+
 ## [1.7.0] - 2026-10-11
 
 ### Added

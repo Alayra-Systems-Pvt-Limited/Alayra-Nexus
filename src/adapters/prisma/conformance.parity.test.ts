@@ -97,7 +97,7 @@ function prismaHarness(engine: 'postgres' | 'sqlite', db: () => PrismaClient): C
 
 describe.skipIf(!PARITY_DATABASE_URL)('Prisma core stores conform', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
-  beforeAll(() => { e = startEngines('conformance'); }, 120_000);
+  beforeAll(async () => { e = await startEngines('conformance'); }, 120_000);
   afterAll(async () => { await e?.dispose(); });
 
   describe.each([['postgres'], ['sqlite']] as const)('%s', (engine) => {

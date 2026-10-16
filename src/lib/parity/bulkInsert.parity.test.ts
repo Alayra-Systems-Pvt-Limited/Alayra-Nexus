@@ -40,7 +40,7 @@ async function insertAs<Row>(engine: 'postgres' | 'sqlite', delegate: BulkDelega
 
 describe.skipIf(!enabled)('batched inserts are idempotent on both engines', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
-  beforeAll(() => { e = startEngines('bulk'); }, 120_000);
+  beforeAll(async () => { e = await startEngines('bulk'); }, 120_000);
   afterAll(async () => { await e?.dispose(); });
 
   const delegate = (db: PrismaClient) => db.auditLog as unknown as BulkDelegate<AuditRow>;
