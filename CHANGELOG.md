@@ -20,10 +20,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   nothing older than its own window (`SETTING_MEMO_TTL_MS`, `REGISTRY_MEMO_TTL_MS`,
   `PROVIDER_MEMO_TTL_MS`, five seconds each) is served. **With it on, a change made on one instance
   can take up to that long to reach an instance that has been idle;** under steady traffic it still
-  arrives within about the window. The master key's hash is never served this way, so a key
-  rotation still reaches every instance within its five seconds. A background read that fails keeps
-  the last good value, is logged (at most every 30 seconds per value, and again when it recovers),
-  and never leaves the value empty.
+  arrives within about the window. That includes the security and privacy switches: guardrails, the
+  SSRF settings, a deactivated pool, and usage anonymisation, which keeps its own 30-second copy on
+  top and so can take up to 60 seconds. Only the master key's hash is exempt: it is never served
+  this way, so a key rotation still reaches every instance within its five seconds. A background
+  read that fails keeps the last good value, is logged (at most every 30 seconds per value, and
+  again when it recovers), and never leaves the value empty.
 
 ### Changed
 
@@ -31,7 +33,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   find a memoised setting, registry or pool list expired now share one read instead of each making
   its own. A registry read whose text has not changed reuses the models already parsed: at 5,000
   models that skips about 15 ms of JSON parsing plus normalising every entry, for a comparison well
-  under a millisecond and the last text kept in memory (about 2 MB). The servable model list, its
+  under a millisecond and two to three copies of the text kept in memory (about 4.5 to 7 MB at
+  5,000 models). The servable model list, its
   `/v1/models` entries and the price map routing orders by are built once per registry version and
   set of pools instead of on every request. A hard-isolated team's own keys are still read on every
   request, so a revoked key stops counting at once. **For `@alayrasystems/nexus-core` hosts:** the

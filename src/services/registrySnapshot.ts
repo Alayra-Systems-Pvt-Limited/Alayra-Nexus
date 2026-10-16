@@ -26,7 +26,8 @@
 // So the text read last time is kept beside what it parsed to, and a read that returns the same
 // text returns the same models. Comparing two strings of that size costs well under a millisecond
 // (hashing them costs more than that, and still needs the text in memory first). The price is the
-// last text held in memory, about 2 MB at 5,000 models.
+// texts held in memory: the stored setting, the shared copy built from it and, when another process
+// wrote a different one, that copy too. Two to three copies, about 4.5 to 7 MB at 5,000 models.
 //
 // Reusing the parse also keeps the registry the SAME array until it really changes, which is what
 // lets the lists below be built once per version rather than once per request.

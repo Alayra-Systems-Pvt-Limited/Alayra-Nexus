@@ -660,6 +660,7 @@ curl http://<your-host>:3000/v1/chat/completions \
 | `UPSTREAM_BODY_MS` | No | Non-streaming: max ms to read the full response body (default: `60000`) |
 | `UPSTREAM_STREAM_IDLE_MS` | No | Streaming: max ms gap between chunks before a hung stream is aborted (default: `30000`) |
 | `UPSTREAM_STREAM_MAX_MS` | No | Streaming: ceiling on one whole request in ms — the idle guard restarts on every chunk, so it bounds silence, not duration (default: `600000`) |
+| `MEMO_MAX_STALE_MS` | No | Lets an instance keep serving a memoised setting, model registry or pool list for up to this many ms after it was read, while one background read refreshes it, so no request waits for that read (default: `0`, off; at most `30000`). **With it on, a dashboard change can take this long to reach another instance**, including guardrails, the SSRF settings, a deactivated pool and usage anonymisation (up to 60 s, as it keeps its own 30 s copy). Only the master API key is exempt: a rotation reaches every instance within 5 s |
 
 > [!IMPORTANT]
 > Generate `MASTER_ENCRYPTION_KEY` with:
