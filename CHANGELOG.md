@@ -9,6 +9,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-16
+
 ### Added
 
 - **Anthropic Messages requests routed to Anthropic now go to Anthropic's own API.**
@@ -2847,7 +2849,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.6...v1.7.0
 [1.6.6]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.5...v1.6.6
 [1.6.5]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.0...v1.6.5
