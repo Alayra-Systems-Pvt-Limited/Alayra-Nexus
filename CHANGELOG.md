@@ -29,7 +29,7 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   tokens than the tokenizer; its median was 32-34 % above for English, 31-43 % for code, 17-27 %
   for JSON and 22 % for other languages. On the four sample prompts it lands at 1.38x (English),
   1.06x (code), 1.42x (Chinese) and 1.22x (JSON). It never exceeds the prompt's UTF-8 byte count.
-  Whitespace and control characters never count low: every repeated mix of up to three spaces,
+  Whitespace and control characters never count low: every repeated mix of up to four spaces,
   tabs, line feeds and carriage returns was checked against the tokenizer, and the other ASCII
   control characters and the C1 controls (U+0080-U+009F) count at their byte count, the most they
   can be. Crafted text can still count low: a long run of random letters with no spaces counts at

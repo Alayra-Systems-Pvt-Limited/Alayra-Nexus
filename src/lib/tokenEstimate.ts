@@ -37,7 +37,7 @@
 // UTF-8 byte count, which no token count can.
 //
 // Crafted text can still count low. Whitespace and control characters cannot: every repeated mix of
-// up to three spaces, tabs, line feeds and carriage returns was checked against the tokenizer, and
+// up to four spaces, tabs, line feeds and carriage returns was checked against the tokenizer, and
 // the other ASCII control characters and the C1 controls (U+0080-U+009F) count at their byte count,
 // the most they can be. But a long run of random letters can count as little as a fifth of its real
 // tokens. So `fast` always runs with two-way reconcile (admission.ts), which charges the difference
@@ -62,6 +62,7 @@ export const TOKEN_ESTIMATE_WEIGHTS = Object.freeze({
   loneCarriageReturn: [1.35, 1] as Cost, // \r not before \n: one token each
   tab:      [1, 1 / 16] as Cost,      // \t: no token holds over 21 tabs; " \t" alternating is a token a pair
   control:  [0, 1] as Cost,           // other ASCII control characters, \v and \f among them: a token each
+  c1Control: [1, 2] as Cost,          // U+0080-U+009F: 2 of the 32 are tokens; a byte each, and no merge
   latin:    [1.45, 0.5] as Cost,      // accented Latin letters
   greek:    [0, 1.05] as Cost,
   cyrillic: [1.55, 0.35] as Cost,
@@ -84,8 +85,12 @@ export const TOKEN_ESTIMATE_WEIGHTS = Object.freeze({
   /** A run of two or more spaces, and each space in it. A single space joins the next word. */
   spaceRun: 0.9,
   space: 1 / 80,
-  /** A \r after a \n that does not follow a \r. cl100k has \n\r only inside \r\n\r: a new token. */
-  crAfterLineFeed: 1,
+  /**
+   * Each place a run of line breaks starts a new token although the run goes on: a \r after a \n
+   * that does not follow a \r (cl100k has \n\r only inside \r\n\r), a third \n after a \r (\r\n\n
+   * is the longest), and a \r after a single space.
+   */
+  breakSplit: 1,
   /** Applied to the whole sum, for text unlike the samples the weights were fitted on. */
   headroom: 1.05,
 });
@@ -93,15 +98,15 @@ export const TOKEN_ESTIMATE_WEIGHTS = Object.freeze({
 // Class ids, in the order of CLASSES. 0 is "no class yet" (the start of the text).
 // The three line-break classes are adjacent, so "is a line break" is one range test.
 const CLASSES = ['lower', 'upper', 'punct', 'lineBreak', 'carriageReturn', 'loneCarriageReturn', 'tab', 'control',
-  'latin', 'greek', 'cyrillic', 'armenian', 'hebrew', 'arabic', 'other2', 'indic', 'thai', 'georgian', 'hangul',
-  'kana', 'han', 'cjkPunct', 'genPunct', 'other3', 'astral'] as const;
-const [LOWER, UPPER, PUNCT, BREAK, CR, LONE_CR, TAB, CONTROL, LATIN, GREEK, CYRILLIC, ARMENIAN, HEBREW, ARABIC, OTHER2,
-  INDIC, THAI, GEORGIAN, HANGUL, KANA, HAN, CJK_PUNCT, GEN_PUNCT, OTHER3, ASTRAL] = CLASSES.map((_, i) => i + 1);
+  'c1Control', 'latin', 'greek', 'cyrillic', 'armenian', 'hebrew', 'arabic', 'other2', 'indic', 'thai', 'georgian',
+  'hangul', 'kana', 'han', 'cjkPunct', 'genPunct', 'other3', 'astral'] as const;
+const [LOWER, UPPER, PUNCT, BREAK, CR, LONE_CR, TAB, CONTROL, C1, LATIN, GREEK, CYRILLIC, ARMENIAN, HEBREW, ARABIC,
+  OTHER2, INDIC, THAI, GEORGIAN, HANGUL, KANA, HAN, CJK_PUNCT, GEN_PUNCT, OTHER3, ASTRAL] = CLASSES.map((_, i) => i + 1);
 const DIGIT = CLASSES.length + 1, SPACE = CLASSES.length + 2, COUNT = CLASSES.length + 3;
 
 const RUN = new Float64Array(COUNT), CHAR = new Float64Array(COUNT), BYTES = new Float64Array(COUNT).fill(1);
 CLASSES.forEach((name, i) => { [RUN[i + 1], CHAR[i + 1]] = TOKEN_ESTIMATE_WEIGHTS[name]; });
-for (const c of [LATIN, GREEK, CYRILLIC, ARMENIAN, HEBREW, ARABIC, OTHER2]) BYTES[c] = 2;
+for (const c of [C1, LATIN, GREEK, CYRILLIC, ARMENIAN, HEBREW, ARABIC, OTHER2]) BYTES[c] = 2;
 for (const c of [INDIC, THAI, GEORGIAN, HANGUL, KANA, HAN, CJK_PUNCT, GEN_PUNCT, OTHER3]) BYTES[c] = 3;
 BYTES[ASTRAL] = 4;
 
@@ -116,7 +121,7 @@ ASCII[0x20] = SPACE; ASCII[0x09] = TAB; ASCII[0x0a] = BREAK; ASCII[0x0d] = CR;
 /** The class of one UTF-16 code unit at or above 0x80. */
 function wideClass(x: number): number {
   if (x < 0x800) {
-    if (x < 0xa0) return OTHER2;                // C1 controls: their byte count, as almost none is a token
+    if (x < 0xa0) return C1;
     if (x < 0x250) return LATIN;
     if (x < 0x370) return OTHER2;              // IPA, spacing modifiers, combining marks
     if (x < 0x400) return GREEK;
@@ -147,7 +152,7 @@ export function estimateTokens(text: string): number {
   if (!text) return 0;
   const W = TOKEN_ESTIMATE_WEIGHTS;
   const chars = new Int32Array(COUNT), runs = new Int32Array(COUNT);
-  let digitGroups = 0, spaceRuns = 0, spaces = 0, crAfterLf = 0, prev = 0, run = 0;
+  let digitGroups = 0, spaceRuns = 0, spaces = 0, breakSplits = 0, prev = 0, run = 0;
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
     let c = code < 0x80 ? ASCII[code] : wideClass(code);
@@ -157,7 +162,9 @@ export function estimateTokens(text: string): number {
       else c = OTHER3;                                                // a lone one: UTF-8 writes 3 bytes
     } else if (c === CR) {
       if (text.charCodeAt(i + 1) !== 0x0a) c = LONE_CR;               // \r without \n is a token each
-      if (prev === BREAK && text.charCodeAt(i - 2) !== 0x0d) crAfterLf++; // \n\r outside \r\n\r
+      if ((prev === BREAK && text.charCodeAt(i - 2) !== 0x0d) || (prev === SPACE && run === 1)) breakSplits++;
+    } else if (c === BREAK && prev === BREAK && text.charCodeAt(i - 2) === 0x0a && text.charCodeAt(i - 3) === 0x0d) {
+      breakSplits++;                                                  // the \n after \r\n\n
     }
     // A run continues through a capital-then-lowercase (a word) and through any mix of \r and \n.
     if (c !== prev && !(prev === UPPER && c === LOWER)
@@ -172,7 +179,7 @@ export function estimateTokens(text: string): number {
   if (prev === DIGIT) digitGroups += Math.ceil(run / 3);
   else if (prev === SPACE && run > 1) { spaceRuns++; spaces += run; }
 
-  let sum = W.digitGroup * digitGroups + W.spaceRun * spaceRuns + W.space * spaces + W.crAfterLineFeed * crAfterLf;
+  let sum = W.digitGroup * digitGroups + W.spaceRun * spaceRuns + W.space * spaces + W.breakSplit * breakSplits;
   let bytes = 0;
   for (let c = 1; c < COUNT; c++) {
     sum += RUN[c] * runs[c] + CHAR[c] * chars[c];

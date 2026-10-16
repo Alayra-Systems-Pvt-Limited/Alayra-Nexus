@@ -115,6 +115,8 @@ describe('estimateTokens — whitespace and control characters never count low',
     'CR-LF-LF': '\r\n\n'.repeat(700),
     'LF-CR-LF': '\n\r\n'.repeat(700),
     'LF-LF-CR': '\n\n\r'.repeat(700),
+    'CR-LF-LF-LF': '\r\n\n\n'.repeat(500),
+    'space-CR-LF-LF': ' \r\n\n'.repeat(500),
     'C1 controls': Array.from({ length: 32 }, (_, i) => String.fromCharCode(0x80 + i)).join('').repeat(30),
     'C1 next line between words': 'a\u0085'.repeat(700),
     'space-tab': ' \t'.repeat(1_000),
@@ -135,10 +137,10 @@ describe('estimateTokens — whitespace and control characters never count low',
     expect(estimateTokens(text)).toBeGreaterThanOrEqual(countTokens(text));
   });
 
-  it('counts every repeated mix of up to three spaces, tabs, line feeds and carriage returns high', () => {
+  it('counts every repeated mix of up to four spaces, tabs, line feeds and carriage returns high', () => {
     const units = [' ', '\t', '\r', '\n'];
     let patterns = units;
-    for (let length = 1; length <= 3; length++) {
+    for (let length = 1; length <= 4; length++) {
       for (const p of patterns) {
         const text = p.repeat(Math.ceil(600 / p.length));
         expect(estimateTokens(text), JSON.stringify(p)).toBeGreaterThanOrEqual(countTokens(text));
