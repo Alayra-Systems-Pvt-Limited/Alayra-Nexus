@@ -70,6 +70,11 @@ away on every turn. Nexus instead pins a conversation to the key that last serve
   falling back to normal tier/LRU selection only for new sessions or when the pinned key is
   cooling, banned, or out of headroom.
 - Sticky-routed responses carry an **`X-Nexus-Sticky: true`** header.
+- An Anthropic Messages request (`/v1/messages`) routed to Anthropic goes to Anthropic's own API
+  as sent, so its `cache_control` breakpoints reach the provider and later turns are read from
+  Anthropic's prompt cache. Such responses carry **`X-Nexus-Native: anthropic`**. With input
+  guardrails on, this happens only when every part of the request is either scanned or already
+  forwarded unscanned on the translated path; otherwise the request is translated as before.
 
 </details>
 

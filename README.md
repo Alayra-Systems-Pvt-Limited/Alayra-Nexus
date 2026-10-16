@@ -570,7 +570,9 @@ claude
 ```
 
 Requests route through the same pool, failover, budgets, and analytics as everything
-else. On startup Claude Code reads `GET /v1/models` to populate its model picker — which
+else. A request routed to Anthropic goes to Anthropic's own API as sent, so prompt caching,
+extended thinking, PDFs and server tools keep working; other providers get it translated to
+the OpenAI shape. On startup Claude Code reads `GET /v1/models` to populate its model picker — which
 now lists **your** configured models alongside the `alayra-nexus-1` auto-route entry, so
 you can pick a specific one from inside the client or leave it on auto and let Nexus
 choose.
