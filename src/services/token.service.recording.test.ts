@@ -24,6 +24,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const REGISTRY = [
   { id: 'openai-gpt-4o', modelString: 'gpt-4o', inputCostPer1M: 2.5, outputCostPer1M: 10 },
   { id: 'openai-tts',    modelString: 'tts-1',  speechPricePer1MChars: 15 },
+  { id: 'claude-sonnet', modelString: 'claude-sonnet-4-6', inputCostPer1M: 3, outputCostPer1M: 15, webSearchCostPer1K: 10 },
 ];
 
 vi.mock('../lib/redis', () => ({ redis: {} }));
@@ -167,5 +168,50 @@ describe('recordTokenUsage — a budget threshold alert', () => {
     vi.mocked(addSpend).mockResolvedValueOnce(8);
     await recordTokenUsage(crossing);
     expect(await alertTitle()).toContain('team "t-1" reached 80%');
+  });
+});
+
+// The extra token kinds (1.8.0) are recorded as reported and never priced, and a request that
+// reports none writes exactly the row it wrote before they existed.
+describe('usage rows carry the token kinds the provider reported', () => {
+  const OLD_ROW_KEYS = [
+    'id', 'sessionId', 'modelId', 'modelName', 'provider', 'inputTokens', 'outputTokens', 'totalTokens', 'unit',
+    'quantity', 'estimatedUsd', 'outcome', 'latencyMs', 'cached', 'savedUsd', 'nexusTeamKeyId', 'teamId', 'createdAt',
+  ];
+
+  it('a request that reports none writes the same columns, and the same price, as before', async () => {
+    await recordTokenUsage({ ...base });
+    await recordTokenUsage({ ...base, detail: {} });
+    for (const [row] of vi.mocked(emit).mock.calls) {
+      expect(Object.keys(row).sort()).toEqual([...OLD_ROW_KEYS].sort());
+      expect(row.estimatedUsd).toBe(0.0075);
+    }
+  });
+
+  it('records each reported kind, and the price does not move', async () => {
+    const detail = { cachedInputTokens: 900, cacheWriteTokens: 50, cacheWrite5mTokens: 20, cacheWrite1hTokens: 30, cacheMissTokens: 100, reasoningTokens: 0 };
+    await recordTokenUsage({ ...base, detail });
+    expect(lastEvent()).toMatchObject({ ...detail, inputTokens: 1000, outputTokens: 500, totalTokens: 1500, estimatedUsd: 0.0075 });
+  });
+
+  it('copies only the known kinds, so a stray field can never fail the batch insert', async () => {
+    await recordTokenUsage({ ...base, detail: { reasoningTokens: 3, bogus: 1 } as never });
+    expect(lastEvent()).toMatchObject({ reasoningTokens: 3 });
+    expect(lastEvent()).not.toHaveProperty('bogus');
+  });
+});
+
+describe('recordTokenUsage — cache and server-tool prices reach the row and the budget', () => {
+  it('prices cache reads below the input price and adds the searches, on the row and against the budget', async () => {
+    vi.mocked(addSpend).mockResolvedValue(null);
+    await recordTokenUsage({
+      sessionId: 's-2', modelId: 'claude-sonnet', modelName: 'claude-sonnet-4-6', provider: 'anthropic',
+      inputTokens: 122_500, outputTokens: 1_000, teamId: 'team-1',
+      detail: { cachedInputTokens: 120_000, cacheWriteTokens: 2_000, cacheWrite5mTokens: 2_000 },
+      serverToolUse: { web_search_requests: 2 },
+    });
+    // 0.036 reads + 0.0075 writes + 0.0015 uncached + 0.015 output + 0.02 searches
+    expect(lastEvent().estimatedUsd).toBeCloseTo(0.08, 9);
+    expect(vi.mocked(addSpend).mock.calls[0][2]).toBeCloseTo(0.08, 9);
   });
 });

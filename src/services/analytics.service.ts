@@ -193,7 +193,7 @@ export const ANALYTICS_BY_PROVIDER = (since: Date, until: Date): DualSql => dual
   Prisma.sql`
       SELECT "provider"                                          AS provider,
              COUNT(*)::int                                       AS requests,
-             COUNT(*) FILTER (WHERE "outcome" <> 'success')::int AS errors,
+             COUNT(*) FILTER (WHERE "outcome" NOT IN ('success', 'client_cancelled'))::int AS errors,
              SUM("totalTokens")::float8                          AS tokens,
              SUM("estimatedUsd")::float8                         AS usd
       FROM "TokenUsage"
@@ -203,7 +203,7 @@ export const ANALYTICS_BY_PROVIDER = (since: Date, until: Date): DualSql => dual
   Prisma.sql`
       SELECT "provider"                                                 AS provider,
              CAST(COUNT(*) AS REAL)                                     AS requests,
-             CAST(COUNT(*) FILTER (WHERE "outcome" <> 'success') AS REAL) AS errors,
+             CAST(COUNT(*) FILTER (WHERE "outcome" NOT IN ('success', 'client_cancelled')) AS REAL) AS errors,
              CAST(SUM("totalTokens") AS REAL)                           AS tokens,
              CAST(SUM("estimatedUsd") AS REAL)                          AS usd
       FROM "TokenUsage"

@@ -92,13 +92,13 @@ describe.skipIf(!enabled)('moving a gateway onto PostgreSQL, both engines real',
   let outcome: MigrationOutcome;
 
   beforeAll(async () => {
-    sqlite = startSqlite('migratecopy');
+    sqlite = await startSqlite('migratecopy');
     source.client = sqlite.client;
     await seedGateway(sqlite.client);
 
     // Empty, with no schema — the state a customer's newly-created database is in. Building it is
     // part of what is under test, not a precondition set up on its behalf.
-    url = freshDatabase('migratecopy');
+    url = await freshDatabase('migratecopy');
     outcome = await migrateToPostgres(url);
 
     target = openPostgres(url);

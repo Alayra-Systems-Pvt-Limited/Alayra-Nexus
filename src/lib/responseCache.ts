@@ -86,6 +86,23 @@ export function responseCacheKey(
   return createHash('sha256').update(canonical).digest('hex');
 }
 
+/**
+ * The key for an Anthropic Messages request (`/v1/messages`): a digest of the caller's own body, not of
+ * its translation. Translation leaves out documents, thinking, file images and settings that change
+ * the answer, so two different requests can translate alike; keyed on the translation, one would be
+ * served the other's answer. Keyed here, two requests share an entry only when they sent the same body.
+ * `stream` is left out, as above, and a marker keeps these entries apart from chat-completions ones.
+ */
+export function messagesCacheKey(
+  raw: Record<string, unknown>,
+  namespace: string = SHARED_NAMESPACE,
+  pinnedModelId: string | null = null,
+): string {
+  const { stream: _stream, ...body } = raw;
+  const canonical = JSON.stringify({ api: 'messages', ns: namespace, model: pinnedModelId ?? CANONICAL_MODEL, body });
+  return createHash('sha256').update(canonical).digest('hex');
+}
+
 // The Redis key prefix every response-cache entry shares. Exported so the Caching section can count
 // and purge them by pattern (`RESP_CACHE_PREFIX + '*'`) without re-hardcoding the string.
 export const RESP_CACHE_PREFIX = 'nexus:respcache:';

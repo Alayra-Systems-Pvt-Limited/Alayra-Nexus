@@ -24,7 +24,6 @@
   "src/lib/kv/parity.test.ts": 528,
   "src/lib/mode.test.ts": 379,
   "src/lib/parity/backup.parity.test.ts": 432,
-  "src/lib/parity/harness.ts": 395,
   "src/lib/parity/queries.parity.test.ts": 312,
   "src/routes/admin/auth.routes.ts": 465,
   "src/routes/admin/backup.routes.ts": 356,

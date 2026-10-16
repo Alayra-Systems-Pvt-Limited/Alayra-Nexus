@@ -31,13 +31,28 @@ interface RawSink {
   writeHead(status: number, headers?: Record<string, string>): void;
   // `Uint8Array` covers Buffer, which extends it. Naming Buffer alone was the type-level half of
   // the bug: the signature described one of the two things the proxy actually writes.
-  write(chunk: string | Uint8Array): void;
+  //
+  // Returns the real socket's answer, so a slow caller pushes back on the provider here exactly as
+  // on /v1/chat/completions (see clientWriter.ts).
+  write(chunk: string | Uint8Array): boolean;
   end(): void;
+  // The real socket's events and state, passed through. Without them the proxy cannot see the
+  // caller hang up (an editor's Stop), and a cancelled answer was read from the provider to the end,
+  // and billed, with nobody reading it. See clientDeparture.ts.
+  readonly destroyed?: boolean;
+  once?(event: string, listener: () => void): unknown;
+  off?(event: string, listener: () => void): unknown;
 }
 
 export interface AnthropicReply {
   /** Cast to FastifyReply for handleProxy; only the intercepted surface is used. */
   reply: FastifyReply;
+  /**
+   * Stop translating: the provider is Anthropic itself, answering in this very format. From here on
+   * its stream, its answer and its error bodies reach the caller untouched. An error the gateway
+   * writes itself (a timeout, no capacity) is not Anthropic-shaped, and is still translated.
+   */
+  passThrough(): void;
 }
 
 export function createAnthropicReply(real: FastifyReply): AnthropicReply {
@@ -47,6 +62,8 @@ export function createAnthropicReply(real: FastifyReply): AnthropicReply {
   // `chunkDecoder.ts` for what happens when a wrapper assumes only one of them, which is the bug
   // this line exists to have fixed.
   const decoder = createChunkDecoder();
+  /** Set by passThrough(); see AnthropicReply. */
+  let native = false;
 
   const raw: RawSink = {
     // Same SSE headers; the event framing inside is what differs.
@@ -61,8 +78,15 @@ export function createAnthropicReply(real: FastifyReply): AnthropicReply {
       if (typeof served === 'string') translator.setModel(served);
       real.raw.writeHead(code, headers);
     },
-    write(chunk) { real.raw.write(translator.push(decoder.text(chunk))); },
+    write(chunk) { return real.raw.write(native ? chunk : translator.push(decoder.text(chunk))); },
+    get destroyed() { return real.raw.destroyed; },
+    // Only when the real reply has them: a stand-in passed in here (a test's) may not.
+    ...(typeof real.raw.once === 'function' && typeof real.raw.off === 'function' ? {
+      once: (event: string, listener: () => void) => real.raw.once(event, listener),
+      off:  (event: string, listener: () => void) => real.raw.off(event, listener),
+    } : {}),
     end() {
+      if (native) { real.raw.end(); return; }
       // Flush whatever the decoder was holding back for a continuation byte that never came, so a
       // stream truncated mid-character still delivers everything that was complete.
       const tail = decoder.flush();
@@ -80,6 +104,10 @@ export function createAnthropicReply(real: FastifyReply): AnthropicReply {
 
     // Non-streaming completion, or an error object/string, translated to Anthropic.
     send(payload: unknown) {
+      if (native) {
+        const own = status >= 400 ? anthropicError(payload) : payload;
+        if (own !== undefined) { real.code(status).send(own); return wrapper; }
+      }
       if (status >= 400) {
         const message = errorMessage(payload);
         real.code(status).send(anthropicErrorBody(status, message));
@@ -95,7 +123,17 @@ export function createAnthropicReply(real: FastifyReply): AnthropicReply {
     },
   };
 
-  return { reply: wrapper as unknown as FastifyReply };
+  return { reply: wrapper as unknown as FastifyReply, passThrough: () => { native = true; } };
+}
+
+/** An error body already in Anthropic's shape (`{ type: 'error', error: {...} }`), parsed; else undefined. */
+function anthropicError(payload: unknown): unknown {
+  let body = payload;
+  if (typeof payload === 'string') {
+    try { body = JSON.parse(payload); } catch { return undefined; }
+  }
+  const b = body as Json | null;
+  return b && typeof b === 'object' && b.type === 'error' && b.error && typeof b.error === 'object' ? b : undefined;
 }
 
 /** Pull a human message out of whatever handleProxy passed to an error send(). */

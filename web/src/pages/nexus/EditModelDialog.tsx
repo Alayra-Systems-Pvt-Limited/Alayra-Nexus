@@ -4,6 +4,7 @@ import { ApiError, type AiModel, type PricingCatalogEntry, type PricingSource } 
 import { updateModelInRegistry } from '../../lib/registry';
 import { loadPricingCatalog, matchPricing } from '../../lib/catalog';
 import { pricingSourceOf } from '../../lib/pricing';
+import { ExtraPriceFields, extraText, extraValues } from './ExtraPriceFields';
 import { Modal, Field, Input, Select, FieldRow, Button, FormError, FormNote } from '../../ui';
 import s from '../pages.module.css';
 
@@ -40,6 +41,7 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
     contextWindow:         String(model.contextWindow ?? 0),
     maxTokens:             String(model.maxTokens ?? 0),
   });
+  const [extra, setExtra] = useState<Record<string, string>>(extraText(model));
   const [catalog, setCatalog] = useState<PricingCatalogEntry[]>([]);
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -52,16 +54,18 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
 
   useEffect(() => { loadPricingCatalog().then(setCatalog).catch(() => {}); }, []);
 
+  // Typing in a price box is the operator taking ownership of the number.
+  const takeOwnership = () => {
+    setSource('manual');
+    setBorrowed(null);
+    setFilled(null);
+    setConfirmUnpriced(false);
+  };
   const setN = (k: string, v: string) => {
     setNum((p) => ({ ...p, [k]: v }));
-    // Typing in a price box is the operator taking ownership of the number.
-    if ((PRICE_KEYS as readonly string[]).includes(k)) {
-      setSource('manual');
-      setBorrowed(null);
-      setFilled(null);
-      setConfirmUnpriced(false);
-    }
+    if ((PRICE_KEYS as readonly string[]).includes(k)) takeOwnership();
   };
+  const setX = (k: string, v: string) => { setExtra((p) => ({ ...p, [k]: v })); takeOwnership(); };
   const toggleCap = (c: string) => setCaps((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]));
   const has = (c: string) => caps.includes(c);
   const hasText = has('chat') || has('completion') || has('embedding');
@@ -88,6 +92,7 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
       for (const k of keys) if (e[k] !== undefined) next[k] = String(e[k]);
       return next;
     });
+    setExtra((p) => ({ ...p, ...extraText(e, true) }));
     setFilled(e.displayName);
   };
 
@@ -109,6 +114,7 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
     imagePrice: n('imagePrice'), speechPricePer1MChars: n('speechPricePer1MChars'),
     transcriptionPrice: n('transcriptionPrice'),
     audioInputPer1M: n('audioInputPer1M'), audioOutputPer1M: n('audioOutputPer1M'),
+    ...extraValues(extra),
     pricingSource: resolvedSource(),
     contextWindow: Math.round(n('contextWindow')), maxTokens: Math.round(n('maxTokens')),
   });
@@ -203,6 +209,7 @@ export function EditModelDialog({ model, onClose, onSaved }: { model: AiModel; o
               <Field label="Input price" hint="$ / 1M tokens"><Input type="number" min={0} step="any" value={num.inputCostPer1M} onInput={(e) => setN('inputCostPer1M', (e.target as HTMLInputElement).value)} /></Field>
               <Field label="Output price" hint="$ / 1M tokens"><Input type="number" min={0} step="any" value={num.outputCostPer1M} onInput={(e) => setN('outputCostPer1M', (e.target as HTMLInputElement).value)} /></Field>
             </FieldRow>
+            <ExtraPriceFields values={extra} onChange={setX} />
             <FieldRow>
               <Field label="Context window" hint="max input tokens"><Input type="number" min={0} value={num.contextWindow} onInput={(e) => setN('contextWindow', (e.target as HTMLInputElement).value)} /></Field>
               <Field label="Max output" hint="tokens"><Input type="number" min={0} value={num.maxTokens} onInput={(e) => setN('maxTokens', (e.target as HTMLInputElement).value)} /></Field>

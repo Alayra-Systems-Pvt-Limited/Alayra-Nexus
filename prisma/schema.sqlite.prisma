@@ -37,6 +37,12 @@ model NexusProvider {
   isActive       Boolean    @default(true)
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+  // How this pool serves Anthropic Messages requests in Anthropic's own format (read only for the
+  // `anthropic` provider; see services/proxy/anthropicPolicy.ts). A JSON object string, e.g.
+  // {"enabled":true,"allow":["speed"]}. null means the defaults: native only when the auth header
+  // is x-api-key, and only request fields Nexus can price are forwarded. Last, so a SQLite file that
+  // gains it later (lib/sqliteColumns.ts) ends with the same column order as a fresh one.
+  nativeMessages String?
   keys           NexusKey[]
 }
 
@@ -108,6 +114,20 @@ model TokenUsage {
   nexusTeamKeyId String?
   teamKey        NexusTeamKey? @relation(fields: [nexusTeamKeyId], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())
+  // Last, so a database that gains them by ALTER TABLE (both engines append) has the same column
+  // order as one created fresh.
+  //
+  // The token kinds a provider reports beyond input and output (1.8.0): cache reads, cache
+  // writes (with Anthropic's 5-minute / 1-hour split), DeepSeek's cache misses, and reasoning.
+  // Nullable with no default on purpose: null means the provider did not report it, which every row
+  // written before these columns existed is, and is not the same as a reported 0. Recorded as
+  // reported and never priced, so no existing money or token aggregate moves. See lib/usageDetail.ts.
+  cachedInputTokens  Int?
+  cacheWriteTokens   Int?
+  cacheWrite5mTokens Int?
+  cacheWrite1hTokens Int?
+  cacheMissTokens    Int?
+  reasoningTokens    Int?
 
   @@index([modelId, createdAt])
   @@index([createdAt])

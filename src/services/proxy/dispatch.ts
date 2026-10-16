@@ -17,8 +17,7 @@
 // Imported through nexus.service (not its routing/ modules) so tests that mock './nexus.service'
 // keep intercepting every routing call the proxy makes.
 import {
-  discoverBestPool, getNextCooldownSeconds, reportServerFailure, reportRateLimit, reportAuthFailure, reportTierExhausted,
-  type NexusRoute,
+  discoverBestPool, getNextCooldownSeconds, reportServerFailure, reportTierExhausted, type NexusRoute,
 } from '../nexus.service';
 import { getSsrfPolicy } from '../ssrf.service';
 import { noCapacityMessage } from '../modelCatalog.service';
@@ -32,12 +31,15 @@ import { withExtraHeaders, providerAuthHeader } from '../../lib/providerHeaders'
 import { isByok, isIsolated } from '../../lib/scope';
 import * as metrics from '../../lib/metrics';
 import { startUpstreamSpan, SpanStatusCode } from '../../lib/tracing';
+import { watchDeparture, type Departure } from '../../lib/clientDeparture';
 import type { RequestTrace } from '../../lib/requestTrace';
 import { DEFAULT_MAX_TOKENS_RESERVE, UPSTREAM_TTFT_MS } from './config';
 import type { Admission } from './admission';
 import type { GuardedRequest } from './inputGuard';
 import { observe, type ProxyRun } from './run';
-import { answered, proceed, withProviderStreamUsage, type Stage } from './types';
+import { planNative } from './anthropicNative';
+import { answerUpstreamFailure } from './upstreamFailure';
+import { answered, proceed, withProviderStreamUsage, type AnthropicNative, type Stage } from './types';
 
 // ── Dispatch: choose a key, call the provider, sort out a failed answer ───────
 
@@ -46,6 +48,8 @@ export interface Dispatched {
   upstream:          Response;
   /** Governs the whole upstream call; the body and stream guards abort through it. */
   controller:        AbortController;
+  /** Aborts `controller` when the caller hangs up; the delivery path releases it when it is done. */
+  departure:         Departure;
   /** Conversation hash for sticky routing; null for a one-shot request. */
   session:           string | null;
   /** Tokens reserved against the key's TPM budget, reconciled to real usage at the end. */
@@ -54,10 +58,15 @@ export interface Dispatched {
   refundReservation: () => void;
   traceAttempt?:     RequestTrace['attempts'][number];
   sessionId:         string;
+  /** True when the request went to Anthropic's own API, and its answer is relayed untouched. */
+  native:            boolean;
+  /** On a native request, what was removed from the caller's body and headers (X-Nexus-Stripped). */
+  stripped:          string[];
 }
 
 export async function dispatchUpstream(
   run: ProxyRun, admission: Admission, guarded: GuardedRequest, messages: unknown[], isStream: boolean,
+  anthropic?: AnthropicNative,
 ): Promise<Stage<Dispatched>> {
   const { body, reply, reqHeaders, team, trace } = run;
   const { scope, pinnedModelId, strategyWeight, overBudgetDowngrade } = admission;
@@ -149,24 +158,30 @@ export async function dispatchUpstream(
     return answered(reply.code(502).send({ error: err instanceof Error ? err.message : 'Upstream blocked by SSRF policy.' }));
   }
 
-  const upstreamUrl  = `${stripTrailingSlash(route.baseUrl)}/chat/completions`;
+  // An Anthropic Messages request routed to Anthropic may go to its own API (anthropicNative.ts).
+  const native = await planNative(anthropic, route, guarded, messages);
+  const upstreamUrl  = native?.url ?? `${stripTrailingSlash(route.baseUrl)}/chat/completions`;
   // Forward the (possibly redacted) messages. In buffered-safe mode we request a
   // non-streamed response from upstream so we can inspect it before replaying it.
-  const upstreamBody = withProviderStreamUsage(
+  const upstreamBody = native?.body ?? withProviderStreamUsage(
     { ...body, messages: effectiveMessages, model: route.modelString, ...(bufferStream ? { stream: false } : {}) },
     route.providerSlug,
     isStream && !bufferStream,
   );
-  const headers: Record<string, string> = withExtraHeaders(route.extraHeaders, {
+  const headers: Record<string, string> = native?.headers ?? withExtraHeaders(route.extraHeaders, {
     'Content-Type': 'application/json',
     ...providerAuthHeader(route.authHeader, route.authPrefix, route.decryptedKey),
   });
+  if (native) anthropic?.passThrough();
   const sessionId = `proxy-${Date.now()}`;
 
   // A single controller governs the whole upstream call. A time-to-first-byte
   // timer aborts if response headers never arrive; it is cleared once they do.
   const controller = new AbortController();
   const ttftTimer = setTimeout(() => controller.abort(), UPSTREAM_TTFT_MS);
+  // A caller who hangs up aborts it too, from here to the last byte: the provider would otherwise
+  // keep generating, and billing, an answer nobody is reading. See lib/clientDeparture.ts.
+  const departure = watchDeparture(reply.raw, () => controller.abort());
 
   // OTel: span for the gateway → provider call (no-op unless an SDK is attached).
   run.tFetch = Date.now();
@@ -178,6 +193,15 @@ export async function dispatchUpstream(
   } catch (err) {
     clearTimeout(ttftTimer);
     refundReservation();
+    departure.release();
+    // The caller left before the provider answered. Nobody is waiting and the key did nothing wrong,
+    // so this is neither a breaker strike nor a provider error.
+    if (departure.gone()) {
+      span.end();
+      if (traceAttempt) traceAttempt.outcome = 'client_cancelled';
+      observe(run, 'client_cancelled');
+      return answered(reply.code(499).send({ error: 'The client closed the request.' }));
+    }
     // A timeout/connection failure is a server-side fault: feed the breaker.
     await reportServerFailure(keyId, route.isProbe);
     metrics.providerError(route.providerSlug, 'timeout');
@@ -198,27 +222,16 @@ export async function dispatchUpstream(
   span.setAttribute('http.status_code', upstream.status);
 
   if (!upstream.ok) {
-    const errText = await upstream.text().catch(() => 'Upstream error');
-    // Classify the failure for the circuit breaker: 429 is flat back-pressure,
-    // 401/403 is a bad credential (a ban is requested on repeat), 5xx is a server fault
-    // (strike/escalate). Other 4xx are the caller's error — the key is fine.
-    if (upstream.status === 429)                             { await reportRateLimit(keyId); metrics.providerError(route.providerSlug, 'rate_limit'); }
-    else if (upstream.status === 401 || upstream.status === 403) { await reportAuthFailure(keyId); metrics.providerError(route.providerSlug, 'auth'); }
-    else if (upstream.status >= 500)                         { await reportServerFailure(keyId, route.isProbe); metrics.providerError(route.providerSlug, 'server'); }
+    const nativeStripped = native ? native.stripped : null;
+    const result = await answerUpstreamFailure(run, { route, upstream, nativeStripped, departure, refundReservation, traceAttempt });
     span.setStatus({ code: SpanStatusCode.ERROR }); span.end();
-    refundReservation(); // rejected upstream — return the reserved budget
-    if (traceAttempt) {
-      traceAttempt.status = upstream.status;
-      traceAttempt.outcome = upstream.status === 429 ? 'rate_limited'
-        : upstream.status === 401 || upstream.status === 403 ? 'auth_error' : 'provider_error';
-    }
-    if (trace) trace.refusal = { status: upstream.status, reason: `The provider answered ${upstream.status}.` };
-    // 4xx (other than 429) is the caller's bad request; 429/auth/5xx is an upstream fault.
-    observe(run, upstream.status >= 500 || upstream.status === 429 || upstream.status === 401 || upstream.status === 403 ? 'upstream_error' : 'client_error');
-    return answered(reply.code(upstream.status).send(errText));
+    return answered(result);
   }
   if (traceAttempt) traceAttempt.status = upstream.status;
   span.end(); // upstream responded OK
 
-  return proceed({ route, upstream, controller, session, reserve, refundReservation, traceAttempt, sessionId });
+  return proceed({
+    route, upstream, controller, departure, session, reserve, refundReservation, traceAttempt, sessionId,
+    native: native !== null, stripped: native?.stripped ?? [],
+  });
 }

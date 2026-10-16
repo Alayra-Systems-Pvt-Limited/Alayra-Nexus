@@ -34,6 +34,8 @@ export interface FixtureProvider {
   id: string; name: string; slug: string; provider: string;
   baseUrl: string | null; authHeader: string; authPrefix: string | null;
   tier: string; preferredModel: string | null; extraHeaders: string | null;
+  /** Optional: a fixture written before 1.8.0 reads as null, the defaults. */
+  nativeMessages?: string | null;
   modelFetchUrl: string | null; modelIdPath: string;
   isActive: boolean; createdAt: Date;
 }
@@ -81,6 +83,7 @@ export const CONFORMANCE_FIXTURE: CoreFixture = {
       id: 'pool-anthropic', name: 'Anthropic main', slug: 'anthropic-main', provider: 'anthropic',
       baseUrl: 'https://api.anthropic.com', authHeader: 'x-api-key', authPrefix: null, tier: 'premium',
       preferredModel: 'claude-x', extraHeaders: '{"anthropic-version":"2023-06-01"}',
+      nativeMessages: '{"allow":["speed"]}',
       modelFetchUrl: 'https://api.anthropic.com/v1/models', modelIdPath: 'data[].id',
       isActive: true, createdAt: hoursAfterT0(1),
     },

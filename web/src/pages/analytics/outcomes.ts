@@ -13,6 +13,7 @@ const OUTCOMES: Record<string, OutcomeMeta> = {
   budget_blocked: { label: 'Budget reached', tone: 'blue',   help: "A team hit its spend cap, so the request was refused on purpose." },
   blocked:        { label: 'Blocked',        tone: 'blue',   help: 'Content guardrails refused the request.' },
   ssrf_blocked:   { label: 'Blocked target', tone: 'blue',   help: 'The upstream address was refused by the network policy.' },
+  client_cancelled: { label: 'Cancelled',    tone: 'gray',   help: 'The caller hung up before the answer finished. Tokens streamed until then are still counted.' },
 };
 
 const UNKNOWN: OutcomeMeta = { label: 'Other', tone: 'gray', help: 'An outcome this dashboard does not recognise.' };

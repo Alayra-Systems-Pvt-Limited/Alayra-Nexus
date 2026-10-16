@@ -25,7 +25,7 @@ import { KEY_ROUTING_ORDER } from './keyOrder';
 /** The routing projection. `satisfies` keeps it in step with ProviderRow at compile time. */
 const PROVIDER_SELECT = {
   id: true, baseUrl: true, provider: true, authHeader: true,
-  authPrefix: true, tier: true, preferredModel: true, extraHeaders: true,
+  authPrefix: true, tier: true, preferredModel: true, extraHeaders: true, nativeMessages: true,
 } satisfies Record<keyof ProviderRow, true>;
 
 /** The operator-check projection, kept in step with ProviderCheckRow the same way. */

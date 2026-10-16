@@ -28,7 +28,7 @@ export type {
   CoreStores,
   KeyStore, KeyRow, KeyAlertFacts, KeyStateRow, KeyCheck,
   ProviderStore, ProviderRow, PreferredModelPool, ProviderCheckRow, ProviderCheck,
-  UsageStore, UsageRow,
+  UsageStore, UsageRow, UsageTokenKinds,
   SettingsStore,
   NotificationSink, NotificationRow,
 } from './ports';
@@ -59,6 +59,7 @@ export {
   handleProxy, ProxyError, withProviderStreamUsage,
   type CompletionsBody, type ProxyRunOptions,
 } from '../services/completionsProxy.service';
+export type { AnthropicNative } from '../services/proxy/types';
 
 // ── Embeddings, images, speech and transcription ──
 export {
@@ -67,7 +68,11 @@ export {
   type BillingSpec, type DispatchOptions,
 } from '../services/proxyDispatch.service';
 
-// ── Anthropic Messages API, translated onto the same pipeline ──
+// ── Usage: the extra token kinds, read from any provider's usage block ──
+export { readUsageDetail, mergeUsageDetail, USAGE_DETAIL_FIELDS, type UsageDetail } from '../lib/usageDetail';
+
+// ── Anthropic Messages API: translated onto the same pipeline, or sent as is to Anthropic itself ──
+export { handleAnthropicMessages } from '../services/anthropicMessages.service';
 export { anthropicToOpenAI } from '../lib/anthropic';
 export { createAnthropicReply } from '../lib/anthropicReply';
 

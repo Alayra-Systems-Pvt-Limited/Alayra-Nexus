@@ -23,7 +23,8 @@ CREATE TABLE "NexusProvider" (
     "preferredModel" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "updatedAt" DATETIME NOT NULL,
+    "nativeMessages" TEXT
 );
 
 -- CreateTable
@@ -72,6 +73,12 @@ CREATE TABLE "TokenUsage" (
     "savedUsd" REAL NOT NULL DEFAULT 0,
     "nexusTeamKeyId" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "cachedInputTokens" INTEGER,
+    "cacheWriteTokens" INTEGER,
+    "cacheWrite5mTokens" INTEGER,
+    "cacheWrite1hTokens" INTEGER,
+    "cacheMissTokens" INTEGER,
+    "reasoningTokens" INTEGER,
     CONSTRAINT "TokenUsage_nexusTeamKeyId_fkey" FOREIGN KEY ("nexusTeamKeyId") REFERENCES "NexusTeamKey" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 

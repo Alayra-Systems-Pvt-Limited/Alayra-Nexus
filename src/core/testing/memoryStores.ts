@@ -54,6 +54,7 @@ const keyRow = (k: FixtureKey): KeyRow => ({
 const providerRow = (p: FixtureProvider): ProviderRow => ({
   id: p.id, baseUrl: p.baseUrl, provider: p.provider, authHeader: p.authHeader,
   authPrefix: p.authPrefix, tier: p.tier, preferredModel: p.preferredModel, extraHeaders: p.extraHeaders,
+  nativeMessages: p.nativeMessages ?? null,
 });
 
 const checkRow = (p: FixtureProvider): ProviderCheckRow => ({

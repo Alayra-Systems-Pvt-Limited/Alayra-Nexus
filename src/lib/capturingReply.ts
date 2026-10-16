@@ -80,8 +80,10 @@ export interface CapturingReplyOptions {
   /**
    * Optional event source for a real downstream socket. The Playground delegates drain, close,
    * and error to its outer response so capture preserves normal backpressure and disconnects.
+   * `destroyed` lets the proxy see a caller who left before it started watching for `close`.
    */
   events?: {
+    readonly destroyed?: boolean;
     once(event: string, listener: () => void): unknown;
     off(event: string, listener: () => void): unknown;
   };
@@ -139,6 +141,7 @@ export function createCapturingReply(opts: CapturingReplyOptions = {}): Capturin
       once: (event: string, listener: () => void) => opts.events!.once(event, listener),
       off:  (event: string, listener: () => void) => opts.events!.off(event, listener),
     } : {}),
+    get destroyed() { return opts.events?.destroyed === true; },
     end() {
       collect(decoder.flush());
       captured.ended = true;

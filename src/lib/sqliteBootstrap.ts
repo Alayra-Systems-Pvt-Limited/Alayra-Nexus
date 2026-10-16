@@ -39,6 +39,11 @@
 // without being asked. Upgrading a standalone database across versions is Phase S3, and until it
 // exists, refusing loudly is the honest behaviour.
 //
+// ONE NARROW EXCEPTION (1.8.0): a nullable column added to an existing table. SQLite adds one
+// without touching a row, and every older row reads as NULL, which is the truth about it. Those
+// columns, and only those, are listed in sqliteColumns.ts and added here to a file that lacks them;
+// without them every usage write that carried one would fail on a file created by 1.7.0.
+//
 // The preflight check cannot substitute for this: `SELECT 1` succeeds against an empty SQLite file,
 // so a gateway with no tables passes every dependency check and then fails on its first real query
 // with "no such table" — long after the point where a good message was possible.
@@ -46,6 +51,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { PrismaClient } from '@prisma/client';
+import { addMissingColumns } from './sqliteColumns';
 
 /**
  * Where the committed DDL lives, relative to this module.
@@ -61,6 +67,8 @@ export interface SchemaBootstrapResult {
   created: boolean;
   /** Tables present after the call. */
   tables: number;
+  /** `Table.column` for each nullable column added to an existing file (see sqliteColumns.ts). */
+  added: string[];
 }
 
 /** Application tables currently in the file, ignoring SQLite's own bookkeeping. */
@@ -100,7 +108,7 @@ function statements(sql: string): string[] {
  */
 export async function ensureSqliteSchema(client: PrismaClient): Promise<SchemaBootstrapResult> {
   const before = await countTables(client);
-  if (before > 0) return { created: false, tables: before };
+  if (before > 0) return { created: false, tables: before, added: await addMissingColumns(client) };
 
   let ddl: string;
   try {
@@ -130,5 +138,5 @@ export async function ensureSqliteSchema(client: PrismaClient): Promise<SchemaBo
     throw new Error(`Ran ${stmts.length} statements from ${DDL_PATH} but the database still has no tables.`);
   }
 
-  return { created: true, tables: after };
+  return { created: true, tables: after, added: [] };
 }

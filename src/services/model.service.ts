@@ -21,13 +21,14 @@ import { REGISTRY_CACHE_KEY }    from '../lib/registryCacheKey';
 import { getActiveProviders }    from './providerCache.service';
 import { TtlMemo }               from '../lib/ttlMemo';
 import { CAPABILITIES, type Capability } from '../lib/modelSelect';
+import { readExtraPrices, type ExtraPrices } from '../lib/usagePrice';
 
 // The registry lives as a JSON blob in AppSettings, not a table, so its shape is not
 // enforced by a schema — this interface is the contract, and `normalizeModel` makes
 // every stored entry conform to it on read. Fields match what the dashboard writes
 // (per-1M pricing, tier, priority); the older per-1k pricing is still tolerated by the
 // cost helpers for entries written by early versions.
-export interface AiModel {
+export interface AiModel extends ExtraPrices {
   id:              string;
   displayName:     string;
   provider:        string;   // provider slug: anthropic | openai | google | groq | openrouter | custom
@@ -136,6 +137,7 @@ export function normalizeModel(raw: Record<string, unknown>): AiModel {
     pricingSource:   inferPricingSource(raw, num),
     contextWindow:   num(raw.contextWindow),
     maxTokens:       num(raw.maxTokens),
+    ...readExtraPrices(raw),
   };
 }
 

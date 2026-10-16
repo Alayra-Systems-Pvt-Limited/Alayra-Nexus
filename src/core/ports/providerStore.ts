@@ -28,6 +28,12 @@ export interface ProviderRow {
   tier: string;
   preferredModel: string | null;
   extraHeaders: string | null;
+  /**
+   * The pool's Anthropic Messages settings, a JSON object string (`{"enabled":true,"allow":["speed"]}`),
+   * or null for the defaults. Optional so that a store written before 1.8.0 still compiles; a store
+   * that leaves it out gives every pool the defaults.
+   */
+  nativeMessages?: string | null;
 }
 
 /** What an operator's credential and model checks read from a pool. */

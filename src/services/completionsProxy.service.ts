@@ -67,20 +67,23 @@ export async function handleProxy(
   if (guarded.answered) return guarded.result;
 
   // Exact-match response cache, checked before any provider is chosen.
-  const cache = await lookUpResponseCache(run, admission.value.scope, admission.value.pinnedModelId, isStream);
+  const cache = await lookUpResponseCache(run, admission.value.scope, admission.value.pinnedModelId, isStream, options.anthropicNative?.body);
   if (cache.answered) return cache.result;
 
   // Choose a key and call the provider; a failed call is answered inside.
-  const dispatched = await dispatchUpstream(run, admission.value, guarded.value, messages, isStream);
+  const dispatched = await dispatchUpstream(run, admission.value, guarded.value, messages, isStream, options.anthropicNative);
   if (dispatched.answered) return dispatched.result;
 
-  // The provider answered 2xx: deliver it the way the caller (and the guardrails) asked for.
+  // The provider answered 2xx: deliver it the way the caller (and the guardrails) asked for. An
+  // answer relayed untouched from Anthropic's own API is not stored in the response cache: the
+  // cache holds the translated form, and a hit is replayed through the translation.
+  const cacheMiss = dispatched.value.native ? { ...cache.value, cacheStoreKey: null } : cache.value;
   const delivery: Delivery = {
     run,
     dispatched:   dispatched.value,
     guarded:      guarded.value,
-    cache:        cache.value,
-    nexusHeaders: gatewayHeaders(dispatched.value, guarded.value, cache.value),
+    cache:        cacheMiss,
+    nexusHeaders: gatewayHeaders(dispatched.value, guarded.value, cacheMiss),
   };
   if (guarded.value.bufferStream) return deliverBuffered(delivery);
   const streamBody = dispatched.value.upstream.body;

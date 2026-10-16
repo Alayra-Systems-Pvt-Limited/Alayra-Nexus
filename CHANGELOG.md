@@ -9,8 +9,112 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-16
+
+### Added
+
+- **Anthropic Messages requests routed to Anthropic now go to Anthropic's own API.**
+  `/v1/messages` used to translate every request to the OpenAI shape and send it to Anthropic's
+  OpenAI-compatible endpoint, which drops `cache_control`, extended thinking, `document` blocks and
+  `top_k`, so prompt caching never worked through the gateway and a long coding session cost
+  noticeably more than going direct. Now, when routing picks an Anthropic pool set up for
+  Anthropic's own API (auth header `x-api-key`, or the pool's new `nativeMessages.enabled`) and
+  chose the model the caller asked for, the caller's body goes to `<baseUrl>/messages` with the
+  key's own credential, the caller's `anthropic-version` (else the pool's, else `2023-06-01`), and
+  the pool's and the caller's `anthropic-beta` values together. Anthropic's answer, stream or
+  error comes back untouched, marked `X-Nexus-Native: anthropic`, with Anthropic's `retry-after`,
+  `request-id` and `x-should-retry` headers. **Nexus forwards only what it can price:** request
+  fields that change the price or the model (`speed`, `service_tier`, `inference_geo`,
+  `container`, `mcp_servers`, `fallbacks`, `context_management`, and any newer field), server tools
+  the routed model does not price (code execution, the advisor, MCP toolsets, unknown tool types;
+  web search and web fetch once the model sets their price), and a caller's beta that only switches
+  one of those on are removed, and the response names them in the new `X-Nexus-Stripped` header.
+  The request still runs. Auth-changing betas (`oauth-*`) are never sent. An operator can let such
+  fields and tools through for one pool with `nativeMessages.allow` (admin API); **whatever a pool
+  allows is billed by Anthropic but neither recorded nor limited by Nexus.** A request for another
+  model, a budget downgrade, a pool on `Authorization: Bearer`, a request whose input guardrails
+  redacted it or whose output rules need to read the answer, and, on a shared key, a request that
+  names an uploaded file all keep the translated path, as does every other provider. With input
+  guardrails on, the native path is used only when every part of the request, field by field, is
+  either scanned or already forwarded unscanned today; anything else keeps the translated path.
+  Usage records the whole prompt as input (uncached plus cache reads plus cache writes, the same
+  meaning `prompt_tokens` has) with the cache reads and the 5-minute and 1-hour cache writes beside
+  it, priced at their own rates (see the next entry), and a stream that ends with Anthropic's own
+  `error` event is recorded as a failure. Anthropic's errors count against a key by their type:
+  only `authentication_error` counts toward a ban, and a `permission_error`, which the caller can
+  provoke on this path, counts against no key. The per-minute token budget leaves out cache reads,
+  as Anthropic's own input limit does. A native answer is not stored in the response cache, and a
+  `/v1/messages` request is now cached under a digest of what it sent, so two requests that
+  translate alike (the same question about two different PDFs) no longer share an answer.
+  `/v1/messages` accepts bodies up to 32 MB, Anthropic's limit for one request, and checks the API
+  key before reading the body. Admission, routing, sticky keys, budgets, the time limits and the
+  hang-up handling are the same on both paths. Deciding costs no database or Redis call; a request
+  that declares a server tool reads the in-process model registry. A pool's settings live in the
+  new nullable `NexusProvider.nativeMessages` column: PostgreSQL gets migration
+  `0021_provider_native_messages` (additive, gives up after five seconds), and a standalone SQLite
+  file created by an earlier version gains the column at start. **For `@alayrasystems/nexus-core`
+  hosts:** `handleAnthropicMessages` serves `/v1/messages` this way; `createAnthropicReply` now also
+  returns `passThrough()`; `ProviderRow` gains an optional `nativeMessages`, which the conformance
+  checks expect a store to return.
+- **Cache reads, cache writes and per-use server tools are priced at their own rates.** A usage
+  row's cost, and so every team budget, used to price the whole prompt at the input price. With
+  prompt caching working on Anthropic, that overstated a cached coding session about six times
+  (cache reads cost a tenth of the input price) and understated 1-hour cache writes (twice the input
+  price). A registry model can now set `cacheReadCostPer1M`, `cacheWrite5mCostPer1M` and
+  `cacheWrite1hCostPer1M`, and the model editor has boxes for them. When one is not set, Anthropic
+  models use Anthropic's published multipliers of the input price (0.1x, 1.25x and 2x); every other
+  provider is priced exactly as before, all input at the input price. A cache-write total reported
+  without its 5-minute and 1-hour split is priced at the 1-hour rate. Server tools billed per use
+  and reported in the usage block (web search and web fetch) are priced from the model's new
+  `webSearchCostPer1K` and `webFetchCostPer1K` and counted toward the budget. The pricing catalog
+  gains Claude Opus 5.5, Sonnet 5.5, Fable 5.1 and Mythos 5.1, whose cache reads cost less than
+  0.1x, with Anthropic's published prices. Older registry entries read as before.
+- **Usage records every token kind the provider reports.** Cache reads, cache writes (with
+  Anthropic's 5-minute and 1-hour split), DeepSeek's cache misses and reasoning tokens are read from
+  the provider's usage block, streamed or not, under OpenAI, Anthropic, DeepSeek and Gemini names,
+  and stored in six new nullable `TokenUsage` columns: `cachedInputTokens`, `cacheWriteTokens`,
+  `cacheWrite5mTokens`, `cacheWrite1hTokens`, `cacheMissTokens` and `reasoningTokens`. A column is
+  null when the provider did not report that kind, so older rows read exactly as before. Cache reads
+  and writes are priced at their own rates where known (the entry above). Responses still pass
+  the provider's usage object through unchanged. PostgreSQL gets migration `0020_usage_token_kinds`,
+  which is additive and gives up after five seconds rather than queue behind a long query on the
+  table (the next start runs it again). A standalone SQLite database created by an earlier version
+  gains the same columns when the gateway starts, all in one transaction, so a start that stops
+  part-way adds none of them, and the startup log says so. A start that finds another process
+  writing to the file waits for it, up to SQLite's five-second busy timeout, and a column another
+  process added first is not added twice. That is the only change made to an existing file. For
+  `@alayrasystems/nexus-core` hosts: `UsageRow` gains the same
+  six optional fields (type `UsageTokenKinds`), the conformance checks now require a store to accept
+  a row that carries them, and `readUsageDetail` reads them from any provider's usage block.
+
 ### Fixed
 
+- **A team on a shared key no longer reads the provider's own words for a refused credential or a
+  rate limit.** A provider's 401, 403 or 429 message can name the account behind the key (an
+  organisation id in a rate-limit message, for one), and the gateway passed it to whichever team
+  hit it. For a caller using a team key on a shared provider key, the error's type and code are now
+  kept and the message is replaced with a generic one. The operator's own key, and a team on its own
+  provider key, still get the provider's words.
+- **A stream the gateway cuts short no longer splices its closing frame into a half-sent event.**
+  When a provider went quiet part-way through an event, the gateway's "this answer is incomplete"
+  frame was written straight after the partial bytes, and a client read the joined line as its own
+  parse error. The frame is now written only between events; a stream cut inside one simply ends.
+- **A caller who hangs up now stops the provider, and the request is recorded as cancelled.** When a
+  client closed a streamed request early (an editor's Stop or Esc key, for example), the gateway
+  went on reading the provider's answer to the end, so the provider kept generating it and a BYOK
+  key paid for tokens nobody read. On `/v1/messages` the Anthropic translator hid the disconnect
+  from the proxy entirely. On `/v1/chat/completions` the proxy stopped reading but left the provider
+  connection open. On the chat endpoints the disconnect now aborts the provider request, for every
+  provider, through the same signal as the time limits: before the provider answers, while a whole
+  answer is arriving, or mid-stream. The request is recorded with the new outcome `client_cancelled`
+  (Cancelled on the dashboard), not as a success or a provider error, and it does not count against
+  the key's circuit breaker or in a provider's error count on the dashboard. A cancelled stream still records the tokens streamed until then. A
+  stream cut short is no longer stored in the response cache: before, a stream the caller left was
+  recorded as a success and its partial answer could be cached and served to the next caller. A
+  Playground run stops the same way when its tab is closed. **Hosts of `@alayrasystems/nexus-core`
+  that hand `handleProxy` a reply stand-in of their own:** give its `raw` `once` and `off`
+  (forwarded to the real socket) and a `destroyed` getter, or a disconnect cannot reach the core.
+  `createAnthropicReply` now does this.
 - **`@alayrasystems/nexus-core` no longer says a key was banned when it was not.** After two 401 or
   403 answers within five minutes the core asks the key store to ban the key. It then raised
   `keyBanned` ("a key was auto-banned", critical) whether or not the store did it. A host whose
@@ -26,6 +130,37 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   saved before it existed. When to ban is unchanged. The core package README now lists every alert
   the core raises, and `docs/routing.md` states the auth rule as the code applies it: any 403
   counts, a success does not reset the count, and an unban does not clear it.
+
+### Internal
+
+- **The parity suites build their databases in-process, once per run.** Each suite's setup ran
+  `prisma db push --force-reset` once per engine, plus a child process to create its PostgreSQL
+  database: three Prisma CLI starts per suite, about fifteen per run. On a Windows machine with the
+  checkout on a spinning disk a cold `npx prisma --version` took 82s, and setup hooks ran past
+  their 120s limit, where CI on Linux spends 6-7s per suite. The PostgreSQL DDL is now generated
+  once per run by a vitest global setup (`prisma migrate diff --from-empty`, the same DDL `db push`
+  applies to an empty database), the SQLite DDL is the committed `prisma/sqlite-schema.sql`, and
+  each suite applies both in one transaction per engine. No suite runs `db push --force-reset` any
+  more. The 1.7.0 database the column-upgrade tests start from is built once, in one transaction,
+  and copied for each test.
+- **The parity suites run SQLite in WAL, as the gateway does.** The gateway puts every standalone
+  database into WAL when it starts, but the suites compared it in SQLite's default `delete` mode,
+  which the gateway never runs in. On the same disk under load a single-row commit took 3.3-4.9s in
+  `delete` mode and 0.08-0.15s in WAL. The suites that test the switch itself still start from
+  `delete`, and the main column-upgrade case also runs on a file left in `delete` mode, as on a
+  filesystem that refuses WAL.
+- **Four proxy suites build their test server without Fastify's schema compilers.** The Anthropic
+  passthrough, edges and guardrails suites and the client-disconnect suite mount the proxy on a real
+  loopback Fastify server in `beforeAll`, and building a Fastify instance loads its validator and
+  serializer compilers (110 modules, 449 KB) whether or not a route has a schema. On a Windows
+  machine with the checkout on a spinning disk the four hooks ran past their 10s limit together
+  during a full run; the same hook takes 130-210ms with a warm file cache, and 40-45ms without the
+  compilers. `test/schemalessFastify.ts` supplies compilers that throw if a schema ever asks for
+  one. None of these routes has a schema, and a reply without one is serialised the same way.
+- **The client-disconnect test waits for the provider socket's close event** rather than reading
+  it the moment the usage row is written. Under load the row can be written first (once in twelve
+  runs of the four proxy suites together). The check that the socket closed within a second of the
+  caller leaving is unchanged.
 
 ## [1.7.0] - 2026-10-11
 
@@ -2714,7 +2849,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.6...v1.7.0
 [1.6.6]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.5...v1.6.6
 [1.6.5]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.0...v1.6.5

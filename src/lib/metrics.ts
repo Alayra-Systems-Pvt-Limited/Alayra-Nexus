@@ -114,9 +114,11 @@ const adminLoginTotal = new Counter({
 
 // ── Recording helpers (called from the request path) ──────────────────────────
 
+// `client_cancelled`: the caller hung up before the answer finished. Neither a success nor a
+// provider fault; a streamed one still records the tokens delivered until then.
 export type RequestOutcome =
   | 'success' | 'client_error' | 'blocked' | 'no_capacity'
-  | 'upstream_error' | 'ssrf_blocked' | 'budget_blocked';
+  | 'upstream_error' | 'ssrf_blocked' | 'budget_blocked' | 'client_cancelled';
 
 export function observeRequest(outcome: RequestOutcome, tier: string | undefined, seconds: number): void {
   requestsTotal.inc({ outcome, tier: tier ?? 'none' });

@@ -63,7 +63,7 @@ const providerCases: ConformanceCase[] = [
       assert.deepEqual(rows[1], {
         id: 'pool-anthropic', baseUrl: 'https://api.anthropic.com', provider: 'anthropic',
         authHeader: 'x-api-key', authPrefix: null, tier: 'premium', preferredModel: 'claude-x',
-        extraHeaders: '{"anthropic-version":"2023-06-01"}',
+        extraHeaders: '{"anthropic-version":"2023-06-01"}', nativeMessages: '{"allow":["speed"]}',
       });
     },
   },
@@ -145,6 +145,25 @@ const recordCases: ConformanceCase[] = [
       const stored = new Map((await h.usageRows()).map((r) => [r.id, r.teamId]));
       assert.deepEqual(USAGE.map((r) => stored.get(r.id)), USAGE.map((r) => r.teamId));
       assert.deepEqual(USAGE.map((r) => r.teamId), ['team-a', 'team-a', 'team-a', 'team-a', 'team-b', null]);
+    },
+  },
+  {
+    // 1.8.0. The optional token kinds are additive: every store must accept a row that carries them
+    // (a strict store that rejects an unknown field would fail every usage flush), spend must not move,
+    // and a store that hands rows back must hand these back unchanged.
+    name: 'usage.insertBatch: the optional token kinds are accepted, never priced, and kept by a store that keeps them',
+    run: async (h) => {
+      const s = await h.setup(F);
+      const kinds = { cachedInputTokens: 6, cacheWriteTokens: 3, cacheWrite5mTokens: 1, cacheWrite1hTokens: 2, cacheMissTokens: 4, reasoningTokens: 0 };
+      const rows = USAGE.map((r, i) => (i % 2 === 0 ? { ...r, ...kinds } : r));
+      await s.usage.insertBatch(rows);
+      assert.equal(await s.usage.teamSpendSince('team-a', T0), 2.5);
+      if (!h.usageRows) return;
+      const stored = new Map((await h.usageRows()).map((r) => [r.id, r]));
+      for (const [i, r] of rows.entries()) {
+        const got = stored.get(r.id);
+        for (const k of Object.keys(kinds) as Array<keyof typeof kinds>) assert.equal(got?.[k] ?? null, i % 2 === 0 ? kinds[k] : null);
+      }
     },
   },
   {

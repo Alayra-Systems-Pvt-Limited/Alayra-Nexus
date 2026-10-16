@@ -27,6 +27,30 @@ providers it holds a key for. Usage rows carry `teamId` (null for the master key
 `PROVIDER_PRESETS` and `presetFor(slug)` are the gateway's table of known providers: default base
 URL, auth header and prefix, model-list path and key prefixes.
 
+When the caller hangs up, the core aborts the provider request and records the outcome
+`client_cancelled`. It sees the disconnect through `reply.raw`: a `close` event, or `destroyed`
+already true. If you hand `handleProxy` a reply stand-in of your own, forward `once`, `off` and
+`destroyed` to the real socket, as `createAnthropicReply` does.
+
+Usage rows may carry optional token kinds (`UsageTokenKinds`): cache reads and writes, cache misses
+and reasoning tokens, as the provider reported them. Absent means not reported. Your `usage` store
+must accept a row that carries them; keeping them is up to you. `readUsageDetail(usage)` reads them
+from any provider's usage block.
+
+Serve `/v1/messages` with `handleAnthropicMessages(body, reply, teamKeyId, headers, team)`. It
+translates the request onto the same pipeline as `handleProxy`, and when routing lands on a pool
+whose provider is `anthropic`, set up for Anthropic's own API (`x-api-key` auth, or the pool's
+`nativeMessages.enabled`), for the model the caller asked for, it sends the caller's own body to
+`<baseUrl>/messages` and relays the answer untouched (header `X-Nexus-Native: anthropic`), so
+`cache_control`, thinking and documents reach the provider. Fields and server tools the gateway
+cannot price are removed unless the pool's `nativeMessages.allow` lists them, and named in
+`X-Nexus-Stripped`. Only the caller's `anthropic-version` and `anthropic-beta` headers are
+forwarded. With input guardrails on, this happens only when every part of the request is either
+scanned or already forwarded unscanned on the translated path. Calling `anthropicToOpenAI` and
+`createAnthropicReply` yourself keeps the translated path for every provider. `ProviderRow` has an
+optional `nativeMessages` (the pool's settings as a JSON string); a store that leaves it out gives
+every pool the defaults, but the conformance checks expect it.
+
 ### Operator alerts
 
 The core raises these alerts on the request path and hands each to your `notifications` port

@@ -15,7 +15,7 @@
  */
 
 import { getCacheConfig } from '../cache.service';
-import { isCacheable, responseCacheKey, getCached, toCompletionJson } from '../../lib/responseCache';
+import { isCacheable, messagesCacheKey, responseCacheKey, getCached, toCompletionJson } from '../../lib/responseCache';
 import * as metrics from '../../lib/metrics';
 import type { RoutingScope } from '../../lib/scope';
 import { observe, recordUsage, type ProxyRun } from './run';
@@ -34,6 +34,8 @@ export interface CacheMiss {
 
 export async function lookUpResponseCache(
   run: ProxyRun, scope: RoutingScope, pinnedModelId: string | null, isStream: boolean,
+  /** An Anthropic Messages request's own body, which keys it instead of its translation. */
+  messagesBody?: Record<string, unknown>,
 ): Promise<Stage<CacheMiss>> {
   const { body, reply, reqHeaders, trace, team, teamKeyId, t0 } = run;
   const cacheCfg    = await getCacheConfig();
@@ -45,7 +47,9 @@ export async function lookUpResponseCache(
   if (!cacheBypassed && cacheCfg.enabled && isCacheable(body)) {
     // The pinned model is part of the identity: two models answering one prompt are two
     // responses, and sharing an entry between them would replay the wrong one silently.
-    const key = responseCacheKey(body, scope.namespace, pinnedModelId);
+    const key = messagesBody
+      ? messagesCacheKey(messagesBody, scope.namespace, pinnedModelId)
+      : responseCacheKey(body, scope.namespace, pinnedModelId);
     const hit = await getCached(key);
     if (hit) {
       metrics.responseCache('hit');

@@ -21,7 +21,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('./redis', () => ({ redis: { get: vi.fn(), set: vi.fn() } }));
 
 import {
-  isCacheable, responseCacheKey, cacheRedisKey, toCompletionJson,
+  isCacheable, responseCacheKey, messagesCacheKey, cacheRedisKey, toCompletionJson,
   buildFromCompletion, buildFromStreamContent,
 } from './responseCache';
 import { SHARED_NAMESPACE } from './scope';
@@ -112,6 +112,27 @@ describe('responseCacheKey', () => {
     it('still de-duplicates identical requests within one team', () => {
       expect(responseCacheKey({ ...base }, 'team:aaa')).toBe(responseCacheKey({ ...base }, 'team:aaa'));
     });
+  });
+});
+
+describe('messagesCacheKey', () => {
+  const pdf = (data: string) => ({ model: 'claude-sonnet-4-5', max_tokens: 64, messages: [{ role: 'user', content: [
+    { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }, { type: 'text', text: 'Summarise this.' }] }] });
+
+  it('tells apart two requests that differ only in what translation drops', () => {
+    expect(messagesCacheKey(pdf('A'))).not.toBe(messagesCacheKey(pdf('B')));
+    expect(messagesCacheKey({ ...pdf('A'), top_k: 5 })).not.toBe(messagesCacheKey(pdf('A')));
+  });
+
+  it('ignores stream, and keeps the scope and the pinned model in the identity', () => {
+    expect(messagesCacheKey({ ...pdf('A'), stream: true })).toBe(messagesCacheKey(pdf('A')));
+    expect(messagesCacheKey(pdf('A'), 'team:aaa')).not.toBe(messagesCacheKey(pdf('A')));
+    expect(messagesCacheKey(pdf('A'), SHARED_NAMESPACE, 'm-1')).not.toBe(messagesCacheKey(pdf('A')));
+  });
+
+  it('never matches a chat-completions key for the same text', () => {
+    const chat = { messages: [{ role: 'user', content: 'hi' }] };
+    expect(messagesCacheKey(chat)).not.toBe(responseCacheKey(chat));
   });
 });
 

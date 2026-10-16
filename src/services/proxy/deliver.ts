@@ -19,11 +19,14 @@ import { reportSuccess } from '../nexus.service';
 import { countMessageTokens } from '../../lib/tokenizer';
 import { reconcileTpm } from '../../lib/admission';
 import { setStickyKeyId } from '../../lib/sticky';
+import { readUsageDetail } from '../../lib/usageDetail';
+import { readAnthropicTokens, readServerToolUse } from '../../lib/anthropicUsage';
 import * as metrics from '../../lib/metrics';
 import { UPSTREAM_BODY_MS } from './config';
 import type { CacheMiss } from './cacheLookup';
 import type { Dispatched } from './dispatch';
 import type { GuardedRequest } from './inputGuard';
+import { nativeAnswerHeaders } from './upstreamFailure';
 import { applyOutputGuardrails, storeInCache } from './responseHelpers';
 import { observe, recordUsage, routeUsage, stampUsage, type ProxyRun } from './run';
 import { openEventStream, toSingleSseChunk } from './sse';
@@ -51,6 +54,7 @@ export function gatewayHeaders(dispatched: Dispatched, guarded: GuardedRequest, 
     ...(route.wasDowngrade ? { 'X-Nexus-Tier-Downgrade': 'true' } : {}),
     ...(route.sticky        ? { 'X-Nexus-Sticky': 'true' } : {}),
     ...(route.byok          ? { 'X-Nexus-BYOK': 'true' } : {}),
+    ...(dispatched.native   ? nativeAnswerHeaders(dispatched.upstream, dispatched.stripped) : {}),
     ...(cache.cacheStoreKey ? { 'X-Nexus-Cache': 'miss' } : {}),
     ...guarded.guardHeaders,
   };
@@ -65,19 +69,24 @@ export function markHealthy({ route, session }: Dispatched): void {
   if (session) void setStickyKeyId(session, route.keyId).catch(() => {});
 }
 
-/** Read a whole JSON answer under its own timer; null when it timed out or was malformed. */
+/**
+ * Read a whole JSON answer under its own timer; null when it timed out, was malformed, or the caller
+ * hung up while it was arriving (the departure watch aborts the read, and closes the upstream).
+ */
 async function readJsonBody(d: Delivery): Promise<Record<string, unknown> | null> {
-  const { upstream, controller, refundReservation, traceAttempt } = d.dispatched;
+  const { upstream, controller, departure, refundReservation, traceAttempt } = d.dispatched;
   const bodyTimer = setTimeout(() => controller.abort(), UPSTREAM_BODY_MS);
   try {
     return await upstream.json() as Record<string, unknown>;
   } catch {
     refundReservation();
-    if (traceAttempt) traceAttempt.outcome = 'provider_error';
-    observe(d.run, 'upstream_error');
+    const cancelled = departure.gone();
+    if (traceAttempt) traceAttempt.outcome = cancelled ? 'client_cancelled' : 'provider_error';
+    observe(d.run, cancelled ? 'client_cancelled' : 'upstream_error');
     return null;
   } finally {
     clearTimeout(bodyTimer);
+    departure.release();
   }
 }
 
@@ -86,14 +95,30 @@ async function settleJson(d: Delivery, data: Record<string, unknown>): Promise<v
   const { run, dispatched, guarded, cache } = d;
   const { route, reserve, traceAttempt, sessionId } = dispatched;
   const usageObj     = data.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
-  const inputTokens  = usageObj?.prompt_tokens     ?? countMessageTokens(guarded.effectiveMessages);
-  const outputTokens = usageObj?.completion_tokens  ?? 1;
+  // Anthropic's own answer (the native passthrough) names and splits its usage differently.
+  const reported     = dispatched.native ? readAnthropicTokens(data.usage)
+    : { input: usageObj?.prompt_tokens, output: usageObj?.completion_tokens };
+  const inputTokens  = reported.input  ?? countMessageTokens(guarded.effectiveMessages);
+  const outputTokens = reported.output ?? 1;
   stampUsage(run, inputTokens, outputTokens);
   observe(run, 'success'); metrics.addTokens(inputTokens, outputTokens);
   storeInCache(cache.cacheStoreKey, data, route.providerSlug, cache.cacheCfg.ttlSeconds); // cache the post-guardrails response
-  void reconcileTpm(route.keyId, reserve, inputTokens + outputTokens).catch(() => {});
+  // Gemini's own answer calls the block `usageMetadata`; every other format calls it `usage`.
+  const detail = readUsageDetail(data.usage ?? data.usageMetadata);
+  void reconcileTpm(route.keyId, reserve, tpmTokens(dispatched, inputTokens, outputTokens, detail.cachedInputTokens)).catch(() => {});
   if (traceAttempt) traceAttempt.outcome = 'success';
-  await recordUsage(run, routeUsage(run, route, sessionId, inputTokens, outputTokens));
+  const serverToolUse = dispatched.native ? readServerToolUse(data.usage) : undefined;
+  await recordUsage(run, { ...routeUsage(run, route, sessionId, inputTokens, outputTokens), detail, serverToolUse });
+}
+
+/**
+ * The tokens a request used against the key's per-minute budget. Anthropic does not count cache
+ * reads toward its input rate limit (https://platform.claude.com/docs/en/api/rate-limits), so on its
+ * own API they are left out here too; a cached session would otherwise look many times larger than the
+ * limit Anthropic applies, and be refused early. The usage row still records the whole prompt.
+ */
+export function tpmTokens(dispatched: Dispatched, input: number, output: number, cacheReads: number | undefined): number {
+  return (dispatched.native ? Math.max(0, input - (cacheReads ?? 0)) : input) + output;
 }
 
 /**

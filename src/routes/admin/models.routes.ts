@@ -54,6 +54,14 @@ const modelSchema = z.object({
   pricingSource:   z.enum(PRICING_SOURCES).optional(),
   contextWindow:   z.number().int().min(0).default(0),
   maxTokens:       z.number().int().min(0).default(0),
+  // Optional, with no default: absent means "not set", and lib/usagePrice.ts then falls back to the
+  // provider's published multipliers (or, for providers without them, the input price). A default
+  // of 0 would price cache reads and searches as free.
+  cacheReadCostPer1M:    z.number().min(0).optional(),
+  cacheWrite5mCostPer1M: z.number().min(0).optional(),
+  cacheWrite1hCostPer1M: z.number().min(0).optional(),
+  webSearchCostPer1K:    z.number().min(0).optional(),
+  webFetchCostPer1K:     z.number().min(0).optional(),
 }).passthrough();
 
 const registrySchema = z.object({ models: z.array(modelSchema) });

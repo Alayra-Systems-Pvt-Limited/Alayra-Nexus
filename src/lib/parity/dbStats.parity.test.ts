@@ -24,7 +24,7 @@ const enabled = !!PARITY_DATABASE_URL;
 describe.skipIf(!enabled)('database stats are real on both engines', { timeout: PARITY_TIMEOUT }, () => {
   let e: Engines;
 
-  beforeAll(async () => { e = startEngines('stats'); await seedBoth(e); }, 120_000);
+  beforeAll(async () => { e = await startEngines('stats'); await seedBoth(e); }, 120_000);
   afterAll(async () => { await e?.dispose(); });
 
   it('both engines return every field — a branch cannot silently omit one', async () => {

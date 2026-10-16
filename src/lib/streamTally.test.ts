@@ -212,3 +212,59 @@ describe('what it keeps, which is the point', () => {
     expect(t.content().length * 10).toBeLessThan(wire.length);
   });
 });
+
+describe("Anthropic's own event stream (the native passthrough)", () => {
+  const ev = (event: string, data: object) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  const usage = { input_tokens: 10, cache_read_input_tokens: 2000, cache_creation_input_tokens: 300, output_tokens: 1,
+    cache_creation: { ephemeral_5m_input_tokens: 100, ephemeral_1h_input_tokens: 200 } };
+  const start = ev('message_start', { type: 'message_start', message: { id: 'msg_1', usage } });
+  const d = (delta: object) => ev('content_block_delta', { type: 'content_block_delta', index: 0, delta });
+  const end = ev('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 42 } });
+
+  function read(text: string) {
+    const t = createStreamTally('anthropic');
+    t.push(bytes(text));
+    t.end();
+    return t;
+  }
+
+  it('reads the whole prompt from message_start and the output from message_delta', () => {
+    const t = read(start + d({ type: 'text_delta', text: 'Hi' }) + end + ev('message_stop', { type: 'message_stop' }));
+    expect(t.usage()).toEqual({ input: 2310, output: 42 });
+    expect(t.detail()).toEqual({ cachedInputTokens: 2000, cacheWriteTokens: 300, cacheWrite5mTokens: 100, cacheWrite1hTokens: 200 });
+  });
+
+  it('keeps text, thinking and tool-input fragments, which are all billed as output', () => {
+    const t = read(start + d({ type: 'thinking_delta', thinking: 'Plan. ' }) + d({ type: 'text_delta', text: 'Calling. ' })
+      + d({ type: 'input_json_delta', partial_json: '{"path":' }) + d({ type: 'signature_delta', signature: 'abc' }));
+    expect(t.content()).toBe('Plan. Calling. {"path":');
+  });
+
+  it('has no output figure for a stream cut before message_delta, so the caller counts what arrived', () => {
+    const t = read(start + d({ type: 'text_delta', text: 'Hal' }));
+    expect(t.usage()).toEqual({ input: 2310, output: null });
+  });
+
+  it('keeps each part of the prompt when a later figure leaves it out, and takes cumulative ones as they come', () => {
+    const later = ev('message_delta', { type: 'message_delta', usage: {
+      input_tokens: 10, cache_read_input_tokens: null, cache_creation_input_tokens: 400, output_tokens: 42,
+      server_tool_use: { web_search_requests: 3 },
+    } });
+    const t = read(start + later);
+    expect(t.usage()).toEqual({ input: 2410, output: 42 });
+    expect(t.serverToolUse()).toEqual({ web_search_requests: 3 });
+  });
+
+  it('marks a stream that carried Anthropic\'s error event as failed', () => {
+    expect(read(start + end).failed()).toBe(false);
+    expect(read(start + ev('error', { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } })).failed()).toBe(true);
+  });
+
+  it('is not used for OpenAI streams, which keep their own reading', () => {
+    const t = createStreamTally();
+    t.push(start + end);
+    t.end();
+    expect(t.usage()).toBeNull();
+    expect(t.serverToolUse()).toBeUndefined();
+  });
+});

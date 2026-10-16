@@ -68,7 +68,7 @@ describe.skipIf(!enabled)('a backup crosses from PostgreSQL to SQLite', { timeou
   let file: Buffer;
 
   beforeAll(async () => {
-    e = startEngines('backup');
+    e = await startEngines('backup');
     await seedSecrets(e.pg);
     file = await exportFrom(e.pg, 'postgres');
   }, 120_000);
@@ -153,7 +153,7 @@ describe.skipIf(!enabled)('a restore is all-or-nothing', { timeout: PARITY_TIMEO
   let file: Buffer;
 
   beforeAll(async () => {
-    e = startEngines('backup-atomic');
+    e = await startEngines('backup-atomic');
     await seedSecrets(e.pg);
     file = await exportFrom(e.pg, 'postgres');
   }, 120_000);
@@ -204,7 +204,7 @@ describe.skipIf(!enabled)('merge does not overwrite what is already there', { ti
   let file: Buffer;
 
   beforeAll(async () => {
-    e = startEngines('backup-merge');
+    e = await startEngines('backup-merge');
     await seedSecrets(e.pg);
     file = await exportFrom(e.pg, 'postgres');
     await readBackup({ client: e.sqlite, engine: 'sqlite', passphrase: PASS, input: Readable.from(file), mode: 'replace' });
@@ -240,7 +240,7 @@ describe.skipIf(!enabled)('a backup can be wrapped for the gateway as well', { t
   let e: Engines;
 
   beforeAll(async () => {
-    e = startEngines('backup-recipients');
+    e = await startEngines('backup-recipients');
     await seedSecrets(e.pg);
   }, 120_000);
   afterAll(async () => { await e?.dispose(); });
@@ -295,7 +295,7 @@ describe.skipIf(!enabled)('a restore that runs out of time says so, and changes 
   const SLOW_ROWS = 1_000;
 
   beforeAll(async () => {
-    e = startEngines('backup-timeout');
+    e = await startEngines('backup-timeout');
     await seedSecrets(e.pg);
 
     // Enough rows that the restore CANNOT finish inside the one-millisecond budget the tests below
@@ -368,7 +368,7 @@ describe.skipIf(!enabled)('a merge says which rows it would silently drop', { ti
   let file: Buffer;
 
   beforeAll(async () => {
-    e = startEngines('backup-collisions');
+    e = await startEngines('backup-collisions');
     await e.pg.appSettings.create({ data: { id: 's-source', key: 'BRANDING', value: '{"from":"source"}' } });
     await e.pg.appSettings.create({ data: { id: 's-shared', key: 'AI_MODEL_REGISTRY', value: '{"models":[]}' } });
     file = await exportFrom(e.pg, 'postgres');

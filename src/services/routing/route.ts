@@ -57,6 +57,9 @@ export interface NexusRoute {
   // The provider's optional extra request headers (JSON object string), applied by the proxy
   // path under the system headers. null when the provider has none.
   extraHeaders: string | null;
+  // The pool's Anthropic Messages settings (JSON object string; see proxy/anthropicPolicy.ts).
+  // Absent or null means the defaults.
+  nativeMessages?: string | null;
   wasDowngrade: boolean;
   // True when this request is the single half-open probe for a recovering key —
   // its outcome must be reported so the breaker closes or re-escalates.
@@ -99,6 +102,7 @@ export function buildRoute(
     authHeader:   provider.authHeader,
     authPrefix:   provider.authPrefix,
     extraHeaders: provider.extraHeaders,
+    nativeMessages: provider.nativeMessages ?? null,
     isProbe:      gate === 'probe',
     byok:         key.ownerTeamId !== null,
     keyStatus:    key.status,

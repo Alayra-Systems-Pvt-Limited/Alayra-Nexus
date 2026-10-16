@@ -42,12 +42,13 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
   const providerSchema = z.object({
     name:           z.string().min(1),
     slug:           z.string().min(1).regex(/^[a-z0-9-]+$/),
-    // A slug, not a member of a fixed list. The column is free text (schema.prisma), the transport
-    // is generic, and nothing downstream branches on the value — so the six-value enum this
-    // replaced was not protecting an invariant, it was a hardcoded guest list. It refused to create
-    // a Mistral or Cloudflare pool that the gateway can route perfectly well, with a 400 naming six
-    // providers and no way to proceed. The shape is still checked, because the slug reaches URLs
-    // and error strings.
+    // A slug, not a member of a fixed list. The column is free text (schema.prisma) and the
+    // transport is generic, so the six-value enum this replaced was not protecting an invariant, it
+    // was a hardcoded guest list. It refused to create a Mistral or Cloudflare pool that the gateway
+    // can route perfectly well, with a 400 naming six providers and no way to proceed. A few values
+    // do change behaviour: `anthropic` lets `/v1/messages` use Anthropic's own API when the pool is
+    // set up for it (see nativeMessages below, and services/proxy/anthropicNative.ts). The shape is
+    // still checked, because the slug reaches URLs and error strings.
     provider:       z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, 'lowercase letters, digits and hyphens only'),
     tier:           z.enum(['premium', 'standard', 'fast']).default('standard'),
     preferredModel: z.string().optional(),
@@ -61,14 +62,29 @@ export default async function adminProvidersRoutes(fastify: FastifyInstance) {
     // argument. Passing only the value type there silently made this `Record<string, unknown>`,
     // which is how one missing argument produced four errors in this file.
     extraHeaders:   z.record(z.string(), z.string()).optional(),
+    // How an `anthropic` pool serves `/v1/messages` (services/proxy/anthropicPolicy.ts). `enabled`
+    // forces Anthropic's own API on or off (unset: on when authHeader is x-api-key). `allow` names
+    // request fields, server-tool families and beta features to forward although Nexus cannot price
+    // them, so their charges are neither recorded nor limited. Persisted as a JSON string; null clears.
+    nativeMessages: z.object({
+      enabled: z.boolean().optional(),
+      allow:   z.array(z.string().regex(/^[a-z0-9_-]{1,64}$/, 'lowercase letters, digits, _ and - only')).max(32).optional(),
+    }).strict().nullable().optional(),
   });
 
-  // Turn a validated provider body into a Prisma-ready row: the object-form extraHeaders is
-  // serialized to the JSON string the column stores (empty object → null, i.e. "clear them").
-  function toProviderData<T extends { extraHeaders?: Record<string, string> }>(body: T): Omit<T, 'extraHeaders'> & { extraHeaders?: string | null } {
-    const { extraHeaders, ...rest } = body;
-    if (extraHeaders === undefined) return rest;
-    return { ...rest, extraHeaders: Object.keys(extraHeaders).length ? JSON.stringify(extraHeaders) : null };
+  // Turn a validated provider body into a Prisma-ready row: the object-form extraHeaders and
+  // nativeMessages are serialized to the JSON strings their columns store (an empty object, or null,
+  // clears them).
+  type JsonColumns = 'extraHeaders' | 'nativeMessages';
+  function toProviderData<T extends { extraHeaders?: Record<string, string>; nativeMessages?: object | null }>(
+    body: T,
+  ): Omit<T, JsonColumns> & { [K in JsonColumns]?: string | null } {
+    const { extraHeaders, nativeMessages, ...rest } = body;
+    return {
+      ...rest,
+      ...(extraHeaders !== undefined ? { extraHeaders: Object.keys(extraHeaders).length ? JSON.stringify(extraHeaders) : null } : {}),
+      ...(nativeMessages !== undefined ? { nativeMessages: nativeMessages && Object.keys(nativeMessages).length ? JSON.stringify(nativeMessages) : null } : {}),
+    };
   }
 
   // Reject provider base/fetch URLs that resolve to a blocked internal host, so a
