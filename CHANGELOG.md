@@ -77,8 +77,9 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   the provider's usage object through unchanged. PostgreSQL gets migration `0020_usage_token_kinds`,
   which is additive and gives up after five seconds rather than queue behind a long query on the
   table (the next start runs it again). A standalone SQLite database created by an earlier version
-  gains the same columns when the gateway starts, and the startup log says so. That is the only
-  change made to an existing file. For `@alayrasystems/nexus-core` hosts: `UsageRow` gains the same
+  gains the same columns when the gateway starts, all in one transaction, so a start that stops
+  part-way adds none of them, and the startup log says so. That is the only change made to an
+  existing file. For `@alayrasystems/nexus-core` hosts: `UsageRow` gains the same
   six optional fields (type `UsageTokenKinds`), the conformance checks now require a store to accept
   a row that carries them, and `readUsageDetail` reads them from any provider's usage block.
 
