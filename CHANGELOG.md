@@ -139,6 +139,11 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   each suite applies both in one transaction per engine. The suites no longer run `db push`, so
   they no longer stop for the confirmation Prisma asks before that command. The 1.7.0 database the
   column-upgrade tests start from is built once, in one transaction, and copied for each test.
+- **The parity suites run SQLite in WAL, as the gateway does.** The gateway puts every standalone
+  database into WAL when it starts, but the suites compared it in SQLite's default `delete` mode,
+  which the gateway never runs in. On the same disk under load a single-row commit took 3.3-4.9s in
+  `delete` mode and 0.08-0.15s in WAL. The suites that test the switch itself still start from
+  `delete`.
 
 ## [1.7.0] - 2026-10-11
 

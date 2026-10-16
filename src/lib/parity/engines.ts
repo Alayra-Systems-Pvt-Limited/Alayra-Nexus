@@ -26,12 +26,21 @@
 // output for the SQLite schema. Each suite then creates its database and runs the DDL in-process,
 // in ONE transaction per engine: one commit instead of one per statement, which on that disk is
 // the difference between about 0.15s and 6-12s for SQLite alone.
+//
+// ── And why the SQLite file is in WAL ─────────────────────────────────────────────────────────
+//
+// Because the gateway's is: server.ts puts every standalone database into WAL at boot
+// (lib/sqlitePragma.ts), and these suites exist to test what the product does. They had been running
+// SQLite in its default `delete` mode, which creates, syncs and deletes a journal file on every
+// commit. On the same disk, under load, 20 single-row commits measured 3.3-4.9s EACH in that mode
+// and 0.08-0.15s each in WAL, which is why the SQLite half of a suite took 30-60s per test.
 
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { configureSqlite } from '../sqlitePragma';
 import { SQLITE_TIMESTAMP_FORMAT, type SqliteAdapterOptions } from '../sqliteTimestamp';
 
 const ROOT = resolve(__dirname, '..', '..', '..');
@@ -187,12 +196,15 @@ export interface SqliteGateway {
   dispose: () => Promise<void>;
 }
 
-/** A client on a new file in a new temp directory, with the SQLite schema applied. */
+/** A client on a new file in a new temp directory, in WAL as the gateway runs it, with the schema applied. */
 async function newSqlite(prefix: string, file: string): Promise<{ client: PrismaClient; url: string; dir: string }> {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   const url = `file:${join(dir, file)}`;
   const client = openSqlite(url);
   try {
+    // Before the schema, where boot does it after: the order changes no table, and this way the
+    // schema's commit is a WAL commit too. A file that refuses WAL stays usable, as in the gateway.
+    await configureSqlite(client);
     await applySchema(client, sqliteSchema());
   } catch (err) {
     await client.$disconnect();

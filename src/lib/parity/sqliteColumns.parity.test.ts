@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureSqliteSchema } from '../sqliteBootstrap';
 import { ADDED_COLUMNS } from '../sqliteColumns';
+import { configureSqlite } from '../sqlitePragma';
 import { openSqlite } from './harness';
 
 const DDL     = readFileSync(resolve(__dirname, '..', '..', '..', 'prisma', 'sqlite-schema.sql'), 'utf8');
@@ -62,6 +63,10 @@ const tableBody = (sql: string, table: string) => sql.split(`CREATE TABLE "${tab
  * The 1.7.0 database, built once per file and copied for each test that needs one. Built in ONE
  * transaction: run as 45 separate commits it took 6-12s on a spinning disk, and over a minute per
  * test during a full parallel run, where each commit waits for the disk; as one, about 0.15s.
+ *
+ * Then put into WAL, because that is the state 1.7.0 left every file in: its boot ran the same
+ * configureSqlite after building the schema. Closing folds the log back into the file, so the copy
+ * is the whole database.
  */
 let template170: Promise<string> | undefined;
 
@@ -73,6 +78,7 @@ async function buildTemplate170(): Promise<string> {
     await tx.$executeRawUnsafe(`INSERT INTO "TokenUsage" ("id", "sessionId", "modelId", "modelName", "provider", "inputTokens", "outputTokens", "totalTokens", "estimatedUsd")
       VALUES ('old-1', 's', 'gpt-4o', 'gpt-4o', 'openai', 1000, 500, 1500, 0.0075)`);
   }, { maxWait: 30_000, timeout: 30_000 });
+  await configureSqlite(db);
   await db.$disconnect();
   return file;
 }
