@@ -250,3 +250,50 @@ describe('noCapacityMessage', () => {
     expect(msg).toContain('rate-limited');
   });
 });
+
+describe('the servable list, built once per registry version', () => {
+  const ids = (list: { id: string }[]) => list.map((m) => m.id);
+  const isolated = { ownerTeamId: 't1', fallbackToShared: false, namespace: 'team:t1' };
+
+  it('is not rebuilt for the same registry and pools, and every caller gets its own array', async () => {
+    h.registry = [model(), model({ id: 'sonnet', provider: 'anthropic' })];
+    h.slugs    = new Set(['openai', 'anthropic']);
+
+    const first  = await listServableModels();
+    const second = await listServableModels();
+    expect(second[1]).toBe(first[1]);
+    expect(second).not.toBe(first);
+
+    first.splice(1);
+    expect(ids(await listServableModels())).toEqual([AUTO_MODEL_ID, 'gpt4o', 'sonnet']);
+  });
+
+  it('follows a pool added or removed on the very next call, with the same registry', async () => {
+    h.registry = [model(), model({ id: 'sonnet', provider: 'anthropic' })];
+    h.slugs    = new Set(['openai']);
+    expect(ids(await listServableModels())).toEqual([AUTO_MODEL_ID, 'gpt4o']);
+
+    // The same Set, changed in place: the list is keyed by which pools exist, not by the object.
+    h.slugs.add('anthropic');
+    expect(ids(await listServableModels())).toEqual([AUTO_MODEL_ID, 'gpt4o', 'sonnet']);
+    expect((await resolveRequestedModel('sonnet', 'chat')).kind).toBe('pinned');
+
+    h.slugs = new Set(['anthropic']);
+    expect(ids(await listServableModels())).toEqual([AUTO_MODEL_ID, 'sonnet']);
+    expect((await resolveRequestedModel('gpt4o', 'chat')).kind).toBe('unknown');
+  });
+
+  it('reads a hard-isolated team\'s keys on every request, so a revoked key drops its provider at once', async () => {
+    h.registry  = [model(), model({ id: 'sonnet', provider: 'anthropic' })];
+    h.slugs     = new Set(['openai', 'anthropic']);
+    h.ownedKeys = [{ provider: { provider: 'anthropic', isActive: true } }];
+    expect(ids(await listServableModels(isolated))).toEqual([AUTO_MODEL_ID, 'sonnet']);
+    expect((await resolveRequestedModel('sonnet', 'chat', isolated)).kind).toBe('pinned');
+
+    h.ownedKeys = [];
+    expect(ids(await listServableModels(isolated))).toEqual([AUTO_MODEL_ID]);
+    expect((await resolveRequestedModel('sonnet', 'chat', isolated)).kind).toBe('unknown');
+    // The shared listing built alongside is untouched by the narrowing.
+    expect(ids(await listServableModels())).toEqual([AUTO_MODEL_ID, 'gpt4o', 'sonnet']);
+  });
+});

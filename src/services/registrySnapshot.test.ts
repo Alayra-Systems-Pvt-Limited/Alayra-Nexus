@@ -26,9 +26,10 @@ vi.mock('../lib/redis', () => ({
 }));
 vi.mock('./settings.service', () => ({ readSettingFresh: vi.fn(async () => setting.value) }));
 
-import { loadRegistry } from './registrySnapshot';
-import { normalizeModel } from './model.service';
+import { loadRegistry, registryPrices, servableSnapshot } from './registrySnapshot';
+import { normalizeModel, type AiModel } from './model.service';
 import { REGISTRY_CACHE_KEY } from '../lib/registryCacheKey';
+import { effectivePrice } from '../lib/routing';
 
 const normalize = vi.fn(normalizeModel);
 const stored = (...ids: string[]) => JSON.stringify(ids.map((id) => ({ id, modelString: id, provider: 'openai', inputCostPer1M: 1 })));
@@ -76,5 +77,37 @@ describe('loadRegistry', () => {
     kv.set(REGISTRY_CACHE_KEY, '{"not":"a list"}');
     setting.value = 'not json';
     expect(await loadRegistry(normalize)).toEqual([]);
+  });
+});
+
+describe('derived lists', () => {
+  const registry = (): AiModel[] => [
+    normalizeModel({ id: 'a', modelString: 'a', provider: 'openai', inputCostPer1M: 2 }),
+    normalizeModel({ id: 'b', modelString: 'b', provider: 'groq', status: 'paused' }),
+    normalizeModel({ id: 'c', modelString: 'c', provider: 'groq' }),
+  ];
+  const toEntry = vi.fn((m: AiModel) => ({
+    id: m.id, displayName: m.id, provider: m.provider, capabilities: m.capabilities, contextWindow: 0, maxTokens: 0, auto: false,
+  }));
+
+  it('prices each model once per registry version, exactly as routing would', () => {
+    const one = registry();
+    const prices = registryPrices(one);
+    expect(registryPrices(one)).toBe(prices);
+    for (const m of one) expect(prices.get(m.id)).toBe(effectivePrice(m as unknown as Record<string, unknown>));
+
+    // A new version is a new array, and gets its own prices.
+    expect(registryPrices(registry())).not.toBe(prices);
+  });
+
+  it('keeps active models with a pool, and rebuilds when the pools change', () => {
+    const one = registry();
+    const first = servableSnapshot(one, new Set(['openai', 'groq']), toEntry);
+    expect(first.models.map((m) => m.id)).toEqual(['a', 'c']);
+    expect(first.entries.map((e) => e.id)).toEqual(['a', 'c']);
+    expect(servableSnapshot(one, new Set(['groq', 'openai']), toEntry)).toBe(first);
+    expect(toEntry).toHaveBeenCalledTimes(2);
+
+    expect(servableSnapshot(one, new Set(['openai']), toEntry).models.map((m) => m.id)).toEqual(['a']);
   });
 });
