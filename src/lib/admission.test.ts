@@ -23,12 +23,17 @@ import { describe, it, expect, vi } from 'vitest';
 // One mock function for every copy of the module, so a test that reloads admission.ts under another
 // environment still sees the same `redis.eval`. The setting is cleared before the module loads, so
 // the default-mode tests mean the same with it set in the shell.
-const evalMock = vi.hoisted(() => { delete process.env.NEXUS_TPM_RECONCILE; return vi.fn(); });
+const evalMock = vi.hoisted(() => {
+  delete process.env.NEXUS_TPM_RECONCILE;
+  delete process.env.NEXUS_TPM_ESTIMATE;
+  return vi.fn();
+});
 vi.mock('./redis', () => ({ redis: { eval: evalMock } }));
 
 import { beforeEach, afterEach } from 'vitest';
 import {
-  rpmKey, tpmKey, usersKey, admitUser, reconcileTpm, readTpmReconcile, ADMIT_LUA, RECONCILE_LUA, CHARGE_LUA,
+  rpmKey, tpmKey, usersKey, admitUser, reconcileTpm, readTpmReconcile, effectiveTpmReconcile, ADMIT_LUA, RECONCILE_LUA,
+  CHARGE_LUA,
   RPM_TPM_WINDOW_SECONDS, MAXUSERS_WINDOW_SECONDS,
 } from './admission';
 import { redis } from './redis';
@@ -103,9 +108,10 @@ const NOON = Date.UTC(2026, 7, 11, 12, 0, 30);
 const TPM = 'nexus:tpm:key-1';
 const CURRENT = rateWindow(TPM, NOON, RPM_TPM_WINDOW_SECONDS).current;
 
-/** A fresh copy of admission.ts, loaded with NEXUS_TPM_RECONCILE set to `value`. */
-async function loadWith(value: string) {
+/** A fresh copy of admission.ts, loaded with NEXUS_TPM_RECONCILE (and NEXUS_TPM_ESTIMATE) set. */
+async function loadWith(value: string, estimate = '') {
   vi.stubEnv('NEXUS_TPM_RECONCILE', value);
+  vi.stubEnv('NEXUS_TPM_ESTIMATE', estimate);
   vi.resetModules();
   return import('./admission');
 }
@@ -128,6 +134,17 @@ describe('NEXUS_TPM_RECONCILE', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(readTpmReconcile('both')).toBe('refund');
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('NEXUS_TPM_RECONCILE="both" was ignored'));
+  });
+
+  it('runs two-way under the fast estimate, and says so when refund was asked for', () => {
+    // The estimate can run low on crafted text, and only two-way charges that back.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(effectiveTpmReconcile('fast', 'refund')).toBe('two-way');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(effectiveTpmReconcile('fast', 'two-way')).toBe('two-way');
+    expect(effectiveTpmReconcile('tokenizer', 'refund')).toBe('refund');
+    expect(effectiveTpmReconcile('tokenizer', 'two-way')).toBe('two-way');
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -170,6 +187,14 @@ describe('reconcileTpm', () => {
     await mod.reconcileTpm('key-1', 100, Number.NaN, NOON);
     await mod.reconcileTpm('key-1', 100, Number.POSITIVE_INFINITY, NOON);
     expect(evalMock).not.toHaveBeenCalled();
+  });
+
+  it('with the fast estimate, charges an overrun even though reconcile was left at refund', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const mod = await loadWith('', 'fast');
+    await mod.reconcileTpm('key-1', 100, 150, NOON);
+    expect(evalMock).toHaveBeenCalledWith(mod.CHARGE_LUA, 1, TPM, '50', '60', String(NOON));
+    warn.mockRestore();
   });
 });
 

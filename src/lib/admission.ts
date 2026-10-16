@@ -17,6 +17,7 @@
 import { redis } from './redis';
 import { defineScript } from './kv/memory';
 import { RATE_WINDOW_LUA, rateWindow, rateCount, windowTtl } from './rateWindow';
+import { TPM_ESTIMATE, type TpmEstimate } from './tokenEstimate';
 
 // Sliding-window length for per-key RPM/TPM counters (seconds).
 export const RPM_TPM_WINDOW_SECONDS = 60;
@@ -170,7 +171,18 @@ export function readTpmReconcile(raw = process.env.NEXUS_TPM_RECONCILE): TpmReco
   return 'refund';
 }
 
-const TPM_RECONCILE: TpmReconcile = readTpmReconcile();
+/**
+ * The reconcile a process runs. The `fast` estimate can run low on crafted text (a long run of
+ * random letters counts as little as a fifth of its real tokens), and only two-way reconcile charges
+ * that back, so `fast` always runs with two-way, and says so once when the setting asked for refund.
+ */
+export function effectiveTpmReconcile(estimate: TpmEstimate, configured: TpmReconcile): TpmReconcile {
+  if (estimate !== 'fast' || configured === 'two-way') return configured;
+  console.warn('⚠️  NEXUS_TPM_ESTIMATE=fast needs two-way reconcile. Using NEXUS_TPM_RECONCILE=two-way, not refund.');
+  return 'two-way';
+}
+
+const TPM_RECONCILE: TpmReconcile = effectiveTpmReconcile(TPM_ESTIMATE, readTpmReconcile());
 
 /**
  * Atomically admit one request against a key's RPM and TPM budgets, reserving
@@ -197,9 +209,9 @@ export async function admitKey(
 
 /**
  * Reconcile a TPM reservation to actual usage: refund `reserved - actual` tokens to the key's TPM
- * window. When the request used more than it reserved, NEXUS_TPM_RECONCILE=two-way adds the excess
- * instead; by default that is a no-op, as it always was. Pass `actual = 0` to fully release a
- * reservation for a failed request.
+ * window. When the request used more than it reserved, NEXUS_TPM_RECONCILE=two-way (always on with
+ * NEXUS_TPM_ESTIMATE=fast) adds the excess instead; by default that is a no-op, as it always was.
+ * Pass `actual = 0` to fully release a reservation for a failed request.
  */
 export async function reconcileTpm(
   keyId: string, reserved: number, actual: number,

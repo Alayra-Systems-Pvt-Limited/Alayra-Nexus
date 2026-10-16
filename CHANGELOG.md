@@ -31,7 +31,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   1.06x (code), 1.42x (Chinese) and 1.22x (JSON). It never exceeds the prompt's UTF-8 byte count.
   Whitespace and control characters never count low: tabs, lone carriage returns, CRLF and every
   mix of them were checked against the tokenizer. Crafted text can still count low: a long run of
-  random letters with no spaces counts at about a fifth of its tokens.
+  random letters with no spaces counts at about a fifth of its tokens. So `fast` always runs with
+  two-way reconcile (next entry), which charges the difference once the provider reports it.
   **A refusal on size stays exact.** When the estimate plus `max_tokens` is above a key's whole TPM
   limit, the key would refuse the request even with an empty window, although the exact count might
   fit. Routing then counts the prompt with the tokenizer and decides on that count, so a prompt is
@@ -51,8 +52,9 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   minute and could admit past its limit. With `two-way`, the excess is added to the current window
   in the same single Redis call a refund makes (a new script, `CHARGE_LUA`, with an in-memory twin
   and its own parity test). A request that spans a minute boundary adds its excess to the new
-  minute, exactly as a refund already lands there. The default, `refund`, behaves exactly as before.
-  It pairs with `NEXUS_TPM_ESTIMATE=fast`, and is useful on its own for providers whose counts
+  minute, exactly as a refund already lands there. The default, `refund`, behaves exactly as before,
+  except with `NEXUS_TPM_ESTIMATE=fast`, which always runs two-way: set with `refund`, it logs one
+  warning at start-up and uses two-way. It is also useful on its own for providers whose counts
   run above cl100k's.
 
 ## [1.8.0] - 2026-10-16

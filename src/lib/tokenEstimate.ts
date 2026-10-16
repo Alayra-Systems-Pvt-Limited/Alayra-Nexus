@@ -38,7 +38,8 @@
 //
 // Crafted text can still count low. Whitespace and control characters cannot (tabs, lone carriage
 // returns and every mix of them were checked against the tokenizer), but a long run of random
-// letters can count as little as a fifth of its real tokens.
+// letters can count as little as a fifth of its real tokens. So `fast` always runs with two-way
+// reconcile (admission.ts), which charges the difference once the provider reports it.
 //
 // It is an admission estimate only, used for chat requests. Usage rows and money never use it.
 
