@@ -21,6 +21,7 @@ import { selectModels, type SelectableModel, type Capability } from '../../lib/m
 import type { RoutingScope } from '../../lib/scope';
 import { getCostWeight } from '../routing.service';
 import { getModelRegistry, activeProviderSlugs } from '../model.service';
+import { registryPrices } from '../registrySnapshot';
 import { getActiveProviders } from '../providerCache.service';
 import { tryPickKey, tryStickyKey } from './pickKey';
 import { SHARED_SCOPE, TIER_ORDER, type NexusRoute, type RouteModel } from './route';
@@ -142,9 +143,9 @@ export async function discoverBestPool(
 
   // Model-first candidate list (Phase 6.1): the registry, filtered to this capability
   // and to providers that actually have a pool, ordered tier → priority → cost. When the
-  // caller is a team with an assigned tier (Phase 8), that tier leads the ordering.
-  const priceById = new Map<string, number | null>();
-  for (const m of registry) priceById.set(m.id, effectivePrice(m as unknown as Record<string, unknown>));
+  // caller is a team with an assigned tier (Phase 8), that tier leads the ordering. The price map
+  // is built once per registry version, not per request (registrySnapshot.ts).
+  const priceById = registryPrices(registry);
   const ordered = selectModels(registry as unknown as SelectableModel[], {
     capability,
     activeProviderSlugs: await activeProviderSlugs(),

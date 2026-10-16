@@ -14,7 +14,7 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-// The model registry as this process reads it.
+// The model registry as this process reads it, and the lists every request derives from it.
 //
 // ── Parsed when it changes, not whenever it is read ───────────────────────────────────────────
 //
@@ -28,11 +28,24 @@
 // (hashing them costs more than that, and still needs the text in memory first). The price is the
 // last text held in memory, about 2 MB at 5,000 models.
 //
+// Reusing the parse also keeps the registry the SAME array until it really changes, which is what
+// lets the lists below be built once per version rather than once per request.
+//
+// ── Built once per registry version ───────────────────────────────────────────────────────────
+//
+// Routing and the model listing derive lists from the registry on every request: the models a
+// caller can be routed to, their catalogue entries, each model's price. Each is a pass over the
+// whole registry. They are kept per registry array (a WeakMap, so a replaced registry takes its
+// lists with it) and, where they also depend on which providers have a pool, per that set too. A
+// list is never older than the registry and pools it is handed: it is looked up by them.
+//
 // Nothing returned from here may be modified by the caller. Every caller filters, maps or reads.
 
 import type { AiModel } from './model.service';
+import type { CatalogEntry } from './modelCatalog.service';
 import { redis } from '../lib/redis';
 import { REGISTRY_CACHE_KEY } from '../lib/registryCacheKey';
+import { effectivePrice } from '../lib/routing';
 import { readSettingFresh } from './settings.service';
 
 /** The setting the registry is stored in. */
@@ -115,4 +128,61 @@ export async function loadRegistry(normalize: Normalize): Promise<AiModel[]> {
   // The next read of the shared copy returns exactly this text: no need to parse it back.
   sharedCopy.remember(built.text, built.models);
   return built.models;
+}
+
+// ── Lists derived from one registry version ──────────────────────────────────────────────────
+
+/** Registry models a caller may be routed to, and the same models as catalogue entries. */
+export interface ServableSnapshot {
+  /** Active models whose provider has a pool, in registry order. */
+  models: readonly AiModel[];
+  /** `models`, one entry each, in the same order. */
+  entries: readonly CatalogEntry[];
+}
+
+interface Derived {
+  prices?: ReadonlyMap<string, number | null>;
+  servable?: { pools: string; snapshot: ServableSnapshot };
+}
+
+const derived = new WeakMap<readonly AiModel[], Derived>();
+
+function derivedFrom(registry: readonly AiModel[]): Derived {
+  let found = derived.get(registry);
+  if (found === undefined) {
+    found = {};
+    derived.set(registry, found);
+  }
+  return found;
+}
+
+/** Each model's effective price (lib/routing `effectivePrice`), by id; built once per registry. */
+export function registryPrices(registry: readonly AiModel[]): ReadonlyMap<string, number | null> {
+  const from = derivedFrom(registry);
+  if (from.prices === undefined) {
+    const prices = new Map<string, number | null>();
+    for (const m of registry) prices.set(m.id, effectivePrice(m as unknown as Record<string, unknown>));
+    from.prices = prices;
+  }
+  return from.prices;
+}
+
+/**
+ * The active models of `registry` whose provider is in `pooled`, with their catalogue entries.
+ *
+ * Built once per registry and set of pooled providers. The set is compared by content, not by
+ * identity, so a pool added or removed rebuilds it on the very next call.
+ */
+export function servableSnapshot(
+  registry: readonly AiModel[],
+  pooled: ReadonlySet<string>,
+  toEntry: (model: AiModel) => CatalogEntry,
+): ServableSnapshot {
+  const from = derivedFrom(registry);
+  const pools = JSON.stringify([...pooled].sort());
+  if (from.servable?.pools !== pools) {
+    const models = registry.filter((m) => m.status === 'active' && pooled.has(m.provider));
+    from.servable = { pools, snapshot: { models, entries: models.map(toEntry) } };
+  }
+  return from.servable.snapshot;
 }

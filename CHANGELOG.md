@@ -31,7 +31,12 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   find a memoised setting, registry or pool list expired now share one read instead of each making
   its own. A registry read whose text has not changed reuses the models already parsed: at 5,000
   models that skips about 15 ms of JSON parsing plus normalising every entry, for a comparison well
-  under a millisecond and the last text kept in memory (about 2 MB).
+  under a millisecond and the last text kept in memory (about 2 MB). The servable model list, its
+  `/v1/models` entries and the price map routing orders by are built once per registry version and
+  set of pools instead of on every request. A hard-isolated team's own keys are still read on every
+  request, so a revoked key stops counting at once. **For `@alayrasystems/nexus-core` hosts:** the
+  entries `listServableModels` returns are now shared between calls; the array is the caller's own,
+  the entries are read-only.
 
 ### Fixed
 
