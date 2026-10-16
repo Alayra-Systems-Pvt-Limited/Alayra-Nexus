@@ -39,7 +39,9 @@
 // lists with it) and, where they also depend on which providers have a pool, per that set too. A
 // list is never older than the registry and pools it is handed: it is looked up by them.
 //
-// Nothing returned from here may be modified by the caller. Every caller filters, maps or reads.
+// Nothing returned from here may be modified by the caller. Every caller filters, maps or reads, and
+// the lists and catalogue entries are frozen, so a caller that tries fails at once instead of
+// quietly changing every later listing.
 
 import type { AiModel } from './model.service';
 import type { CatalogEntry } from './modelCatalog.service';
@@ -183,8 +185,13 @@ export function servableSnapshot(
   const from = derivedFrom(registry);
   const pools = JSON.stringify([...pooled].sort());
   if (from.servable?.pools !== pools) {
-    const models = registry.filter((m) => m.status === 'active' && pooled.has(m.provider));
-    from.servable = { pools, snapshot: { models, entries: models.map(toEntry) } };
+    const models = Object.freeze(registry.filter((m) => m.status === 'active' && pooled.has(m.provider)));
+    const entries = Object.freeze(models.map((m) => {
+      const entry = toEntry(m);
+      Object.freeze(entry.capabilities);
+      return Object.freeze(entry);
+    }));
+    from.servable = { pools, snapshot: { models, entries } };
   }
   return from.servable.snapshot;
 }

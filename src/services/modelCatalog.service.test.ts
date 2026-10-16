@@ -255,17 +255,18 @@ describe('the servable list, built once per registry version', () => {
   const ids = (list: { id: string }[]) => list.map((m) => m.id);
   const isolated = { ownerTeamId: 't1', fallbackToShared: false, namespace: 'team:t1' };
 
-  it('is not rebuilt for the same registry and pools, and every caller gets its own array', async () => {
+  it('is not rebuilt for the same registry and pools; each caller gets its own array of frozen entries', async () => {
     h.registry = [model(), model({ id: 'sonnet', provider: 'anthropic' })];
     h.slugs    = new Set(['openai', 'anthropic']);
-
     const first  = await listServableModels();
     const second = await listServableModels();
     expect(second[1]).toBe(first[1]);
-    expect(second).not.toBe(first);
-
     first.splice(1);
     expect(ids(await listServableModels())).toEqual([AUTO_MODEL_ID, 'gpt4o', 'sonnet']);
+    // Shared between calls, so a change fails at once instead of editing every later listing.
+    expect(() => { second[1].displayName = 'edited'; }).toThrow(TypeError);
+    expect(() => second[1].capabilities.push('image')).toThrow(TypeError);
+    expect(Object.isFrozen((h.registry[0] as { capabilities: string[] }).capabilities)).toBe(false);
   });
 
   it('follows a pool added or removed on the very next call, with the same registry', async () => {

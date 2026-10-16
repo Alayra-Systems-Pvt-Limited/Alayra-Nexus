@@ -35,8 +35,8 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   `/v1/models` entries and the price map routing orders by are built once per registry version and
   set of pools instead of on every request. A hard-isolated team's own keys are still read on every
   request, so a revoked key stops counting at once. **For `@alayrasystems/nexus-core` hosts:** the
-  entries `listServableModels` returns are now shared between calls; the array is the caller's own,
-  the entries are read-only.
+  entries `listServableModels` returns are now shared between calls and frozen; the array is the
+  caller's own.
 
 ### Fixed
 

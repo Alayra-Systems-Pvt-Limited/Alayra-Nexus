@@ -100,10 +100,10 @@ async function ownedProviderSlugs(teamId: string): Promise<Set<string>> {
   return (await coreStores()).keys.ownedProviderSlugs(teamId);
 }
 
-/** One registry model as `/v1/models` lists it. */
+/** One registry model as `/v1/models` lists it, with its own copy of the capabilities (frozen with it). */
 const toCatalogEntry = (m: AiModel): CatalogEntry => ({
   id: m.id, displayName: m.displayName || m.modelString || m.id, provider: m.provider,
-  capabilities: m.capabilities, contextWindow: m.contextWindow, maxTokens: m.maxTokens, auto: false,
+  capabilities: [...m.capabilities], contextWindow: m.contextWindow, maxTokens: m.maxTokens, auto: false,
 });
 
 /**
