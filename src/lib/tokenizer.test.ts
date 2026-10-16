@@ -17,7 +17,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 // Every call into the tokenizer is counted, so a test can prove which count a reservation used.
-const encodes = vi.hoisted(() => ({ n: 0 }));
+// The setting is cleared before the module loads, so these tests mean the same with it set in the
+// shell; each mode is then loaded explicitly where it is tested.
+const encodes = vi.hoisted(() => { delete process.env.NEXUS_TPM_ESTIMATE; return { n: 0 }; });
 vi.mock('js-tiktoken', async (importOriginal) => {
   const real = await importOriginal<typeof import('js-tiktoken')>();
   return {

@@ -21,8 +21,9 @@ import { describe, it, expect, vi } from 'vitest';
 // Redis module — no connection is attempted. The admitKey / reconcileTpm Lua paths
 // are exercised against a real Redis in the integration suite (Phase 13).
 // One mock function for every copy of the module, so a test that reloads admission.ts under another
-// environment still sees the same `redis.eval`.
-const evalMock = vi.hoisted(() => vi.fn());
+// environment still sees the same `redis.eval`. The setting is cleared before the module loads, so
+// the default-mode tests mean the same with it set in the shell.
+const evalMock = vi.hoisted(() => { delete process.env.NEXUS_TPM_RECONCILE; return vi.fn(); });
 vi.mock('./redis', () => ({ redis: { eval: evalMock } }));
 
 import { beforeEach, afterEach } from 'vitest';
