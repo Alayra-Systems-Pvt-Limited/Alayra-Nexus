@@ -28,15 +28,9 @@ const state = vi.hoisted(() => {
   return { kv: null as null | { eval(...a: unknown[]): Promise<unknown> }, encodes: 0 };
 });
 vi.mock('./redis', () => ({ redis: { eval: (...a: unknown[]) => state.kv!.eval(...a) } }));
-vi.mock('js-tiktoken', async (importOriginal) => {
-  const real = await importOriginal<typeof import('js-tiktoken')>();
-  return {
-    ...real,
-    getEncoding: (name: Parameters<typeof real.getEncoding>[0]) => {
-      const enc = real.getEncoding(name);
-      return { encode: (text: string) => { state.encodes++; return enc.encode(text); } };
-    },
-  };
+vi.mock('./bpeCount', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./bpeCount')>();
+  return { ...real, countCl100k: (text: string) => { state.encodes++; return real.countCl100k(text); } };
 });
 
 const NOON = Date.UTC(2026, 7, 11, 12, 0, 30);

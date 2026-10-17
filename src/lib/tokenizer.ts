@@ -14,30 +14,45 @@
  * ANY KIND, either express or implied. See the License for details.
  */
 
-import { getEncoding, type Tiktoken } from 'js-tiktoken';
+import { countCl100k, loadCl100k } from './bpeCount';
 import { estimateTokens, TPM_ESTIMATE } from './tokenEstimate';
 
 export { readTpmEstimate, TPM_ESTIMATE, type TpmEstimate } from './tokenEstimate';
 
-// A single shared encoder, lazily initialized. cl100k_base is a reasonable,
-// provider-neutral proxy for admission *estimates* — this number is only used to
-// reserve budget before a request goes out, not for billing (real usage from the
-// provider reconciles it afterward), so it does not need to match each provider's
-// exact tokenizer.
-let enc: Tiktoken | null = null;
-function encoder(): Tiktoken {
-  if (!enc) enc = getEncoding('cl100k_base');
-  return enc;
-}
+// cl100k_base is a reasonable, provider-neutral proxy for admission *estimates*: this number
+// reserves budget before a request goes out, and the provider's real usage reconciles it afterward,
+// so it does not need to match each provider's exact tokenizer. It is counted by bpeCount.ts, which
+// gives js-tiktoken's exact count in time linear in the text (js-tiktoken's own merge is quadratic
+// in the length of one unbroken word, and one long word could stall the event loop for seconds).
 
-/** Token count of a single string, with a safe character-based fallback. */
+/**
+ * Token count of a single string. Text that names a special token, such as `<|endoftext|>`, is
+ * counted exactly like any other text; the character-based fallback is for an unexpected error only.
+ */
 export function countTokens(text: string): number {
   if (!text) return 0;
   try {
-    return encoder().encode(text).length;
+    return countCl100k(text);
   } catch {
     return Math.ceil(text.length / 4);
   }
+}
+
+/**
+ * Load the tokenizer's ranks in the background, so that no request pays for it: about 0.1-0.3 s,
+ * and more from a cold disk. With NEXUS_TPM_ESTIMATE=fast the first exact count can come in the
+ * middle of a request (the recount of a refused estimate, or the usage of a provider that reports
+ * none). Returns at once; the load runs on the next turn of the event loop. The proxy routes call
+ * it once the server is listening, in every worker (routes/proxy.ts).
+ */
+export function warmTokenizer(): void {
+  setImmediate(() => {
+    try {
+      loadCl100k();
+    } catch (err) {
+      console.warn('  Tokenizer warm-up failed; it loads on first use instead:', err instanceof Error ? err.message : err);
+    }
+  }).unref();
 }
 
 /** Extract the textual content from a chat message's `content` (string or parts array). */

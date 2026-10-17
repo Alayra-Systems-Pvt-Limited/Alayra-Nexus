@@ -79,3 +79,7 @@ export { createAnthropicReply } from '../lib/anthropicReply';
 // ── Model listing and the caller's routing scope ──
 export { listServableModels } from '../services/modelCatalog.service';
 export { resolveRequestScope } from '../services/byok.service';
+
+// ── Token counting: load the tokenizer's data at start-up, in the background ──
+// Call once each process is listening, so no request waits for the load (0.3-0.4 s).
+export { warmTokenizer } from '../lib/tokenizer';

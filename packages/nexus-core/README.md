@@ -27,6 +27,10 @@ providers it holds a key for. Usage rows carry `teamId` (null for the master key
 `PROVIDER_PRESETS` and `presetFor(slug)` are the gateway's table of known providers: default base
 URL, auth header and prefix, model-list path and key prefixes.
 
+Call `warmTokenizer()` once each process is listening. It loads the tokenizer's data (0.3-0.4 s) in
+the background, so the first request that counts tokens does not wait for it. Without it, that
+request pays for the load.
+
 When the caller hangs up, the core aborts the provider request and records the outcome
 `client_cancelled`. It sees the disconnect through `reply.raw`: a `close` event, or `destroyed`
 already true. If you hand `handleProxy` a reply stand-in of your own, forward `once`, `off` and

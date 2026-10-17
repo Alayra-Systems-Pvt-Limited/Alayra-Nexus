@@ -9,6 +9,46 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+## [1.8.6] - 2026-10-17
+
+### Added
+
+- **`@alayrasystems/nexus-core` exports `warmTokenizer()`.** A host calls it once each process is
+  listening, and the tokenizer's data (0.3-0.4 s to load) loads in the background, so the first
+  request that counts tokens does not wait for it. The gateway's own server does this already.
+
+### Changed
+
+- **`js-tiktoken` is pinned to exactly 1.0.21.** Nexus now reads that package's cl100k vocabulary
+  file directly, so a new version is taken only after the counting tests have run against it.
+
+### Fixed
+
+- **Counting a request's tokens now takes time that grows with the text's length, not with the
+  square of its longest unbroken word.** Nexus counts a chat request's tokens with the cl100k
+  tokenizer before routing it, to reserve them against a key's tokens-per-minute limit, and after
+  the answer when the provider reports no usage. The tokenizer library's merge step took time that
+  grew with the square of an unbroken run's length, so one long run could block the event loop for a
+  long time. Nexus now counts with its own implementation of the same tokenizer: the same
+  vocabulary, pattern and merge rule, read from the same package, with the next merge found through
+  a priority queue, as the reference tokenizer does, and each pair looked up by its two token
+  numbers instead of by its text. Time now grows with the length of the text. On a development PC a
+  16 KB run takes about 10 ms, 1 MB of ordinary text (English, code, JSON, Chinese) about 0.1-0.2 s,
+  1 MB of the slowest shapes (a run of one character repeated, of spaces or of newlines) about
+  0.3-0.4 s, so a 32 MB `/v1/messages` body of such a run takes about 11-22 s. Counts are unchanged:
+  identical, in the tests, on about 2.4 MB of real text (English, code, JSON, markdown, ten other
+  languages, emoji, base64, URLs, minified JavaScript, recorded chat payloads) and on 4,000
+  generated strings. The one exception is a single unbroken run over 64 KB (of letters, of
+  punctuation or of whitespace), which real text does not have. It is counted in 64 KB slices with 8
+  tokens added at each cut, four times the largest drop seen. In every cut measured (52,500 cuts,
+  worst shift -3/+2 tokens) the sliced count was never lower than exact, and at most 11 tokens a cut
+  above it; this is measured, not guaranteed. The tokenizer's data now also loads in the background
+  once the server is listening, instead of during the first request that needs it.
+- **Text that contains a tokenizer special-token string, such as `<|endoftext|>`, is now counted
+  exactly.** Before, the tokenizer refused such text and the whole text was estimated at a quarter
+  of its length in characters. It is now counted as the ordinary text it is, the way the tokenizer
+  counts it when no special token is allowed.
+
 ## [1.8.5] - 2026-10-17
 
 ### Added
@@ -2975,7 +3015,8 @@ First tagged release and first published container image
 - Constant-time comparison and 2FA for admin auth (Phase 6) are not yet in place;
   protect the admin password and API key accordingly for now.
 
-[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.5...HEAD
+[Unreleased]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.6...HEAD
+[1.8.6]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.5...v1.8.6
 [1.8.5]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.8.0...v1.8.5
 [1.8.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/Alayra-Systems-Pvt-Limited/Alayra-Nexus/compare/v1.6.6...v1.7.0
