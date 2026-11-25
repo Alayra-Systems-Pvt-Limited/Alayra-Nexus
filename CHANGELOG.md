@@ -9,6 +9,11 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Documentation
+
+- **The README names the maintainer's city correctly: Faisalabad, Pakistan.** It said Islamabad;
+  Alayra Systems Pvt. Limited works from Faisalabad.
+
 ## [1.8.6] - 2026-10-17
 
 ### Added
