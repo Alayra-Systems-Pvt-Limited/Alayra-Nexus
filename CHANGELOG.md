@@ -9,6 +9,16 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`@alayrasystems/nexus-core` compiles again in a strict TypeScript project on a fresh install.**
+  ioredis 6.1.0 (23 Nov 2026), which the core's `^6.0.0` range installs, now exports error classes
+  whose declarations import `redis-errors`, a package with no types of its own, and lists their
+  types only for its own development. A host compiling with `strict` and `skipLibCheck: false`
+  therefore failed with TS7016. nexus-core now depends on `@types/redis-errors` ^1.2.3, with the
+  same range in the root package.json, and compiles cleanly against ioredis 6.0.0 and 6.1.0. The
+  package smoke still checks with `skipLibCheck` off, so Nexus's own declarations stay checked.
+
 ## [1.8.6] - 2026-10-17
 
 ### Added

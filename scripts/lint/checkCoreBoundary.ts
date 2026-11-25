@@ -27,7 +27,7 @@
 // The package's own package.json is the allowlist, so what the core may load and what the package
 // installs cannot disagree. It is also held to the root package.json: same ranges, same version.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { checkBoundary, type BoundaryRules } from './coreBoundary';
 
@@ -59,8 +59,31 @@ export const CORE_RULES: BoundaryRules = {
   allowedPackages: new Set(Object.keys(CORE_MANIFEST.dependencies ?? {})),
 };
 
-/** Problems with the package manifest itself, given the packages the core was seen to load. */
-export function manifestProblems(loaded: ReadonlySet<string>): string[] {
+/** `@types/redis-errors` → `redis-errors`, `@types/babel__core` → `@babel/core`; null if not types. */
+export function typedPackage(name: string): string | null {
+  if (!name.startsWith('@types/')) return null;
+  const bare = name.slice('@types/'.length);
+  return bare.includes('__') ? `@${bare.replace('__', '/')}` : bare;
+}
+
+/** The runtime dependencies an installed package declares; none when it is not installed. */
+function installedDependencies(name: string): string[] {
+  const path = `node_modules/${name}/package.json`;
+  return existsSync(resolve(ROOT, path)) ? Object.keys(readManifest(path).dependencies ?? {}) : [];
+}
+
+/**
+ * Problems with the package manifest itself, given the packages the core was seen to load.
+ *
+ * A `@types/x` dependency never loads, so it cannot be held to "the core loads it". It is there
+ * because a loaded package's own declarations import `x` without depending on its types, which
+ * breaks a strict host's compile (ioredis 6.1 and redis-errors). It is unused once no loaded
+ * package depends on `x`, and is then reported like any other unused dependency.
+ */
+export function manifestProblems(
+  loaded: ReadonlySet<string>,
+  dependenciesOf: (name: string) => readonly string[] = installedDependencies,
+): string[] {
   const problems: string[] = [];
   const rootRange = (name: string) => ROOT_MANIFEST.dependencies?.[name] ?? ROOT_MANIFEST.devDependencies?.[name];
 
@@ -68,7 +91,12 @@ export function manifestProblems(loaded: ReadonlySet<string>): string[] {
     problems.push(`version ${CORE_MANIFEST.version} differs from @alayrasystems/nexus ${ROOT_MANIFEST.version}; they release together`);
   }
   for (const [name, range] of Object.entries(CORE_MANIFEST.dependencies ?? {})) {
-    if (!loaded.has(name)) problems.push(`dependency '${name}' is declared but the core never loads it`);
+    const typed = typedPackage(name);
+    if (typed === null) {
+      if (!loaded.has(name)) problems.push(`dependency '${name}' is declared but the core never loads it`);
+    } else if (![...loaded].some((pkg) => dependenciesOf(pkg).includes(typed))) {
+      problems.push(`dependency '${name}' is declared but no package the core loads depends on '${typed}'`);
+    }
     if (range !== rootRange(name)) problems.push(`'${name}' is ${range} here but ${rootRange(name) ?? 'absent'} in the root package.json`);
   }
   for (const [name, range] of Object.entries(CORE_MANIFEST.peerDependencies ?? {})) {
