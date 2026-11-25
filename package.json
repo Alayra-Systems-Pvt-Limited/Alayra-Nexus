@@ -125,6 +125,7 @@
   "overrides": {
     "brace-expansion": ">=5.0.12",
     "deepmerge-ts": "^8.0.2",
+    "effect": "^3.22.1",
     "mysql2": "^3.24.4"
   }
 }

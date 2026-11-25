@@ -19,6 +19,24 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   same range in the root package.json, and compiles cleanly against ioredis 6.0.0 and 6.1.0. The
   package smoke still checks with `skipLibCheck` off, so Nexus's own declarations stay checked.
 
+### Security
+
+- **The gateway's production dependencies are clear of every advisory `npm audit` reported.**
+  There were ten vulnerable packages (four high, five moderate, one low). All but the Prisma chain
+  are fixed by updates inside their declared ranges: zod 4.6.5 to 4.6.7 (high: memory exhaustion
+  validating oversized constrained collections); fastify 5.12.5 to 5.12.6 (low: header validation
+  bypass); fast-uri 3.1.8 to 3.1.9 and 4.2.1 to 4.2.3 (moderate: scheme spoofing and injection,
+  path and host confusion); ip-address 10.7.3 to 10.7.6 (moderate: quadratic-time zone identifier
+  matching); and @fastify/static 10.1.6 to 10.1.12, which brings glob 14.0.6 and minimatch 11.0.9
+  (moderate: traversal after an aborted search, pattern amplification). The prisma packages move
+  from 7.10.0 to 7.10.1, but `@prisma/config` 7.10.1, the newest 7.x, still pins effect 3.20.0
+  (high: ReDoS in `Schema.TemplateLiteral`). An `overrides` entry therefore raises effect to
+  ^3.22.1 (3.22.5 installed), because no Prisma 7 release ships a fixed effect and Prisma 8 is a
+  major upgrade. The generated SQLite schema and DDL are unchanged. The other pending updates come
+  with these: @fastify/multipart 10.1.3 to 10.1.4 and dotenv 18.0.7 to 18.0.8; for development,
+  eslint 10.14.0, globals 17.14.0, typescript-eslint 8.72.1, vitest 5.0.5, and the dashboard's vite
+  8.1.4 to 8.3.5; and the CodeQL action 4.38.3 to 4.39.3.
+
 ## [1.8.6] - 2026-10-17
 
 ### Added
