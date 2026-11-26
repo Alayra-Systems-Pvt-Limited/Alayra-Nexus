@@ -22,7 +22,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { checkBoundary, runtimeImports, packageName, type BoundaryRules } from './coreBoundary';
-import { CORE_RULES, CORE_MANIFEST, manifestProblems } from './checkCoreBoundary';
+import { CORE_RULES, CORE_MANIFEST, manifestProblems, typedPackage } from './checkCoreBoundary';
 
 // ── Fixture trees ─────────────────────────────────────────────────────────────────────────────
 
@@ -144,5 +144,33 @@ describe('the gateway core', () => {
   it('names a declared dependency the core no longer loads', () => {
     expect(manifestProblems(new Set(['ioredis', 'js-tiktoken', 'prom-client'])))
       .toEqual(["dependency '@opentelemetry/api' is declared but the core never loads it"]);
+  });
+});
+
+// ── Declarations a strict host needs ──────────────────────────────────────────────────────────
+
+describe('a @types dependency', () => {
+  const LOADED = new Set(['@opentelemetry/api', 'ioredis', 'js-tiktoken', 'prom-client']);
+
+  it('maps to the package it types, scoped ones included', () => {
+    expect(typedPackage('@types/redis-errors')).toBe('redis-errors');
+    expect(typedPackage('@types/babel__core')).toBe('@babel/core');
+    expect(typedPackage('ioredis')).toBeNull();
+    expect(typedPackage('@opentelemetry/api')).toBeNull();
+  });
+
+  it('is accepted while a package the core loads depends on the package it types', () => {
+    const deps = (pkg: string) => (pkg === 'ioredis' ? ['denque', 'redis-errors'] : []);
+    expect(manifestProblems(LOADED, deps)).toEqual([]);
+  });
+
+  it('is named as unused once no package the core loads depends on it', () => {
+    expect(manifestProblems(LOADED, () => ['denque']))
+      .toEqual(["dependency '@types/redis-errors' is declared but no package the core loads depends on 'redis-errors'"]);
+  });
+
+  it('is in the manifest because the installed ioredis depends on redis-errors', () => {
+    expect(CORE_MANIFEST.dependencies).toHaveProperty('@types/redis-errors');
+    expect(manifestProblems(LOADED)).toEqual([]);
   });
 });

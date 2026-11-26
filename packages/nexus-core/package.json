@@ -28,9 +28,10 @@
     "LICENSE",
     "NOTICE"
   ],
-  "//": "Built from ../../src by `npm run core:build` at the repository root. `dependencies` is the core's runtime allowlist: `npm run check:core-boundary` fails if the core loads a package not listed here, if a listed one is unused, or if a range differs from the root package.json. The version moves in lockstep with @alayrasystems/nexus.",
+  "//": "Built from ../../src by `npm run core:build` at the repository root. `dependencies` is the core's runtime allowlist: `npm run check:core-boundary` fails if the core loads a package not listed here, if a listed one is unused, or if a range differs from the root package.json. A `@types/x` entry is never loaded: it is there because a package the core loads ships declarations that import `x` without depending on its types (ioredis and redis-errors), so a strict host compiles; it is unused once no loaded package depends on `x`. The version moves in lockstep with @alayrasystems/nexus.",
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
+    "@types/redis-errors": "^1.2.3",
     "ioredis": "^6.0.0",
     "js-tiktoken": "1.0.21",
     "prom-client": "^15.1.3"
