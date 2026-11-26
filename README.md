@@ -55,7 +55,7 @@ one for you silently would mean every install shared a key we published.</sub>
 
 <br>
 
-> Built and maintained by **[Alayra Systems Pvt. Limited](https://github.com/Alayra-Systems-Pvt-Limited)** · Islamabad, Pakistan
+> Built and maintained by **[Alayra Systems Pvt. Limited](https://github.com/Alayra-Systems-Pvt-Limited)** · Faisalabad, Pakistan
 
 <br>
 
