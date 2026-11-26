@@ -37,6 +37,11 @@ semver. The legacy ids `kinetic-nexus-1` and `nexus` remain accepted as aliases.
   eslint 10.14.0, globals 17.14.0, typescript-eslint 8.72.1, vitest 5.0.5, and the dashboard's vite
   8.1.4 to 8.3.5; and the CodeQL action 4.38.3 to 4.39.3.
 
+### Documentation
+
+- **The README names the maintainer's city correctly: Faisalabad, Pakistan.** It said Islamabad;
+  Alayra Systems Pvt. Limited works from Faisalabad.
+
 ## [1.8.6] - 2026-10-17
 
 ### Added
